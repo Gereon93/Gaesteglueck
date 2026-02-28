@@ -27,7 +27,7 @@ final class Guest {
     var isChild: Bool
     var notes: String
     var isPinned: Bool
-    // table relationship added in Task 3
+    var table: GuestTable?
 
     init(
         name: String,

@@ -86,6 +86,9 @@ struct RoomCanvasView: View {
             ToolbarItem(placement: .primaryAction) {
                 AutoAssignButton()
             }
+            ToolbarItem(placement: .secondaryAction) {
+                AutoPlaceButton()
+            }
             ToolbarItem(placement: .status) {
                 ScoreBadgeView(score: happinessScore)
             }

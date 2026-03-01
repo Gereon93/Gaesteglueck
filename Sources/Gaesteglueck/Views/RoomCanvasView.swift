@@ -7,9 +7,11 @@ struct RoomCanvasView: View {
     @Query private var tables: [GuestTable]
     @Query(sort: \Guest.name) private var guests: [Guest]
     @Query private var relationships: [Relationship]
+    @Query private var roomPlans: [RoomPlan]
 
     @State private var selectedTable: GuestTable?
     @State private var showingAddTable = false
+    @State private var showingFloorPlanSetup = false
 
     private var unassignedGuests: [Guest] {
         guests.filter { $0.table == nil }
@@ -35,6 +37,16 @@ struct RoomCanvasView: View {
             ZStack {
                 Color(.systemGroupedBackground)
                     .ignoresSafeArea()
+
+                #if canImport(UIKit)
+                if let roomPlan = roomPlans.first, let imageData = roomPlan.imageData,
+                   let uiImage = UIImage(data: imageData) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFit()
+                        .opacity(0.3)
+                }
+                #endif
 
                 ForEach(tables) { table in
                     TableCanvasItemView(
@@ -78,11 +90,32 @@ struct RoomCanvasView: View {
             ToolbarItem(placement: .secondaryAction) {
                 ExportButton(tables: tables, eventName: "Hochzeit", date: nil)
             }
+            ToolbarItem(placement: .secondaryAction) {
+                Button {
+                    showingFloorPlanSetup = true
+                } label: {
+                    Label("Raumplan-Foto", systemImage: "photo.badge.plus")
+                }
+            }
             #endif
         }
         .sheet(isPresented: $showingAddTable) {
             TableFormView()
         }
+        #if canImport(UIKit)
+        .sheet(isPresented: $showingFloorPlanSetup) {
+            if let roomPlan = roomPlans.first {
+                FloorPlanSetupView(roomPlan: roomPlan)
+            }
+        }
+        .onAppear {
+            // Ensure a RoomPlan exists for floor plan import
+            if roomPlans.isEmpty {
+                let plan = RoomPlan()
+                modelContext.insert(plan)
+            }
+        }
+        #endif
     }
 
     // MARK: - Guest Inbox

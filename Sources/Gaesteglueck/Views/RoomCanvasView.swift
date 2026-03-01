@@ -83,6 +83,9 @@ struct RoomCanvasView: View {
                     Label("Tisch hinzufügen", systemImage: "plus")
                 }
             }
+            ToolbarItem(placement: .primaryAction) {
+                AutoAssignButton()
+            }
             ToolbarItem(placement: .status) {
                 ScoreBadgeView(score: happinessScore)
             }

@@ -43,4 +43,20 @@ struct GuestTableTests {
         let combinedCap = t1.combinedCapacity(with: t2)
         #expect(combinedCap > t1.capacity)
     }
+
+    @Test("Two rectangular 200x100 tables combined have correct capacity")
+    func combinedCapacityCalculation() {
+        let t1 = GuestTable(name: "T1", shape: .rectangular, width: 200, depth: 100)
+        let t2 = GuestTable(name: "T2", shape: .rectangular, width: 200, depth: 100)
+        t1.linkedTableID = t2.id
+        t2.linkedTableID = t1.id
+
+        let combined = t1.combinedCapacity(with: t2)
+        // Combined 400cm long, 100cm wide
+        // 2 long sides: 400/60 * 2 = 12
+        // 2 short ends: 100/60 * 2 = 2
+        // Total: 14
+        #expect(combined == 14)
+        #expect(combined > t1.capacity)
+    }
 }

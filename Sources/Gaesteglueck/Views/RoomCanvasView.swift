@@ -211,6 +211,10 @@ struct RoomCanvasView: View {
                 }
                 .padding()
             }
+
+            Divider()
+
+            AISuggestionView()
         }
         .background(.background)
     }

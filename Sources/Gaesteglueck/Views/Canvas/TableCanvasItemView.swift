@@ -7,15 +7,24 @@ struct TableCanvasItemView: View {
     let isSelected: Bool
     let onTap: () -> Void
 
+    @Query(sort: \GuestTable.name) private var allTables: [GuestTable]
     @State private var dragOffset: CGSize = .zero
+    @State private var showingCombineSheet = false
 
     var body: some View {
         VStack(spacing: 4) {
             tableShape
-            Text(table.name)
-                .font(.caption2)
-                .padding(.horizontal, 4)
-                .background(.ultraThinMaterial, in: Capsule())
+            HStack(spacing: 2) {
+                Text(table.name)
+                    .font(.caption2)
+                if table.linkedTableID != nil {
+                    Image(systemName: "link")
+                        .font(.caption2)
+                        .foregroundStyle(.blue)
+                }
+            }
+            .padding(.horizontal, 4)
+            .background(.ultraThinMaterial, in: Capsule())
             Text("\(table.guests.count)/\(table.capacity)")
                 .font(.caption2)
                 .foregroundStyle(table.isFull ? .red : .secondary)
@@ -39,6 +48,28 @@ struct TableCanvasItemView: View {
                 }
         )
         .onTapGesture(perform: onTap)
+        .contextMenu {
+            if table.shape == .rectangular {
+                Button {
+                    showingCombineSheet = true
+                } label: {
+                    Label("Tisch verbinden", systemImage: "link")
+                }
+            }
+            if table.linkedTableID != nil {
+                Button(role: .destructive) {
+                    if let linked = allTables.first(where: { $0.id == table.linkedTableID }) {
+                        linked.linkedTableID = nil
+                    }
+                    table.linkedTableID = nil
+                } label: {
+                    Label("Verbindung lösen", systemImage: "link.badge.plus")
+                }
+            }
+        }
+        .sheet(isPresented: $showingCombineSheet) {
+            TableCombineSheet(table: table)
+        }
     }
 
     @ViewBuilder

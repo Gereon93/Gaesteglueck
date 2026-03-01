@@ -6,6 +6,7 @@ struct GuestListView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Guest.name) private var guests: [Guest]
     @State private var showingAddSheet = false
+    @State private var showingOnboarding = false
     @State private var editingGuest: Guest?
     @State private var searchText = ""
 
@@ -64,12 +65,23 @@ struct GuestListView: View {
                 ImportButton()
             }
             #endif
+            ToolbarItem(placement: .secondaryAction) {
+                Button {
+                    showingOnboarding = true
+                } label: {
+                    Label("Beziehungen zuweisen", systemImage: "wand.and.stars")
+                }
+                .disabled(guests.isEmpty)
+            }
         }
         .sheet(isPresented: $showingAddSheet) {
             GuestFormView()
         }
         .sheet(item: $editingGuest) { guest in
             GuestFormView(guest: guest)
+        }
+        .sheet(isPresented: $showingOnboarding) {
+            OnboardingWizardView()
         }
     }
 }

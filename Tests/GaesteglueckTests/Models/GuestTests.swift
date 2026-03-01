@@ -53,4 +53,12 @@ struct GuestTests {
         let child = Guest(name: "Klein-Max", side: .bride, isChild: true)
         #expect(child.isChild)
     }
+
+    @Test("Pinned guest defaults to false and can be toggled")
+    func pinnedGuest() {
+        let guest = Guest(name: "Braut", side: .bride)
+        #expect(!guest.isPinned)
+        guest.isPinned = true
+        #expect(guest.isPinned)
+    }
 }

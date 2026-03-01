@@ -64,7 +64,16 @@ enum PDFExporter {
                     y += 18
                 } else {
                     for guest in table.guests.sorted(by: { $0.name < $1.name }) {
-                        let line = "\u{2022} \(guest.name) (\(guest.side.rawValue))"
+                        var line = "\u{2022} \(guest.name) (\(guest.side.rawValue))"
+                        if guest.dietaryPreference != .meat {
+                            line += " \(guest.dietaryPreference.rawValue)"
+                        }
+                        if !guest.allergies.isEmpty {
+                            line += " \u{26A0}\u{FE0F} \(guest.allergies)"
+                        }
+                        if guest.isChild {
+                            line += " Kind"
+                        }
                         line.draw(at: CGPoint(x: 60, y: y), withAttributes: bodyAttributes)
                         y += 18
                     }
@@ -83,6 +92,34 @@ enum PDFExporter {
             let totalCapacity = tables.reduce(0) { $0 + $1.capacity }
             let summary = "Gesamt: \(totalGuests) Gäste an \(tables.count) Tischen (\(totalCapacity) Plätze)"
             summary.draw(at: CGPoint(x: 40, y: y), withAttributes: subtitleAttributes)
+
+            // --- Dietary Summary for Caterer ---
+            context.beginPage()
+            y = 40
+            "Übersicht für den Caterer".draw(at: CGPoint(x: 40, y: y), withAttributes: titleAttributes)
+            y += 35
+
+            let allGuests = tables.flatMap(\.guests)
+            let meatCount = allGuests.filter { $0.dietaryPreference == .meat }.count
+            let vegCount = allGuests.filter { $0.dietaryPreference == .vegetarian }.count
+            let veganCount = allGuests.filter { $0.dietaryPreference == .vegan }.count
+            let childCount = allGuests.filter(\.isChild).count
+
+            "Fleisch: \(meatCount)".draw(at: CGPoint(x: 40, y: y), withAttributes: bodyAttributes); y += 20
+            "Vegetarisch: \(vegCount)".draw(at: CGPoint(x: 40, y: y), withAttributes: bodyAttributes); y += 20
+            "Vegan: \(veganCount)".draw(at: CGPoint(x: 40, y: y), withAttributes: bodyAttributes); y += 20
+            "Kinder: \(childCount)".draw(at: CGPoint(x: 40, y: y), withAttributes: bodyAttributes); y += 30
+
+            // List all allergies
+            let guestsWithAllergies = allGuests.filter { !$0.allergies.isEmpty }
+            if !guestsWithAllergies.isEmpty {
+                "Unverträglichkeiten:".draw(at: CGPoint(x: 40, y: y), withAttributes: headerAttributes)
+                y += 22
+                for guest in guestsWithAllergies.sorted(by: { $0.name < $1.name }) {
+                    "  \(guest.name): \(guest.allergies)".draw(at: CGPoint(x: 60, y: y), withAttributes: bodyAttributes)
+                    y += 18
+                }
+            }
         }
 
         return data

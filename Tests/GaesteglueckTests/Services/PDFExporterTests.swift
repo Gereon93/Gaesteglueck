@@ -28,5 +28,20 @@ struct PDFExporterTests {
         )
         #expect(data.count > 100)
     }
+
+    @Test("PDF includes dietary summary section")
+    func dietarySummary() {
+        let table = GuestTable(name: "T1", shape: .round, diameter: 180)
+        let veganGuest = Guest(name: "Lisa", side: .bride, dietaryPreference: .vegan, allergies: "Nüsse")
+        let meatGuest = Guest(name: "Klaus", side: .groom)
+        table.guests = [veganGuest, meatGuest]
+
+        let data = PDFExporter.generatePDF(
+            tables: [table],
+            eventName: "Hochzeit",
+            date: Date()
+        )
+        #expect(data.count > 200)
+    }
 }
 #endif

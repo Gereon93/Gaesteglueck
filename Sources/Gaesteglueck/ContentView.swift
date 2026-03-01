@@ -17,6 +17,8 @@ struct ContentView: View {
                 RoomCanvasView()
             case .relationships:
                 RelationshipListView()
+            case .statistics:
+                StatisticsView()
             case nil:
                 ContentUnavailableView("Bereich wählen", systemImage: "sidebar.left", description: Text("Wähle einen Bereich aus der Seitenleiste."))
             }

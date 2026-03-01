@@ -6,6 +6,7 @@ enum AppSection: String, CaseIterable, Identifiable {
     case tables = "Tische"
     case room = "Raumplan"
     case relationships = "Beziehungen"
+    case statistics = "Übersicht"
 
     var id: String { rawValue }
 
@@ -15,6 +16,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .tables: "tablecells"
         case .room: "square.split.bottomrightquarter"
         case .relationships: "heart.text.clipboard"
+        case .statistics: "chart.bar"
         }
     }
 }

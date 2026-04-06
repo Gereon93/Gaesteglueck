@@ -5,7 +5,7 @@ import UniformTypeIdentifiers
 
 struct ImportButton: View {
     @State private var showingFilePicker = false
-    @State private var parsedFamilies: [ImportedFamily]?
+    @State private var parsedRows: [RegistrationRow]?
     @State private var importError: String?
     @State private var importedCount: Int?
 
@@ -22,12 +22,12 @@ struct ImportButton: View {
             handleFile(result)
         }
         .sheet(item: Binding(
-            get: { parsedFamilies.map { IdentifiableWrapper(value: $0) } },
-            set: { parsedFamilies = $0?.value }
+            get: { parsedRows.map { IdentifiableWrapper(value: $0) } },
+            set: { parsedRows = $0?.value }
         )) { wrapper in
-            ImportPreviewView(families: wrapper.value) { count in
+            ImportPreviewView(rows: wrapper.value) { count in
                 importedCount = count
-                parsedFamilies = nil
+                parsedRows = nil
             }
         }
         .alert("Import fehlgeschlagen", isPresented: Binding(
@@ -55,14 +55,15 @@ struct ImportButton: View {
                 guard url.startAccessingSecurityScopedResource() else { return }
                 defer { url.stopAccessingSecurityScopedResource() }
 
-                let families: [ImportedFamily]
+                let rows: [RegistrationRow]
                 if url.pathExtension.lowercased() == "xlsx" {
-                    families = try ExcelParser.parse(url: url)
+                    let data = try Data(contentsOf: url)
+                    rows = try ExcelParser.parseRegistrations(data)
                 } else {
                     let content = try String(contentsOf: url, encoding: .utf8)
-                    families = try CSVParser.parse(content)
+                    rows = try CSVParser.parseRegistrations(content)
                 }
-                parsedFamilies = families
+                parsedRows = rows
             } catch {
                 importError = error.localizedDescription
             }

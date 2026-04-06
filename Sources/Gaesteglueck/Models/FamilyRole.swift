@@ -13,13 +13,11 @@ enum FamilyRole: String, Codable, CaseIterable, Identifiable, Sendable {
     case fatherInLaw = "Schwiegervater"
     case aunt = "Tante"
     case uncle = "Onkel"
-    case cousin = "Cousin/Cousine"
+    case cousin = "Cousin"
+    case cousine = "Cousine"
     case niece = "Nichte"
     case nephew = "Neffe"
     case child = "Kind"
-    case partner = "Partner/in"
-    case friend = "Freund/in"
-    case witness = "Trauzeuge/Trauzeugin"
     case other = "Sonstige"
     var id: String { rawValue }
 }

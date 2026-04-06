@@ -1,55 +1,76 @@
-#if canImport(SwiftUI)
+#if canImport(SwiftUI) && canImport(SwiftData)
 import SwiftUI
+import SwiftData
 
 struct GuestRowView: View {
     let guest: Guest
+    var tags: [Tag] = []
+
+    private var guestTags: [Tag] {
+        tags.filter { $0.guestIDs.contains(guest.id) }
+    }
 
     var body: some View {
-        HStack {
-            Circle()
-                .fill(guest.side.color)
-                .frame(width: 12, height: 12)
-            VStack(alignment: .leading) {
-                HStack(spacing: 4) {
-                    Text(guest.name)
-                        .font(.body)
-                    if guest.isChild {
-                        Image(systemName: "figure.child")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                // Partner badge
+                Text(guest.partnerAssignment.rawValue)
+                    .font(.caption2)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(guest.partnerAssignment.color.opacity(0.2))
+                    .foregroundStyle(guest.partnerAssignment.color)
+                    .clipShape(Capsule())
+
+                Text(guest.fullName)
+                    .font(.body)
+
+                // Age badge if not adult
+                if guest.ageCategory != .adult {
+                    Label(guest.ageCategory.rawValue, systemImage: guest.ageCategory.icon)
+                        .font(.caption2)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(.secondary.opacity(0.15))
+                        .clipShape(Capsule())
                 }
-                HStack(spacing: 6) {
-                    if let groupLabel = guest.groupLabel {
-                        Text(groupLabel)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    if let role = guest.familyRole {
-                        Text(role.rawValue)
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                    }
+
+                Spacer()
+
+                // Dietary info
+                if guest.dietaryChoice != "Fleisch" {
+                    Text(guest.dietaryChoice)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-            }
-            Spacer()
-            HStack(spacing: 2) {
-                Text(guest.dietaryPreference.badge)
-                    .font(.caption)
-                if !guest.allergies.isEmpty {
+
+                // Intolerance warning
+                if guest.hasIntolerances {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.caption2)
                         .foregroundStyle(.orange)
-                        .help(guest.allergies)
+                        .help(guest.intolerances.joined(separator: ", "))
                 }
             }
-            Text(guest.rsvpStatus.rawValue)
-                .font(.caption)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 2)
-                .background(guest.rsvpStatus.color.opacity(0.2))
-                .clipShape(Capsule())
+
+            // Tags
+            if !guestTags.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 4) {
+                        ForEach(guestTags) { tag in
+                            Text(tag.name)
+                                .font(.caption2)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color(hex: tag.color).opacity(0.2))
+                                .foregroundStyle(Color(hex: tag.color))
+                                .clipShape(Capsule())
+                        }
+                    }
+                }
+            }
         }
+        .padding(.vertical, 2)
     }
 }
 #endif

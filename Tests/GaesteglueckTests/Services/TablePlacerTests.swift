@@ -26,21 +26,6 @@ struct TablePlacerTests {
         #expect(distance >= minDistance)
     }
 
-    @Test("Bride table placed centrally")
-    func brideTableCentered() {
-        let bt = GuestTable(name: "Brauttisch", shape: .brideTable, width: 400, depth: 100)
-        let t1 = GuestTable(name: "T1", shape: .round, diameter: 180)
-
-        let placements = TablePlacer.suggestLayout(
-            tables: [bt, t1],
-            roomWidthCM: 1000,
-            roomDepthCM: 800
-        )
-
-        let bridePlace = placements.first { $0.tableID == bt.id }!
-        #expect(bridePlace.x > 300 && bridePlace.x < 700)
-    }
-
     @Test("Tables fit within room bounds")
     func withinBounds() {
         let tables = (0..<5).map { GuestTable(name: "T\($0)", shape: .round, diameter: 180) }

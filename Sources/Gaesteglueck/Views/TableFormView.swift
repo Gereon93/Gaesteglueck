@@ -53,7 +53,7 @@ struct TableFormView: View {
                                 .monospacedDigit()
                                 .frame(width: 60)
                         }
-                    case .rectangular, .brideTable:
+                    case .rectangular, .square:
                         HStack {
                             Text("Breite")
                             Slider(value: $width, in: 100...600, step: 10)
@@ -80,7 +80,6 @@ struct TableFormView: View {
                 }
             }
             .navigationTitle(table == nil ? "Tisch erstellen" : "Tisch bearbeiten")
-            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Abbrechen") { dismiss() }

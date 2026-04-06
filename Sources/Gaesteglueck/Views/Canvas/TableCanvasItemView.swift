@@ -6,8 +6,8 @@ struct TableCanvasItemView: View {
     @Bindable var table: GuestTable
     let isSelected: Bool
     let onTap: () -> Void
+    @Query private var allTables: [GuestTable]
 
-    @Query(sort: \GuestTable.name) private var allTables: [GuestTable]
     @State private var dragOffset: CGSize = .zero
     @State private var showingCombineSheet = false
 
@@ -17,7 +17,7 @@ struct TableCanvasItemView: View {
             HStack(spacing: 2) {
                 Text(table.name)
                     .font(.caption2)
-                if table.linkedTableID != nil {
+                if table.combinationGroup != nil {
                     Image(systemName: "link")
                         .font(.caption2)
                         .foregroundStyle(.blue)
@@ -56,12 +56,12 @@ struct TableCanvasItemView: View {
                     Label("Tisch verbinden", systemImage: "link")
                 }
             }
-            if table.linkedTableID != nil {
+            if let groupID = table.combinationGroup {
                 Button(role: .destructive) {
-                    if let linked = allTables.first(where: { $0.id == table.linkedTableID }) {
-                        linked.linkedTableID = nil
+                    for t in allTables where t.combinationGroup == groupID {
+                        t.combinationGroup = nil
+                        t.combinationRole = nil
                     }
-                    table.linkedTableID = nil
                 } label: {
                     Label("Verbindung lösen", systemImage: "link.badge.plus")
                 }
@@ -85,11 +85,11 @@ struct TableCanvasItemView: View {
                 .fill(Color.brown.opacity(0.3))
                 .stroke(Color.brown, lineWidth: 1)
                 .frame(width: table.width / 3, height: table.depth / 3)
-        case .brideTable:
+        case .square:
             Rectangle()
-                .fill(Color.yellow.opacity(0.3))
-                .stroke(Color.yellow.mix(with: .brown, by: 0.5), lineWidth: 2)
-                .frame(width: table.width / 3, height: table.depth / 3)
+                .fill(Color.brown.opacity(0.3))
+                .stroke(Color.brown, lineWidth: 1)
+                .frame(width: table.width / 3, height: table.width / 3)
         }
     }
 }

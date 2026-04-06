@@ -2,22 +2,22 @@
 import SwiftUI
 
 enum AppSection: String, CaseIterable, Identifiable {
+    case dashboard = "Dashboard"
     case guests = "Gäste"
-    case tables = "Tische"
-    case room = "Raumplan"
-    case relationships = "Beziehungen"
-    case statistics = "Übersicht"
+    case tables = "Tische & Raum"
+    case tags = "Gruppen & Tags"
+    case assistant = "KI-Assistent"
     case settings = "Einstellungen"
 
     var id: String { rawValue }
 
     var icon: String {
         switch self {
+        case .dashboard: "house"
         case .guests: "person.3"
         case .tables: "tablecells"
-        case .room: "square.split.bottomrightquarter"
-        case .relationships: "heart.text.clipboard"
-        case .statistics: "chart.bar"
+        case .tags: "tag"
+        case .assistant: "sparkles"
         case .settings: "gear"
         }
     }

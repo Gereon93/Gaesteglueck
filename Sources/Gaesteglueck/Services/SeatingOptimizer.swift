@@ -6,12 +6,13 @@ enum SeatingOptimizer {
     static func solve(
         guests: [Guest],
         tables: [GuestTable],
-        relationships: [Relationship],
+        tags: [Tag],
+        constraints: [Constraint],
         iterations: Int = 5000
     ) -> [UUID: UUID] {
         guard !guests.isEmpty, !tables.isEmpty else { return [:] }
 
-        let graph = SeatingGraph(guests: guests, relationships: relationships)
+        let graph = SeatingGraph(guests: guests, tags: tags, constraints: constraints)
         let tableIDs = tables.map(\.id)
         let tableCapacities = Dictionary(uniqueKeysWithValues: tables.map { ($0.id, $0.capacity) })
 

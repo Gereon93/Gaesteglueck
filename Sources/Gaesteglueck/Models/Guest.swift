@@ -14,66 +14,85 @@ enum RSVPStatus: String, Codable, CaseIterable, Sendable {
 #endif
 final class Guest {
     var id: UUID
-    var name: String
-    var side: Side
-    var groupType: GroupType?
-    var customGroupName: String?
+    var firstName: String
+    var lastName: String
+    var partnerAssignment: PartnerAssignment
+    var ageCategory: AgeCategory
+    var age: Int?
     var familyID: UUID?
     var familyRole: FamilyRole?
-    var mainContactPersonID: UUID?
-    var dietaryPreference: DietaryPreference
-    var allergies: String
-    var rsvpStatus: RSVPStatus
-    var isChild: Bool
+    var familyRolePartner: PartnerAssignment?
+    var dietaryChoice: String
+    var intolerances: [String]
+    var funFact: String
     var notes: String
+    var employer: String
+    var profession: String
+    var hobbies: [String]
+    var languages: [String]
+    var registrationGroup: UUID?
+    var rsvpStatus: RSVPStatus
     var isPinned: Bool
     var table: GuestTable?
 
     init(
-        name: String,
-        side: Side,
-        groupType: GroupType? = nil,
-        customGroupName: String? = nil,
+        firstName: String,
+        lastName: String = "",
+        partnerAssignment: PartnerAssignment = .both,
+        ageCategory: AgeCategory = .adult,
+        age: Int? = nil,
         familyID: UUID? = nil,
         familyRole: FamilyRole? = nil,
-        dietaryPreference: DietaryPreference = .meat,
-        allergies: String = "",
-        rsvpStatus: RSVPStatus = .pending,
-        isChild: Bool = false,
-        notes: String = ""
+        familyRolePartner: PartnerAssignment? = nil,
+        dietaryChoice: String = "Fleisch",
+        intolerances: [String] = [],
+        funFact: String = "",
+        notes: String = "",
+        rsvpStatus: RSVPStatus = .confirmed,
+        registrationGroup: UUID? = nil
     ) {
         self.id = UUID()
-        self.name = name
-        self.side = side
-        self.groupType = groupType
-        self.customGroupName = customGroupName
+        self.firstName = firstName
+        self.lastName = lastName
+        self.partnerAssignment = partnerAssignment
+        self.ageCategory = ageCategory
+        self.age = age
         self.familyID = familyID
         self.familyRole = familyRole
-        self.mainContactPersonID = nil
-        self.dietaryPreference = dietaryPreference
-        self.allergies = allergies
-        self.rsvpStatus = rsvpStatus
-        self.isChild = isChild
+        self.familyRolePartner = familyRolePartner
+        self.dietaryChoice = dietaryChoice
+        self.intolerances = intolerances
+        self.funFact = funFact
         self.notes = notes
+        self.employer = ""
+        self.profession = ""
+        self.hobbies = []
+        self.languages = []
+        self.registrationGroup = registrationGroup
+        self.rsvpStatus = rsvpStatus
         self.isPinned = false
     }
 
-    var groupLabel: String? {
-        guard let groupType else { return nil }
-        if let custom = customGroupName, !custom.isEmpty {
-            return "\(groupType.rawValue): \(custom)"
-        }
-        return groupType.rawValue
+    var fullName: String {
+        lastName.isEmpty ? firstName : "\(firstName) \(lastName)"
+    }
+
+    var hasIntolerances: Bool {
+        !intolerances.isEmpty
     }
 
     var dietarySummary: String {
         var parts: [String] = []
-        if dietaryPreference != .meat {
-            parts.append(dietaryPreference.rawValue)
+        if dietaryChoice != "Fleisch" {
+            parts.append(dietaryChoice)
         }
-        if !allergies.isEmpty {
-            parts.append("⚠️ \(allergies)")
+        if hasIntolerances {
+            parts.append("⚠️ \(intolerances.joined(separator: ", "))")
         }
         return parts.joined(separator: " · ")
+    }
+
+    var needsSeat: Bool {
+        ageCategory.needsSeat
     }
 }

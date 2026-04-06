@@ -17,7 +17,9 @@ final class GuestTable {
     var positionY: Double
     var rotation: Double
     var isLocked: Bool
-    var linkedTableID: UUID?
+    var isChildTable: Bool
+    var combinationGroup: UUID?
+    var combinationRole: CombinationRole?
     var guests: [Guest]
 
     var capacity: Int {
@@ -30,20 +32,10 @@ final class GuestTable {
             let perimeter = 2 * (width + depth)
             let rawSeats = Int(perimeter / seatWidth)
             return max(rawSeats - 2, 4)
-        case .brideTable:
-            return Int(width / seatWidth)
+        case .square:
+            let perimeter = 4 * width
+            return Int(perimeter / seatWidth)
         }
-    }
-
-    func combinedCapacity(with other: GuestTable) -> Int {
-        guard shape == .rectangular, other.shape == .rectangular else {
-            return capacity + other.capacity
-        }
-        let seatWidth: Double = 60
-        let totalWidth = width + other.width
-        let longSideSeats = Int(totalWidth / seatWidth) * 2
-        let shortSideSeats = Int(depth / seatWidth) * 2
-        return longSideSeats + shortSideSeats
     }
 
     var remainingSeats: Int { capacity - guests.count }
@@ -57,7 +49,8 @@ final class GuestTable {
         depth: Double = 100,
         positionX: Double = 0,
         positionY: Double = 0,
-        rotation: Double = 0
+        rotation: Double = 0,
+        isChildTable: Bool = false
     ) {
         self.id = UUID()
         self.name = name
@@ -69,7 +62,9 @@ final class GuestTable {
         self.positionY = positionY
         self.rotation = rotation
         self.isLocked = false
-        self.linkedTableID = nil
+        self.isChildTable = isChildTable
+        self.combinationGroup = nil
+        self.combinationRole = nil
         self.guests = []
     }
 }

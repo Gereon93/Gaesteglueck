@@ -1,128 +1,83 @@
-#if canImport(UIKit)
+#if canImport(AppKit)
 import Foundation
-import PDFKit
-import UIKit
+import AppKit
 
 enum PDFExporter {
-    static func generatePDF(
-        tables: [GuestTable],
-        eventName: String,
-        date: Date?
-    ) -> Data {
-        let pageRect = CGRect(x: 0, y: 0, width: 595, height: 842) // A4
-        let renderer = UIGraphicsPDFRenderer(bounds: pageRect)
+    static func generatePDF(tables: [GuestTable], eventName: String, date: Date?) -> Data {
+        let pageRect = CGRect(x: 0, y: 0, width: 595, height: 842)
+        let pdfData = NSMutableData()
+        guard let consumer = CGDataConsumer(data: pdfData as CFMutableData),
+              let context = CGContext(consumer: consumer, mediaBox: nil, nil) else { return Data() }
 
-        let data = renderer.pdfData { context in
-            context.beginPage()
+        func beginPage() {
+            var mediaBox = pageRect
+            context.beginPage(mediaBox: &mediaBox)
+            context.translateBy(x: 0, y: pageRect.height)
+            context.scaleBy(x: 1, y: -1)
+        }
 
-            let titleAttributes: [NSAttributedString.Key: Any] = [
-                .font: UIFont.boldSystemFont(ofSize: 24)
-            ]
-            let subtitleAttributes: [NSAttributedString.Key: Any] = [
-                .font: UIFont.systemFont(ofSize: 14),
-                .foregroundColor: UIColor.secondaryLabel
-            ]
-            let headerAttributes: [NSAttributedString.Key: Any] = [
-                .font: UIFont.boldSystemFont(ofSize: 16)
-            ]
-            let bodyAttributes: [NSAttributedString.Key: Any] = [
-                .font: UIFont.systemFont(ofSize: 12)
-            ]
+        func drawText(_ text: String, at point: CGPoint, font: NSFont, color: NSColor = .labelColor) {
+            let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
+            (text as NSString).draw(at: point, withAttributes: attrs)
+        }
 
-            var y: CGFloat = 40
+        beginPage()
+        var y: CGFloat = 40
 
-            // Title
-            let title = "Sitzplan: \(eventName)"
-            title.draw(at: CGPoint(x: 40, y: y), withAttributes: titleAttributes)
-            y += 35
+        drawText("Sitzplan: \(eventName)", at: CGPoint(x: 40, y: y), font: .boldSystemFont(ofSize: 24))
+        y += 35
 
-            // Date
-            if let date {
-                let formatter = DateFormatter()
-                formatter.dateStyle = .long
-                formatter.locale = Locale(identifier: "de_DE")
-                let dateStr = formatter.string(from: date)
-                dateStr.draw(at: CGPoint(x: 40, y: y), withAttributes: subtitleAttributes)
-                y += 25
-            }
+        if let date {
+            let fmt = DateFormatter()
+            fmt.dateStyle = .long
+            fmt.locale = Locale(identifier: "de_DE")
+            drawText(fmt.string(from: date), at: CGPoint(x: 40, y: y), font: .systemFont(ofSize: 14), color: .secondaryLabelColor)
+            y += 25
+        }
+        y += 15
 
-            y += 15
-
-            // Tables
-            for table in tables.sorted(by: { $0.name < $1.name }) {
-                if y > pageRect.height - 100 {
-                    context.beginPage()
-                    y = 40
+        for table in tables.sorted(by: { $0.name < $1.name }) {
+            if y > pageRect.height - 100 { context.endPage(); beginPage(); y = 40 }
+            drawText("\(table.name) (\(table.shape.rawValue), \(table.guests.count)/\(table.capacity) Plätze)", at: CGPoint(x: 40, y: y), font: .boldSystemFont(ofSize: 16))
+            y += 22
+            if table.guests.isEmpty {
+                drawText("Keine Gäste zugewiesen", at: CGPoint(x: 60, y: y), font: .systemFont(ofSize: 12)); y += 18
+            } else {
+                for guest in table.guests.sorted(by: { $0.fullName < $1.fullName }) {
+                    var line = "\u{2022} \(guest.fullName)"
+                    if guest.dietaryChoice != "Fleisch" { line += " \(guest.dietaryChoice)" }
+                    if guest.hasIntolerances { line += " \u{26A0}\u{FE0F} \(guest.intolerances.joined(separator: ", "))" }
+                    if guest.ageCategory != .adult { line += " [\(guest.ageCategory.rawValue)]" }
+                    drawText(line, at: CGPoint(x: 60, y: y), font: .systemFont(ofSize: 12)); y += 18
                 }
-
-                let header = "\(table.name) (\(table.shape.rawValue), \(table.guests.count)/\(table.capacity) Plätze)"
-                header.draw(at: CGPoint(x: 40, y: y), withAttributes: headerAttributes)
-                y += 22
-
-                if table.guests.isEmpty {
-                    "Keine Gäste zugewiesen".draw(at: CGPoint(x: 60, y: y), withAttributes: bodyAttributes)
-                    y += 18
-                } else {
-                    for guest in table.guests.sorted(by: { $0.name < $1.name }) {
-                        var line = "\u{2022} \(guest.name) (\(guest.side.rawValue))"
-                        if guest.dietaryPreference != .meat {
-                            line += " \(guest.dietaryPreference.rawValue)"
-                        }
-                        if !guest.allergies.isEmpty {
-                            line += " \u{26A0}\u{FE0F} \(guest.allergies)"
-                        }
-                        if guest.isChild {
-                            line += " Kind"
-                        }
-                        line.draw(at: CGPoint(x: 60, y: y), withAttributes: bodyAttributes)
-                        y += 18
-                    }
-                }
-
-                y += 10
-            }
-
-            // Summary
-            if y > pageRect.height - 60 {
-                context.beginPage()
-                y = 40
             }
             y += 10
-            let totalGuests = tables.reduce(0) { $0 + $1.guests.count }
-            let totalCapacity = tables.reduce(0) { $0 + $1.capacity }
-            let summary = "Gesamt: \(totalGuests) Gäste an \(tables.count) Tischen (\(totalCapacity) Plätze)"
-            summary.draw(at: CGPoint(x: 40, y: y), withAttributes: subtitleAttributes)
+        }
 
-            // --- Dietary Summary for Caterer ---
-            context.beginPage()
-            y = 40
-            "Übersicht für den Caterer".draw(at: CGPoint(x: 40, y: y), withAttributes: titleAttributes)
-            y += 35
+        context.endPage()
+        beginPage()
+        y = 40
+        drawText("Übersicht für den Caterer", at: CGPoint(x: 40, y: y), font: .boldSystemFont(ofSize: 24)); y += 35
 
-            let allGuests = tables.flatMap(\.guests)
-            let meatCount = allGuests.filter { $0.dietaryPreference == .meat }.count
-            let vegCount = allGuests.filter { $0.dietaryPreference == .vegetarian }.count
-            let veganCount = allGuests.filter { $0.dietaryPreference == .vegan }.count
-            let childCount = allGuests.filter(\.isChild).count
+        let allGuests = tables.flatMap(\.guests)
+        let counts = Dictionary(grouping: allGuests, by: \.dietaryChoice).mapValues(\.count)
+        for (choice, count) in counts.sorted(by: { $0.key < $1.key }) {
+            drawText("\(choice): \(count)", at: CGPoint(x: 40, y: y), font: .systemFont(ofSize: 12)); y += 20
+        }
+        let childCount = allGuests.filter { $0.ageCategory != .adult }.count
+        drawText("Kinder: \(childCount)", at: CGPoint(x: 40, y: y), font: .systemFont(ofSize: 12)); y += 30
 
-            "Fleisch: \(meatCount)".draw(at: CGPoint(x: 40, y: y), withAttributes: bodyAttributes); y += 20
-            "Vegetarisch: \(vegCount)".draw(at: CGPoint(x: 40, y: y), withAttributes: bodyAttributes); y += 20
-            "Vegan: \(veganCount)".draw(at: CGPoint(x: 40, y: y), withAttributes: bodyAttributes); y += 20
-            "Kinder: \(childCount)".draw(at: CGPoint(x: 40, y: y), withAttributes: bodyAttributes); y += 30
-
-            // List all allergies
-            let guestsWithAllergies = allGuests.filter { !$0.allergies.isEmpty }
-            if !guestsWithAllergies.isEmpty {
-                "Unverträglichkeiten:".draw(at: CGPoint(x: 40, y: y), withAttributes: headerAttributes)
-                y += 22
-                for guest in guestsWithAllergies.sorted(by: { $0.name < $1.name }) {
-                    "  \(guest.name): \(guest.allergies)".draw(at: CGPoint(x: 60, y: y), withAttributes: bodyAttributes)
-                    y += 18
-                }
+        let withIntolerances = allGuests.filter(\.hasIntolerances)
+        if !withIntolerances.isEmpty {
+            drawText("Unverträglichkeiten:", at: CGPoint(x: 40, y: y), font: .boldSystemFont(ofSize: 16)); y += 22
+            for guest in withIntolerances.sorted(by: { $0.fullName < $1.fullName }) {
+                drawText("  \(guest.fullName): \(guest.intolerances.joined(separator: ", "))", at: CGPoint(x: 60, y: y), font: .systemFont(ofSize: 12)); y += 18
             }
         }
 
-        return data
+        context.endPage()
+        context.closePDF()
+        return pdfData as Data
     }
 }
 #endif

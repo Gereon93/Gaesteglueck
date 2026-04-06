@@ -5,91 +5,109 @@ import SwiftData
 struct GuestFormView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Query private var events: [Event]
 
     let guest: Guest?
 
-    @State private var name: String
-    @State private var side: Side
-    @State private var groupType: GroupType?
-    @State private var customGroupName: String
+    @State private var firstName: String
+    @State private var lastName: String
+    @State private var partnerAssignment: PartnerAssignment
     @State private var familyRole: FamilyRole?
-    @State private var dietaryPreference: DietaryPreference
-    @State private var allergies: String
-    @State private var isChild: Bool
+    @State private var dietaryChoice: String
+    @State private var intolerances: String
+    @State private var ageCategory: AgeCategory
     @State private var rsvpStatus: RSVPStatus
+    @State private var funFact: String
     @State private var notes: String
+    @State private var employer: String
+    @State private var profession: String
+    @State private var hobbies: String
+    @State private var showingExtraDetails = false
+
+    private var menuOptions: [String] {
+        events.first?.menuOptions ?? ["Fleisch", "Vegetarisch", "Vegan"]
+    }
 
     init(guest: Guest? = nil) {
         self.guest = guest
-        _name = State(initialValue: guest?.name ?? "")
-        _side = State(initialValue: guest?.side ?? .neutral)
-        _groupType = State(initialValue: guest?.groupType)
-        _customGroupName = State(initialValue: guest?.customGroupName ?? "")
+        _firstName = State(initialValue: guest?.firstName ?? "")
+        _lastName = State(initialValue: guest?.lastName ?? "")
+        _partnerAssignment = State(initialValue: guest?.partnerAssignment ?? .both)
         _familyRole = State(initialValue: guest?.familyRole)
-        _dietaryPreference = State(initialValue: guest?.dietaryPreference ?? .meat)
-        _allergies = State(initialValue: guest?.allergies ?? "")
-        _isChild = State(initialValue: guest?.isChild ?? false)
-        _rsvpStatus = State(initialValue: guest?.rsvpStatus ?? .pending)
+        _dietaryChoice = State(initialValue: guest?.dietaryChoice ?? "Fleisch")
+        _intolerances = State(initialValue: guest?.intolerances.joined(separator: ", ") ?? "")
+        _ageCategory = State(initialValue: guest?.ageCategory ?? .adult)
+        _rsvpStatus = State(initialValue: guest?.rsvpStatus ?? .confirmed)
+        _funFact = State(initialValue: guest?.funFact ?? "")
         _notes = State(initialValue: guest?.notes ?? "")
+        _employer = State(initialValue: guest?.employer ?? "")
+        _profession = State(initialValue: guest?.profession ?? "")
+        _hobbies = State(initialValue: guest?.hobbies.joined(separator: ", ") ?? "")
     }
 
     private var isValid: Bool {
-        !name.trimmingCharacters(in: .whitespaces).isEmpty
+        !firstName.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     var body: some View {
         NavigationStack {
             Form {
-                Section("Pflichtfelder") {
-                    TextField("Name", text: $name)
-                    Picker("Seite", selection: $side) {
-                        ForEach(Side.allCases) { side in
-                            Text(side.rawValue).tag(side)
-                        }
-                    }
-                    Toggle("Kind", isOn: $isChild)
+                Section("Name") {
+                    TextField("Vorname", text: $firstName)
+                    TextField("Nachname", text: $lastName)
                 }
-                Section("Gruppe & Beziehung") {
-                    Picker("Gruppe", selection: $groupType) {
-                        Text("Keine").tag(nil as GroupType?)
-                        ForEach(GroupType.allCases) { gt in
-                            Text(gt.rawValue).tag(gt as GroupType?)
+
+                Section("Zuordnung") {
+                    Picker("Partner", selection: $partnerAssignment) {
+                        ForEach(PartnerAssignment.allCases) { pa in
+                            Text(pa.rawValue).tag(pa)
                         }
                     }
-                    if groupType == .clubMember {
-                        TextField("Vereinsname (z.B. TuS Musterstadt)", text: $customGroupName)
+                    .pickerStyle(.segmented)
+
+                    Picker("Alter", selection: $ageCategory) {
+                        ForEach(AgeCategory.allCases) { ac in
+                            Text(ac.rawValue).tag(ac)
+                        }
                     }
-                    Picker("Beziehung", selection: $familyRole) {
+                }
+
+                Section("Beziehung") {
+                    Picker("Familienrolle", selection: $familyRole) {
                         Text("Keine Angabe").tag(nil as FamilyRole?)
                         ForEach(FamilyRole.allCases) { role in
                             Text(role.rawValue).tag(role as FamilyRole?)
                         }
                     }
                 }
+
                 Section("Essen & Unverträglichkeiten") {
-                    Picker("Ernährung", selection: $dietaryPreference) {
-                        ForEach(DietaryPreference.allCases) { pref in
-                            HStack {
-                                Text(pref.badge)
-                                Text(pref.rawValue)
-                            }.tag(pref)
+                    Picker("Menüwahl", selection: $dietaryChoice) {
+                        ForEach(menuOptions, id: \.self) { option in
+                            Text(option).tag(option)
                         }
                     }
-                    .pickerStyle(.segmented)
-                    TextField("Unverträglichkeiten (z.B. Laktose, Nüsse)", text: $allergies)
+                    TextField("Unverträglichkeiten (kommagetrennt)", text: $intolerances)
                 }
-                Section("Status") {
+
+                Section("Sonstiges") {
                     Picker("RSVP", selection: $rsvpStatus) {
                         ForEach(RSVPStatus.allCases, id: \.self) { status in
                             Text(status.rawValue).tag(status)
                         }
                     }
+                    TextField("Fun Fact", text: $funFact)
                     TextField("Notizen", text: $notes, axis: .vertical)
                         .lineLimit(3...6)
                 }
+
+                DisclosureGroup("Weitere Details", isExpanded: $showingExtraDetails) {
+                    TextField("Arbeitgeber", text: $employer)
+                    TextField("Beruf", text: $profession)
+                    TextField("Hobbies (kommagetrennt)", text: $hobbies)
+                }
             }
             .navigationTitle(guest == nil ? "Gast hinzufügen" : "Gast bearbeiten")
-            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Abbrechen") { dismiss() }
@@ -103,30 +121,46 @@ struct GuestFormView: View {
     }
 
     private func save() {
+        let parsedIntolerances = intolerances
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+
+        let parsedHobbies = hobbies
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+
         if let guest {
-            guest.name = name.trimmingCharacters(in: .whitespaces)
-            guest.side = side
-            guest.groupType = groupType
-            guest.customGroupName = customGroupName.isEmpty ? nil : customGroupName
+            guest.firstName = firstName.trimmingCharacters(in: .whitespaces)
+            guest.lastName = lastName.trimmingCharacters(in: .whitespaces)
+            guest.partnerAssignment = partnerAssignment
             guest.familyRole = familyRole
-            guest.dietaryPreference = dietaryPreference
-            guest.allergies = allergies
-            guest.isChild = isChild
+            guest.dietaryChoice = dietaryChoice
+            guest.intolerances = parsedIntolerances
+            guest.ageCategory = ageCategory
             guest.rsvpStatus = rsvpStatus
+            guest.funFact = funFact
             guest.notes = notes
+            guest.employer = employer
+            guest.profession = profession
+            guest.hobbies = parsedHobbies
         } else {
             let newGuest = Guest(
-                name: name.trimmingCharacters(in: .whitespaces),
-                side: side,
-                groupType: groupType,
-                customGroupName: customGroupName.isEmpty ? nil : customGroupName,
+                firstName: firstName.trimmingCharacters(in: .whitespaces),
+                lastName: lastName.trimmingCharacters(in: .whitespaces),
+                partnerAssignment: partnerAssignment,
+                ageCategory: ageCategory,
                 familyRole: familyRole,
-                dietaryPreference: dietaryPreference,
-                allergies: allergies,
-                rsvpStatus: rsvpStatus,
-                isChild: isChild,
-                notes: notes
+                dietaryChoice: dietaryChoice,
+                intolerances: parsedIntolerances,
+                funFact: funFact,
+                notes: notes,
+                rsvpStatus: rsvpStatus
             )
+            newGuest.employer = employer
+            newGuest.profession = profession
+            newGuest.hobbies = parsedHobbies
             modelContext.insert(newGuest)
         }
         dismiss()

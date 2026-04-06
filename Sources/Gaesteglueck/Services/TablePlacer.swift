@@ -19,26 +19,17 @@ enum TablePlacer {
         var placements: [TablePlacement] = []
 
         let sorted = tables.sorted { a, b in
-            if a.shape == .brideTable { return true }
-            if b.shape == .brideTable { return false }
-            return tableFootprint(a) > tableFootprint(b)
+            tableFootprint(a) > tableFootprint(b)
         }
 
         for table in sorted {
-            let footprint = tableFootprint(table)
-            let position: (x: Double, y: Double)
-
-            if table.shape == .brideTable {
-                position = (roomWidthCM / 2, wallMargin + footprint / 2)
-            } else {
-                position = findNonOverlappingPosition(
+            let position = findNonOverlappingPosition(
                     for: table,
                     existing: placements,
                     allTables: tables,
                     roomWidth: roomWidthCM,
                     roomDepth: roomDepthCM
                 )
-            }
 
             placements.append(TablePlacement(tableID: table.id, x: position.x, y: position.y))
         }
@@ -50,7 +41,7 @@ enum TablePlacer {
         switch table.shape {
         case .round:
             return table.diameter + 2 * chairBuffer
-        case .rectangular, .brideTable:
+        case .rectangular, .square:
             return max(table.width, table.depth) + 2 * chairBuffer
         }
     }

@@ -12,26 +12,23 @@ struct ViolationBannerView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundStyle(.red)
-                        Text(violationText(violation))
-                            .font(.caption)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(violation.description)
+                                .font(.caption)
+                            let names = violation.guestIDs.compactMap { id in
+                                allGuests.first { $0.id == id }?.fullName
+                            }
+                            if !names.isEmpty {
+                                Text(names.joined(separator: ", "))
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                     }
                 }
             }
             .padding(8)
             .background(.red.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
-        }
-    }
-
-    private func violationText(_ v: Violation) -> String {
-        let nameA = allGuests.first { $0.id == v.personAID }?.name ?? "?"
-        let nameB = allGuests.first { $0.id == v.personBID }?.name ?? "?"
-        switch v.type {
-        case .partnersSeparated:
-            return "\(nameA) & \(nameB) sind getrennt!"
-        case .toxicAtSameTable:
-            return "\(nameA) & \(nameB) sitzen am selben Tisch!"
-        case .tableOverCapacity:
-            return "Tisch überbelegt"
         }
     }
 }

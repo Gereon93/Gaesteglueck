@@ -6,7 +6,7 @@ struct ImportPreviewView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
 
-    let families: [ImportedFamily]
+    let rows: [RegistrationRow]
     let onComplete: (Int) -> Void
 
     var body: some View {
@@ -14,37 +14,37 @@ struct ImportPreviewView: View {
             List {
                 Section {
                     HStack {
-                        Text("Familien/Paare")
+                        Text("Registrierungen")
                         Spacer()
-                        Text("\(families.count)")
+                        Text("\(rows.count)")
                     }
                     HStack {
                         Text("Personen gesamt")
                         Spacer()
-                        Text("\(families.reduce(0) { $0 + $1.members.count })")
+                        Text("\(rows.reduce(0) { $0 + $1.guestCount })")
                     }
                 } header: {
                     Text("Übersicht")
                 }
 
-                ForEach(Array(families.enumerated()), id: \.offset) { _, family in
+                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                     Section {
-                        ForEach(Array(family.members.enumerated()), id: \.offset) { _, member in
-                            HStack {
-                                Circle().fill(member.side.color).frame(width: 8, height: 8)
-                                Text(member.name)
-                                if member.isChild {
-                                    Image(systemName: "figure.child")
-                                        .font(.caption2)
-                                }
-                                Spacer()
-                                Text(member.dietaryPreference.badge)
-                                if !member.allergies.isEmpty {
-                                    Image(systemName: "exclamationmark.triangle.fill")
-                                        .font(.caption2)
-                                        .foregroundStyle(.orange)
-                                }
-                            }
+                        HStack {
+                            Text(row.familyName)
+                                .font(.headline)
+                            Spacer()
+                            Text("\(row.guestCount) Personen")
+                                .foregroundStyle(.secondary)
+                        }
+                        if !row.guestDetails.isEmpty {
+                            Text(row.guestDetails)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        if !row.notes.isEmpty {
+                            Text(row.notes)
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
                         }
                     }
                 }
@@ -63,27 +63,29 @@ struct ImportPreviewView: View {
 
     private func performImport() {
         var count = 0
-        for family in families {
-            for member in family.members {
-                let guest = Guest(
-                    name: member.name,
-                    side: member.side,
-                    familyID: family.sharedFamilyID,
-                    dietaryPreference: member.dietaryPreference,
-                    allergies: member.allergies,
-                    isChild: member.isChild
+        for row in rows {
+            let registrationGroup = UUID()
+            // Create a placeholder guest for each registration row
+            let guest = Guest(
+                firstName: row.familyName,
+                notes: [row.guestDetails, row.funFacts, row.notes].filter { !$0.isEmpty }.joined(separator: " | "),
+                registrationGroup: registrationGroup
+            )
+            modelContext.insert(guest)
+            count += 1
+
+            // Create additional guests if count > 1
+            for i in 1..<row.guestCount {
+                let extra = Guest(
+                    firstName: "\(row.familyName) +\(i)",
+                    registrationGroup: registrationGroup
                 )
-                modelContext.insert(guest)
+                modelContext.insert(extra)
                 count += 1
             }
         }
         onComplete(count)
         dismiss()
     }
-}
-
-// Color extension for ImportedGuest.side (uses the existing Side.color from ModelExtensions+UI)
-extension ImportedGuest {
-    // Side already has .color from ModelExtensions+UI.swift
 }
 #endif

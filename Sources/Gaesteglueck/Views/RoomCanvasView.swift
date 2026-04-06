@@ -5,8 +5,9 @@ import SwiftData
 struct RoomCanvasView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var tables: [GuestTable]
-    @Query(sort: \Guest.name) private var guests: [Guest]
-    @Query private var relationships: [Relationship]
+    @Query(sort: \Guest.firstName) private var guests: [Guest]
+    @Query private var tags: [Tag]
+    @Query private var constraints: [Constraint]
     @Query private var roomPlans: [RoomPlan]
 
     @State private var selectedTable: GuestTable?
@@ -14,20 +15,41 @@ struct RoomCanvasView: View {
     @State private var showingFloorPlanSetup = false
 
     private var unassignedGuests: [Guest] {
-        guests.filter { $0.table == nil }
+        guests.filter { $0.table == nil && $0.needsSeat }
     }
 
     private var happinessScore: Double {
-        HappinessScorer.scoreAllTables(tables, relationships: relationships)
+        HappinessScorer.scoreAllTables(tables, tags: tags, constraints: constraints)
     }
 
     private var violations: [Violation] {
-        HappinessScorer.findViolations(tables: tables, relationships: relationships)
+        HappinessScorer.findViolations(tables: tables, constraints: constraints)
+    }
+
+    // Group unassigned guests by their primary tag
+    private var unassignedGrouped: [(String, [Guest])] {
+        var result: [(String, [Guest])] = []
+        var placed = Set<UUID>()
+
+        for tag in tags.sorted(by: { $0.name < $1.name }) {
+            let inTag = unassignedGuests.filter { tag.guestIDs.contains($0.id) && !placed.contains($0.id) }
+            if !inTag.isEmpty {
+                result.append((tag.name, inTag))
+                inTag.forEach { placed.insert($0.id) }
+            }
+        }
+
+        let ungrouped = unassignedGuests.filter { !placed.contains($0.id) }
+        if !ungrouped.isEmpty {
+            result.append(("Ohne Gruppe", ungrouped))
+        }
+
+        return result
     }
 
     var body: some View {
         HStack(spacing: 0) {
-            // Left panel: unassigned guests
+            // Left panel: unassigned guests grouped by tags
             guestInbox
                 .frame(width: 250)
 
@@ -35,18 +57,8 @@ struct RoomCanvasView: View {
 
             // Center: room canvas
             ZStack {
-                Color(.systemGroupedBackground)
+                Color(nsColor: .controlBackgroundColor)
                     .ignoresSafeArea()
-
-                #if canImport(UIKit)
-                if let roomPlan = roomPlans.first, let imageData = roomPlan.imageData,
-                   let uiImage = UIImage(data: imageData) {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .scaledToFit()
-                        .opacity(0.3)
-                }
-                #endif
 
                 ForEach(tables) { table in
                     TableCanvasItemView(
@@ -70,7 +82,7 @@ struct RoomCanvasView: View {
 
             Divider()
 
-            // Right panel: selected table details + score
+            // Right panel: selected table details or empty
             detailPanel
                 .frame(width: 280)
         }
@@ -92,36 +104,13 @@ struct RoomCanvasView: View {
             ToolbarItem(placement: .status) {
                 ScoreBadgeView(score: happinessScore)
             }
-            #if canImport(UIKit)
             ToolbarItem(placement: .secondaryAction) {
                 ExportButton(tables: tables, eventName: "Hochzeit", date: nil)
             }
-            ToolbarItem(placement: .secondaryAction) {
-                Button {
-                    showingFloorPlanSetup = true
-                } label: {
-                    Label("Raumplan-Foto", systemImage: "photo.badge.plus")
-                }
-            }
-            #endif
         }
         .sheet(isPresented: $showingAddTable) {
             TableFormView()
         }
-        #if canImport(UIKit)
-        .sheet(isPresented: $showingFloorPlanSetup) {
-            if let roomPlan = roomPlans.first {
-                FloorPlanSetupView(roomPlan: roomPlan)
-            }
-        }
-        .onAppear {
-            // Ensure a RoomPlan exists for floor plan import
-            if roomPlans.isEmpty {
-                let plan = RoomPlan()
-                modelContext.insert(plan)
-            }
-        }
-        #endif
     }
 
     // MARK: - Guest Inbox
@@ -138,9 +127,17 @@ struct RoomCanvasView: View {
             .padding()
 
             List {
-                ForEach(unassignedGuests) { guest in
-                    GuestRowView(guest: guest)
-                        .draggable(guest.id.uuidString)
+                ForEach(unassignedGrouped, id: \.0) { groupName, groupGuests in
+                    Section(groupName) {
+                        ForEach(groupGuests) { guest in
+                            HStack {
+                                Circle().fill(guest.partnerAssignment.color).frame(width: 8, height: 8)
+                                Text(guest.fullName)
+                                    .font(.body)
+                            }
+                            .draggable(guest.id.uuidString)
+                        }
+                    }
                 }
             }
             .listStyle(.plain)
@@ -158,6 +155,11 @@ struct RoomCanvasView: View {
                         .font(.headline)
                     Text("\(table.guests.count)/\(table.capacity) Plätze")
                         .foregroundStyle(.secondary)
+                    if table.isChildTable {
+                        Label("Kindertisch", systemImage: "figure.child")
+                            .font(.caption)
+                            .foregroundStyle(.green)
+                    }
                 }
                 .padding()
 
@@ -170,8 +172,8 @@ struct RoomCanvasView: View {
                                         .foregroundStyle(.orange)
                                         .font(.caption)
                                 }
-                                Circle().fill(guest.side.color).frame(width: 8, height: 8)
-                                Text(guest.name)
+                                Circle().fill(guest.partnerAssignment.color).frame(width: 8, height: 8)
+                                Text(guest.fullName)
                                 Spacer()
                                 Button {
                                     guest.isPinned.toggle()
@@ -185,7 +187,7 @@ struct RoomCanvasView: View {
                                     guest.table = nil
                                 } label: {
                                     Image(systemName: "xmark.circle.fill")
-                                        .foregroundStyle(guest.isPinned ? .secondary.opacity(0.3) : .secondary)
+                                        .foregroundStyle(guest.isPinned ? Color.secondary.opacity(0.3) : Color.secondary)
                                 }
                                 .buttonStyle(.plain)
                                 .disabled(guest.isPinned)
@@ -200,26 +202,42 @@ struct RoomCanvasView: View {
 
             Divider()
 
-            // Violations
+            // Violations banner
             if !violations.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    Label("Warnungen", systemImage: "exclamationmark.triangle.fill")
-                        .font(.headline)
-                        .foregroundStyle(.red)
-                    ForEach(violations) { v in
-                        Text(v.description)
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                    }
-                }
-                .padding()
+                ViolationBannerView(violations: violations, allGuests: guests)
+                    .padding()
             }
-
-            Divider()
-
-            AISuggestionView()
         }
         .background(.background)
+    }
+}
+
+/// Placeholder for auto-assign functionality
+struct AutoAssignButton: View {
+    @Query private var guests: [Guest]
+    @Query private var tables: [GuestTable]
+    @Query private var tags: [Tag]
+    @Query private var constraints: [Constraint]
+
+    var body: some View {
+        Button {
+            let unassigned = guests.filter { $0.table == nil }
+            let result = SeatingOptimizer.solve(
+                guests: unassigned,
+                tables: tables,
+                tags: tags,
+                constraints: constraints
+            )
+            for (guestID, tableID) in result {
+                if let guest = guests.first(where: { $0.id == guestID }),
+                   let table = tables.first(where: { $0.id == tableID }) {
+                    guest.table = table
+                }
+            }
+        } label: {
+            Label("Auto-Zuweisen", systemImage: "wand.and.stars")
+        }
+        .disabled(guests.filter { $0.table == nil }.isEmpty || tables.isEmpty)
     }
 }
 #endif

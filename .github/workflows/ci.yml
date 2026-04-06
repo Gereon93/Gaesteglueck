@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lint (swift format check)
+        run: |
+          if command -v swift-format &> /dev/null; then
+            swift-format lint --recursive Sources/ Tests/ --strict
+          else
+            echo "swift-format not available, skipping lint"
+          fi
+
+      - name: Build
+        run: swift build
+
+      - name: Test
+        run: swift test

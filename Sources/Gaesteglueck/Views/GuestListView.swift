@@ -4,28 +4,29 @@ import SwiftData
 
 struct GuestListView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \Guest.name) private var guests: [Guest]
+    @Query(sort: \Guest.firstName) private var guests: [Guest]
+    @Query private var tags: [Tag]
     @State private var showingAddSheet = false
-    @State private var showingOnboarding = false
     @State private var editingGuest: Guest?
     @State private var searchText = ""
+    @State private var showingEnrichment = false
 
     private var filteredGuests: [Guest] {
         guard !searchText.isEmpty else { return guests }
-        return guests.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
+        return guests.filter { $0.fullName.localizedCaseInsensitiveContains(searchText) }
     }
 
-    private var groupedGuests: [Side: [Guest]] {
-        Dictionary(grouping: filteredGuests, by: \.side)
+    private var groupedGuests: [PartnerAssignment: [Guest]] {
+        Dictionary(grouping: filteredGuests, by: \.partnerAssignment)
     }
 
     var body: some View {
         List {
-            ForEach(Side.allCases) { side in
-                if let sideGuests = groupedGuests[side], !sideGuests.isEmpty {
+            ForEach(PartnerAssignment.allCases) { assignment in
+                if let assignmentGuests = groupedGuests[assignment], !assignmentGuests.isEmpty {
                     Section {
-                        ForEach(sideGuests) { guest in
-                            GuestRowView(guest: guest)
+                        ForEach(assignmentGuests) { guest in
+                            GuestRowView(guest: guest, tags: tags)
                                 .contentShape(Rectangle())
                                 .onTapGesture { editingGuest = guest }
                                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
@@ -38,8 +39,8 @@ struct GuestListView: View {
                         }
                     } header: {
                         HStack {
-                            Circle().fill(side.color).frame(width: 8, height: 8)
-                            Text("\(side.rawValue) (\(sideGuests.count))")
+                            Circle().fill(assignment.color).frame(width: 8, height: 8)
+                            Text("\(assignment.rawValue) (\(assignmentGuests.count))")
                         }
                     }
                 }
@@ -67,9 +68,9 @@ struct GuestListView: View {
             #endif
             ToolbarItem(placement: .secondaryAction) {
                 Button {
-                    showingOnboarding = true
+                    showingEnrichment = true
                 } label: {
-                    Label("Beziehungen zuweisen", systemImage: "wand.and.stars")
+                    Label("Anreichern", systemImage: "wand.and.sparkles")
                 }
                 .disabled(guests.isEmpty)
             }
@@ -80,8 +81,8 @@ struct GuestListView: View {
         .sheet(item: $editingGuest) { guest in
             GuestFormView(guest: guest)
         }
-        .sheet(isPresented: $showingOnboarding) {
-            OnboardingWizardView()
+        .sheet(isPresented: $showingEnrichment) {
+            EnrichmentWizardView()
         }
     }
 }

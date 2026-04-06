@@ -16,10 +16,11 @@ struct GuestTableTests {
         #expect(table.capacity == 8)
     }
 
-    @Test("Bride table calculates one-sided capacity")
-    func brideTableCapacity() {
-        let table = GuestTable(name: "Brauttisch", shape: .brideTable, width: 400, depth: 100)
-        #expect(table.capacity == 6)
+    @Test("Square table calculates capacity from width")
+    func squareTableCapacity() {
+        let table = GuestTable(name: "Quadrat", shape: .square, width: 200)
+        // perimeter = 4 * 200 = 800, seats = 800/60 = 13
+        #expect(table.capacity == 13)
     }
 
     @Test("Remaining seats calculation")
@@ -34,29 +35,21 @@ struct GuestTableTests {
         #expect(!table.isFull)
     }
 
-    @Test("Combined rectangular tables increase capacity")
-    func combinedTables() {
-        let t1 = GuestTable(name: "T1", shape: .rectangular, width: 200, depth: 100)
-        let t2 = GuestTable(name: "T2", shape: .rectangular, width: 200, depth: 100)
-        t1.linkedTableID = t2.id
-        t2.linkedTableID = t1.id
-        let combinedCap = t1.combinedCapacity(with: t2)
-        #expect(combinedCap > t1.capacity)
+    @Test("Child table flag")
+    func childTable() {
+        let table = GuestTable(name: "Kindertisch", shape: .round, diameter: 120, isChildTable: true)
+        #expect(table.isChildTable)
     }
 
-    @Test("Two rectangular 200x100 tables combined have correct capacity")
-    func combinedCapacityCalculation() {
+    @Test("Combination group")
+    func combinationGroup() {
         let t1 = GuestTable(name: "T1", shape: .rectangular, width: 200, depth: 100)
         let t2 = GuestTable(name: "T2", shape: .rectangular, width: 200, depth: 100)
-        t1.linkedTableID = t2.id
-        t2.linkedTableID = t1.id
-
-        let combined = t1.combinedCapacity(with: t2)
-        // Combined 400cm long, 100cm wide
-        // 2 long sides: 400/60 * 2 = 12
-        // 2 short ends: 100/60 * 2 = 2
-        // Total: 14
-        #expect(combined == 14)
-        #expect(combined > t1.capacity)
+        let groupID = UUID()
+        t1.combinationGroup = groupID
+        t1.combinationRole = .head
+        t2.combinationGroup = groupID
+        t2.combinationRole = .end
+        #expect(t1.combinationGroup == t2.combinationGroup)
     }
 }

@@ -1,4 +1,4 @@
-#if canImport(UIKit)
+#if canImport(AppKit)
 import Testing
 import Foundation
 @testable import Gaesteglueck
@@ -8,7 +8,7 @@ struct PDFExporterTests {
     @Test("Generates non-empty PDF data")
     func generatesPDF() {
         let table = GuestTable(name: "Tisch 1", shape: .round, diameter: 180)
-        let guest = Guest(name: "Anna", side: .bride)
+        let guest = Guest(firstName: "Anna", partnerAssignment: .partner1)
         table.guests = [guest]
 
         let data = PDFExporter.generatePDF(
@@ -32,8 +32,8 @@ struct PDFExporterTests {
     @Test("PDF includes dietary summary section")
     func dietarySummary() {
         let table = GuestTable(name: "T1", shape: .round, diameter: 180)
-        let veganGuest = Guest(name: "Lisa", side: .bride, dietaryPreference: .vegan, allergies: "Nüsse")
-        let meatGuest = Guest(name: "Klaus", side: .groom)
+        let veganGuest = Guest(firstName: "Lisa", partnerAssignment: .partner1, dietaryChoice: "Vegan", intolerances: ["Nüsse"])
+        let meatGuest = Guest(firstName: "Klaus", partnerAssignment: .partner2)
         table.guests = [veganGuest, meatGuest]
 
         let data = PDFExporter.generatePDF(

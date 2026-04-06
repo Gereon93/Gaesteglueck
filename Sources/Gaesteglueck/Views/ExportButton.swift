@@ -1,4 +1,4 @@
-#if canImport(SwiftUI) && canImport(UIKit)
+#if canImport(SwiftUI) && canImport(AppKit)
 import SwiftUI
 
 struct ExportButton: View {
@@ -6,19 +6,11 @@ struct ExportButton: View {
     let eventName: String
     let date: Date?
 
-    @State private var showingShareSheet = false
-    @State private var pdfURL: URL?
-
     var body: some View {
         Button {
             exportPDF()
         } label: {
             Label("PDF exportieren", systemImage: "square.and.arrow.up")
-        }
-        .sheet(isPresented: $showingShareSheet) {
-            if let url = pdfURL {
-                ShareLink(item: url)
-            }
         }
     }
 
@@ -31,8 +23,15 @@ struct ExportButton: View {
         let tempURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("Sitzplan-\(eventName).pdf")
         try? data.write(to: tempURL)
-        pdfURL = tempURL
-        showingShareSheet = true
+
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.pdf]
+        panel.nameFieldStringValue = "Sitzplan-\(eventName).pdf"
+        panel.begin { response in
+            if response == .OK, let url = panel.url {
+                try? data.write(to: url)
+            }
+        }
     }
 }
 #endif

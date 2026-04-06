@@ -2,23 +2,23 @@
 import SwiftUI
 
 struct ContentView: View {
-    @State private var selectedSection: AppSection? = .guests
+    @State private var selectedSection: AppSection? = .dashboard
 
     var body: some View {
         NavigationSplitView {
             AppSidebar(selection: $selectedSection)
         } detail: {
             switch selectedSection {
+            case .dashboard:
+                DashboardView()
             case .guests:
                 GuestListView()
             case .tables:
-                TableListView()
-            case .room:
                 RoomCanvasView()
-            case .relationships:
-                RelationshipListView()
-            case .statistics:
-                StatisticsView()
+            case .tags:
+                TagListView()
+            case .assistant:
+                KIWizardView()
             case .settings:
                 SettingsView()
             case nil:

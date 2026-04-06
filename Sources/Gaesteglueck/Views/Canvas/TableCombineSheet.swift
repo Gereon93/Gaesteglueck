@@ -8,20 +8,20 @@ struct TableCombineSheet: View {
     @Query(sort: \GuestTable.name) private var allTables: [GuestTable]
 
     private var availableTables: [GuestTable] {
-        allTables.filter { $0.id != table.id && $0.shape == .rectangular && $0.linkedTableID == nil }
+        allTables.filter { $0.id != table.id && $0.shape == .rectangular && $0.combinationGroup == nil }
     }
 
     var body: some View {
         NavigationStack {
             List {
-                if table.linkedTableID != nil {
+                if table.combinationGroup != nil {
                     Section {
                         Button("Verbindung lösen", role: .destructive) {
-                            if let linkedID = table.linkedTableID,
-                               let linked = allTables.first(where: { $0.id == linkedID }) {
-                                linked.linkedTableID = nil
+                            let groupID = table.combinationGroup
+                            for t in allTables where t.combinationGroup == groupID {
+                                t.combinationGroup = nil
+                                t.combinationRole = nil
                             }
-                            table.linkedTableID = nil
                             dismiss()
                         }
                     }
@@ -34,9 +34,11 @@ struct TableCombineSheet: View {
                     }
                     ForEach(availableTables) { other in
                         Button {
-                            table.linkedTableID = other.id
-                            other.linkedTableID = table.id
-                            // Position the linked table next to this one
+                            let groupID = table.combinationGroup ?? UUID()
+                            table.combinationGroup = groupID
+                            table.combinationRole = .head
+                            other.combinationGroup = groupID
+                            other.combinationRole = .end
                             other.positionX = table.positionX + table.width / 3 + 5
                             other.positionY = table.positionY
                             dismiss()
@@ -44,7 +46,7 @@ struct TableCombineSheet: View {
                             HStack {
                                 Text(other.name)
                                 Spacer()
-                                Text("\(other.width.formatted())×\(other.depth.formatted()) cm")
+                                Text("\(other.width.formatted())x\(other.depth.formatted()) cm")
                                     .foregroundStyle(.secondary)
                             }
                         }

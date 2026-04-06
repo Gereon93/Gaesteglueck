@@ -4,49 +4,38 @@ import Foundation
 
 @Suite("Happiness Scorer")
 struct HappinessScorerTests {
-    func makeGuest(_ name: String, side: Side = .bride) -> Guest {
-        Guest(name: name, side: side)
+    func makeGuest(_ firstName: String, assignment: PartnerAssignment = .partner1) -> Guest {
+        Guest(firstName: firstName, partnerAssignment: assignment)
     }
 
     @Test("Empty table scores zero")
     func emptyTable() {
         let table = GuestTable(name: "T1", shape: .round)
-        let score = HappinessScorer.scoreTable(table, relationships: [])
+        let score = HappinessScorer.scoreTable(table, tags: [], constraints: [])
         #expect(score == 0)
     }
 
-    @Test("Partners at same table scores positively")
-    func partnersAtSameTable() {
+    @Test("Tag members at same table scores positively")
+    func tagMembersAtSameTable() {
         let alice = makeGuest("Alice")
-        let bob = makeGuest("Bob", side: .groom)
+        let bob = makeGuest("Bob", assignment: .partner2)
         let table = GuestTable(name: "T1", shape: .round)
         table.guests = [alice, bob]
 
-        let rel = Relationship(personAID: alice.id, personBID: bob.id, type: .partner)
-        let score = HappinessScorer.scoreTable(table, relationships: [rel])
+        let tag = Tag(name: "Unigruppe", category: .friendGroup)
+        tag.guestIDs = [alice.id, bob.id]
+        let score = HappinessScorer.scoreTable(table, tags: [tag], constraints: [])
         #expect(score > 0)
     }
 
-    @Test("Toxic guests at same table scores very negatively")
-    func toxicAtSameTable() {
-        let alice = makeGuest("Alice")
-        let eve = makeGuest("Eve")
+    @Test("Mixed assignments bonus")
+    func mixedAssignmentsBonus() {
+        let p1Guest = makeGuest("A", assignment: .partner1)
+        let p2Guest = makeGuest("B", assignment: .partner2)
         let table = GuestTable(name: "T1", shape: .round)
-        table.guests = [alice, eve]
+        table.guests = [p1Guest, p2Guest]
 
-        let rel = Relationship(personAID: alice.id, personBID: eve.id, type: .toxic)
-        let score = HappinessScorer.scoreTable(table, relationships: [rel])
-        #expect(score < 0)
-    }
-
-    @Test("Mixed sides bonus")
-    func mixedSidesBonus() {
-        let brideGuest = makeGuest("A", side: .bride)
-        let groomGuest = makeGuest("B", side: .groom)
-        let table = GuestTable(name: "T1", shape: .round)
-        table.guests = [brideGuest, groomGuest]
-
-        let score = HappinessScorer.scoreTable(table, relationships: [])
+        let score = HappinessScorer.scoreTable(table, tags: [], constraints: [])
         #expect(score > 0)
     }
 
@@ -59,12 +48,12 @@ struct HappinessScorerTests {
         t1.guests = [alice]
         t2.guests = [bob]
 
-        let total = HappinessScorer.scoreAllTables([t1, t2], relationships: [])
-        #expect(total == HappinessScorer.scoreTable(t1, relationships: []) + HappinessScorer.scoreTable(t2, relationships: []))
+        let total = HappinessScorer.scoreAllTables([t1, t2], tags: [], constraints: [])
+        #expect(total == HappinessScorer.scoreTable(t1, tags: [], constraints: []) + HappinessScorer.scoreTable(t2, tags: [], constraints: []))
     }
 
-    @Test("Partners separated across tables produces violation")
-    func partnersSeparated() {
+    @Test("Must-sit-together constraint separated produces violation")
+    func mustSitTogetherViolation() {
         let alice = makeGuest("Alice")
         let bob = makeGuest("Bob")
         let t1 = GuestTable(name: "T1", shape: .round)
@@ -72,22 +61,22 @@ struct HappinessScorerTests {
         t1.guests = [alice]
         t2.guests = [bob]
 
-        let rel = Relationship(personAID: alice.id, personBID: bob.id, type: .partner)
-        let violations = HappinessScorer.findViolations(tables: [t1, t2], relationships: [rel])
+        let constraint = Constraint(type: .mustSitTogether, guestIDs: [alice.id, bob.id], reason: "Ehepaar")
+        let violations = HappinessScorer.findViolations(tables: [t1, t2], constraints: [constraint])
         #expect(!violations.isEmpty)
-        #expect(violations.first?.type == .partnersSeparated)
+        #expect(violations.first?.type == .constraintViolated)
     }
 
-    @Test("Toxic at same table produces violation")
-    func toxicViolation() {
+    @Test("Must-not-sit-together at same table produces violation")
+    func mustNotSitTogetherViolation() {
         let alice = makeGuest("Alice")
         let eve = makeGuest("Eve")
         let table = GuestTable(name: "T1", shape: .round)
         table.guests = [alice, eve]
 
-        let rel = Relationship(personAID: alice.id, personBID: eve.id, type: .toxic)
-        let violations = HappinessScorer.findViolations(tables: [table], relationships: [rel])
+        let constraint = Constraint(type: .mustNotSitTogether, guestIDs: [alice.id, eve.id], reason: "Konflikt")
+        let violations = HappinessScorer.findViolations(tables: [table], constraints: [constraint])
         #expect(!violations.isEmpty)
-        #expect(violations.first?.type == .toxicAtSameTable)
+        #expect(violations.first?.type == .constraintViolated)
     }
 }

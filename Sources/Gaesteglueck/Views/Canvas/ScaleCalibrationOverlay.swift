@@ -1,4 +1,4 @@
-#if canImport(SwiftUI) && canImport(SwiftData) && canImport(UIKit)
+#if canImport(SwiftUI) && canImport(SwiftData) && canImport(AppKit)
 import SwiftUI
 import SwiftData
 
@@ -17,27 +17,25 @@ struct ScaleCalibrationOverlay: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Text("Tippe zwei Punkte auf einer bekannten Wand und gib die Länge in cm ein.")
+            Text("Klicke zwei Punkte auf einer bekannten Wand und gib die Länge in cm ein.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .padding()
 
             GeometryReader { geo in
-                if let imageData = roomPlan.imageData, let uiImage = UIImage(data: imageData) {
-                    Image(uiImage: uiImage)
+                if let imageData = roomPlan.imageData, let nsImage = NSImage(data: imageData) {
+                    Image(nsImage: nsImage)
                         .resizable()
                         .scaledToFit()
                         .overlay {
                             Canvas { context, size in
                                 imageSize = size
-                                // Draw calibration line
                                 if let a = pointA, let b = pointB {
                                     var path = Path()
                                     path.move(to: a)
                                     path.addLine(to: b)
                                     context.stroke(path, with: .color(.red), lineWidth: 3)
                                 }
-                                // Draw points
                                 for point in [pointA, pointB].compactMap({ $0 }) {
                                     let rect = CGRect(x: point.x - 8, y: point.y - 8, width: 16, height: 16)
                                     context.fill(Circle().path(in: rect), with: .color(.red))
@@ -50,7 +48,6 @@ struct ScaleCalibrationOverlay: View {
                             } else if pointB == nil {
                                 pointB = location
                             } else {
-                                // Reset
                                 pointA = location
                                 pointB = nil
                             }
@@ -61,7 +58,6 @@ struct ScaleCalibrationOverlay: View {
             HStack {
                 TextField("Länge in cm (z.B. 1000 für 10m)", text: $realWorldCM)
                     .textFieldStyle(.roundedBorder)
-                    .keyboardType(.numberPad)
                     .frame(maxWidth: 300)
 
                 Button("Kalibrieren") {
@@ -79,7 +75,6 @@ struct ScaleCalibrationOverlay: View {
               let cm = Double(realWorldCM), cm > 0,
               imageSize.width > 0 else { return }
 
-        // Store normalized coordinates (0-1)
         roomPlan.scalePointAX = a.x / imageSize.width
         roomPlan.scalePointAY = a.y / imageSize.height
         roomPlan.scalePointBX = b.x / imageSize.width

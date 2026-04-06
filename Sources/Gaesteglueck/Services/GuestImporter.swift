@@ -20,9 +20,11 @@ struct ImportedFamily: Sendable {
 }
 
 struct ImportedGuest: Sendable {
-    let name: String
-    let side: Side
-    let dietaryPreference: DietaryPreference
-    let allergies: String
-    let isChild: Bool
+    let firstName: String
+    let lastName: String
+    let dietaryChoice: String
+    let intolerances: [String]
+    let ageCategory: AgeCategory
+    let funFact: String
+    let notes: String
 }

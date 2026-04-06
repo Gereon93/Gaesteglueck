@@ -1,14 +1,12 @@
-#if canImport(SwiftUI) && canImport(SwiftData) && canImport(UIKit)
+#if canImport(SwiftUI) && canImport(SwiftData) && canImport(AppKit)
 import SwiftUI
 import SwiftData
-import PhotosUI
 
 struct FloorPlanSetupView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Bindable var roomPlan: RoomPlan
 
-    @State private var selectedPhoto: PhotosPickerItem?
     @State private var phase: SetupPhase = .chooseImage
 
     enum SetupPhase {
@@ -27,18 +25,22 @@ struct FloorPlanSetupView: View {
 
                     Text("Raumplan importieren")
                         .font(.title2.bold())
-                    Text("Fotografiere den Grundriss der Location oder wähle ein Bild aus deinen Fotos.")
+                    Text("Wähle ein Bild des Grundrisses der Location.")
                         .multilineTextAlignment(.center)
                         .foregroundStyle(.secondary)
 
-                    HStack(spacing: 16) {
-                        PhotosPicker(selection: $selectedPhoto, matching: .images) {
-                            Label("Aus Fotos", systemImage: "photo")
-                                .frame(maxWidth: .infinity)
+                    Button("Bild auswählen") {
+                        let panel = NSOpenPanel()
+                        panel.allowedContentTypes = [.image]
+                        panel.begin { response in
+                            if response == .OK, let url = panel.url,
+                               let data = try? Data(contentsOf: url) {
+                                roomPlan.imageData = data
+                                phase = .calibrate
+                            }
                         }
-                        .buttonStyle(.bordered)
                     }
-                    .padding(.horizontal, 40)
+                    .buttonStyle(.bordered)
 
                     if roomPlan.imageData != nil {
                         Button("Vorhandenen Plan verwenden") {
@@ -48,14 +50,6 @@ struct FloorPlanSetupView: View {
                     }
                 }
                 .padding()
-                .onChange(of: selectedPhoto) { _, newValue in
-                    Task {
-                        if let data = try? await newValue?.loadTransferable(type: Data.self) {
-                            roomPlan.imageData = data
-                            phase = .calibrate
-                        }
-                    }
-                }
 
             case .calibrate:
                 ScaleCalibrationOverlay(roomPlan: roomPlan) {

@@ -85,6 +85,7 @@ enum WizardPhase: Int, CaseIterable {
 
 struct KIWizardView: View {
     @AppStorage("lmStudioEndpoint") private var lmStudioEndpoint = "http://localhost:1234"
+    @Environment(\.modelContext) private var modelContext
     @Query(sort: \Guest.firstName) private var guests: [Guest]
     @Query private var tags: [Tag]
     @Query private var constraints: [Constraint]
@@ -95,6 +96,11 @@ struct KIWizardView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var showingChat = false
+
+    // Structured plan from LLMSeatingPlanner.
+    @State private var proposedPlan: LLMSeatingPlanner.ProposedAssignment?
+    @State private var isRequestingPlan = false
+    @State private var planApplied = false
 
     private var systemContext: String {
         let context = GroupAnalyzer.buildLLMContext(guests: guests, tags: tags, constraints: constraints, tables: tables)
@@ -152,6 +158,12 @@ struct KIWizardView: View {
 
             Divider()
 
+            // Structured plan panel (appears once plan is proposed).
+            if let plan = proposedPlan {
+                proposedPlanPanel(plan)
+                Divider()
+            }
+
             // Bottom bar
             HStack {
                 if currentPhase != .done {
@@ -167,6 +179,18 @@ struct KIWizardView: View {
                     .disabled(isLoading || guests.isEmpty)
                 } else {
                     Button {
+                        requestStructuredPlan()
+                    } label: {
+                        HStack {
+                            if isRequestingPlan { ProgressView().controlSize(.small) }
+                            Image(systemName: "wand.and.stars")
+                            Text(proposedPlan == nil ? "Konkreten Plan anfordern" : "Plan neu anfordern")
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(isRequestingPlan || guests.isEmpty || tables.isEmpty)
+
+                    Button {
                         showingChat = true
                     } label: {
                         HStack {
@@ -174,7 +198,6 @@ struct KIWizardView: View {
                             Text("Freier Chat")
                         }
                     }
-                    .buttonStyle(.borderedProminent)
                 }
 
                 Spacer()
@@ -184,6 +207,8 @@ struct KIWizardView: View {
                         currentPhase = .clusters
                         messages = []
                         errorMessage = nil
+                        proposedPlan = nil
+                        planApplied = false
                     }
                     .foregroundStyle(.secondary)
                 }
@@ -191,6 +216,86 @@ struct KIWizardView: View {
             .padding()
         }
         .navigationTitle("KI-Assistent")
+    }
+
+    // MARK: - Proposed plan panel
+
+    @ViewBuilder
+    private func proposedPlanPanel(_ plan: LLMSeatingPlanner.ProposedAssignment) -> some View {
+        let byTable = Dictionary(grouping: plan.assignments, by: \.value)
+            .mapValues { $0.map(\.key) }
+
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: "list.clipboard")
+                Text("KI-Vorschlag")
+                    .font(.headline)
+                Spacer()
+                if planApplied {
+                    Label("Übernommen", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                        .font(.caption)
+                }
+            }
+
+            if !plan.warnings.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(plan.warnings, id: \.self) { w in
+                        Label(w, systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(.orange)
+                            .font(.caption)
+                    }
+                }
+            }
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(tables.sorted(by: { $0.name < $1.name })) { table in
+                        if let guestIDs = byTable[table.id], !guestIDs.isEmpty {
+                            let tableGuests = guestIDs.compactMap { gid in guests.first { $0.id == gid } }
+                            VStack(alignment: .leading, spacing: 2) {
+                                HStack {
+                                    Text(table.name).font(.caption.bold())
+                                    Text("(\(tableGuests.count)/\(table.capacity))")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                    if table.isChildTable {
+                                        Image(systemName: "figure.child").font(.caption2)
+                                    }
+                                }
+                                Text(tableGuests.map(\.fullName).joined(separator: ", "))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                if let reason = plan.rationale[table.id] {
+                                    Text(reason)
+                                        .font(.caption2)
+                                        .italic()
+                                        .foregroundStyle(.tertiary)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .frame(maxHeight: 180)
+
+            HStack {
+                Button {
+                    applyProposedPlan(plan)
+                } label: {
+                    Label(planApplied ? "Erneut anwenden" : "Plan übernehmen", systemImage: "checkmark.circle")
+                }
+                .buttonStyle(.borderedProminent)
+
+                Button("Verwerfen") {
+                    proposedPlan = nil
+                    planApplied = false
+                }
+                .foregroundStyle(.secondary)
+            }
+        }
+        .padding()
+        .background(.blue.opacity(0.06))
     }
 
     // MARK: - Phase Indicator
@@ -268,6 +373,77 @@ struct KIWizardView: View {
         let next = WizardPhase.allCases.first { $0.rawValue == currentPhase.rawValue + 1 }
         if let next {
             currentPhase = next
+        }
+    }
+
+    // MARK: - Structured plan request
+
+    private func requestStructuredPlan() {
+        guard !guests.isEmpty, !tables.isEmpty else { return }
+        isRequestingPlan = true
+        errorMessage = nil
+
+        // Build the prompt here on the main actor so we only ship primitives (String + maps)
+        // across the actor boundary — avoids sending @Model instances.
+        let context = LLMSeatingPlanner.PlannerContext(
+            guests: Array(guests),
+            tables: Array(tables),
+            tags: Array(tags),
+            constraints: Array(constraints)
+        )
+        let (userPrompt, guestMap, tableMap) = LLMSeatingPlanner.buildPrompt(from: context)
+        let systemPrompt = LLMSeatingPlanner.systemPrompt
+        let endpoint = lmStudioEndpoint
+
+        // Snapshot guest/table IDs for post-response validation on the main actor.
+        let allGuestIDs = Set(guests.map(\.id))
+        let tableCapacities: [UUID: Int] = Dictionary(uniqueKeysWithValues: tables.map { ($0.id, $0.capacity) })
+        let tableNames: [UUID: String] = Dictionary(uniqueKeysWithValues: tables.map { ($0.id, $0.name) })
+        let hardConstraints: [(type: ConstraintType, guestIDs: [UUID], reason: String)] = constraints.map {
+            ($0.type, $0.guestIDs, $0.reason)
+        }
+
+        Task { @Sendable in
+            let client = LMStudioClient(endpoint: endpoint)
+            do {
+                let raw = try await client.prompt(system: systemPrompt, user: userPrompt, temperature: 0.2)
+                let plan = try LLMSeatingPlanner.parseRawResponse(
+                    raw,
+                    guestIDMap: guestMap,
+                    tableIDMap: tableMap,
+                    allGuestIDs: allGuestIDs,
+                    tableCapacities: tableCapacities,
+                    tableNames: tableNames,
+                    hardConstraints: hardConstraints
+                )
+                await MainActor.run {
+                    proposedPlan = plan
+                    planApplied = false
+                    isRequestingPlan = false
+                }
+            } catch {
+                await MainActor.run {
+                    errorMessage = "Konnte Plan nicht erstellen: \(error.localizedDescription)"
+                    isRequestingPlan = false
+                }
+            }
+        }
+    }
+
+    private func applyProposedPlan(_ plan: LLMSeatingPlanner.ProposedAssignment) {
+        // Map UUID → real table and assign each guest.
+        let tablesByID = Dictionary(uniqueKeysWithValues: tables.map { ($0.id, $0) })
+        let guestsByID = Dictionary(uniqueKeysWithValues: guests.map { ($0.id, $0) })
+
+        for (guestID, tableID) in plan.assignments {
+            guard let guest = guestsByID[guestID], let table = tablesByID[tableID] else { continue }
+            guest.table = table
+        }
+        do {
+            try modelContext.save()
+            planApplied = true
+        } catch {
+            errorMessage = "Konnte Plan nicht speichern: \(error.localizedDescription)"
         }
     }
 }

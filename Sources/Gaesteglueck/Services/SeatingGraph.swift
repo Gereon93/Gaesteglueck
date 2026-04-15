@@ -10,9 +10,16 @@ struct SeatingGraph: Sendable {
 
     let nodes: [UUID]
     let edges: [Edge]
+    /// Per-guest per-table weight modifiers (e.g. child-table bonus/malus).
+    let tableBonuses: [UUID: [UUID: Double]]
+    /// Child-table IDs (cached for optimizer lookup).
+    let childTableIDs: Set<UUID>
 
-    init(guests: [Guest], tags: [Tag], constraints: [Constraint]) {
+    init(guests: [Guest], tags: [Tag], constraints: [Constraint], tables: [GuestTable] = []) {
         self.nodes = guests.map(\.id)
+        self.childTableIDs = Set(tables.filter(\.isChildTable).map(\.id))
+        let hasChildTable = !childTableIDs.isEmpty
+
         var edges: [Edge] = []
 
         for constraint in constraints {
@@ -42,19 +49,73 @@ struct SeatingGraph: Sendable {
 
         let families = Dictionary(grouping: guests.filter { $0.familyID != nil }, by: { $0.familyID! })
         for (_, members) in families {
+            // Detect adult partner pair: exactly two adults in a family (no kids bundled in).
+            let adults = members.filter { $0.ageCategory == .adult }
+            let kids = members.filter { $0.ageCategory != .adult }
+            let isPurePartnerPair = adults.count == 2 && kids.isEmpty
+
             for i in members.indices {
                 for j in (i+1)..<members.count {
+                    let a = members[i]
+                    let b = members[j]
                     let exists = edges.contains {
-                        ($0.from == members[i].id && $0.to == members[j].id) || ($0.from == members[j].id && $0.to == members[i].id)
+                        ($0.from == a.id && $0.to == b.id) || ($0.from == b.id && $0.to == a.id)
                     }
-                    if !exists {
-                        let isChildPair = members[i].ageCategory != .adult || members[j].ageCategory != .adult
-                        edges.append(Edge(from: members[i].id, to: members[j].id, weight: isChildPair ? 100 : 70, isHardConstraint: isChildPair))
+                    guard !exists else { continue }
+
+                    let isChildPair = a.ageCategory != .adult || b.ageCategory != .adult
+                    if isChildPair {
+                        // Child-parent edge: hard unless a child table exists (then child may leave).
+                        if hasChildTable {
+                            edges.append(Edge(from: a.id, to: b.id, weight: 30, isHardConstraint: false))
+                        } else {
+                            edges.append(Edge(from: a.id, to: b.id, weight: 100, isHardConstraint: true))
+                        }
+                    } else if isPurePartnerPair {
+                        // Adult-adult partner edge: extra strong so SA keeps couples together.
+                        edges.append(Edge(from: a.id, to: b.id, weight: 150, isHardConstraint: false))
+                    } else {
+                        edges.append(Edge(from: a.id, to: b.id, weight: 70, isHardConstraint: false))
                     }
                 }
             }
         }
 
+        // Bridge-person boost: guests with 2+ tags connect groups, so any edge
+        // they participate in is worth slightly more (encourages SA to keep them
+        // close to their strongest group rather than scattering them).
+        var tagCountPerGuest: [UUID: Int] = [:]
+        for tag in tags {
+            for gid in tag.guestIDs {
+                tagCountPerGuest[gid, default: 0] += 1
+            }
+        }
+        edges = edges.map { edge in
+            guard !edge.isHardConstraint else { return edge }
+            let fromBridge = (tagCountPerGuest[edge.from] ?? 0) >= 2
+            let toBridge = (tagCountPerGuest[edge.to] ?? 0) >= 2
+            if fromBridge || toBridge {
+                return Edge(from: edge.from, to: edge.to, weight: edge.weight + 10, isHardConstraint: false)
+            }
+            return edge
+        }
+
+        // Table bonuses: child-table preference/penalty.
+        var bonuses: [UUID: [UUID: Double]] = [:]
+        if hasChildTable {
+            for guest in guests {
+                var perTable: [UUID: Double] = [:]
+                for table in tables where table.isChildTable {
+                    if guest.ageCategory != .adult {
+                        perTable[table.id] = 200
+                    } else {
+                        perTable[table.id] = -200
+                    }
+                }
+                if !perTable.isEmpty { bonuses[guest.id] = perTable }
+            }
+        }
+        self.tableBonuses = bonuses
         self.edges = edges
     }
 
@@ -64,5 +125,9 @@ struct SeatingGraph: Sendable {
 
     func weight(between a: UUID, and b: UUID) -> Double {
         edges.first { ($0.from == a && $0.to == b) || ($0.from == b && $0.to == a) }?.weight ?? 0
+    }
+
+    func tableBonus(guest: UUID, table: UUID) -> Double {
+        tableBonuses[guest]?[table] ?? 0
     }
 }

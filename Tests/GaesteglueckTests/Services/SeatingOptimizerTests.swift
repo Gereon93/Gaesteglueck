@@ -111,7 +111,7 @@ struct SeatingOptimizerTests {
         #expect(result.count == 12)
     }
 
-    @Test("Children from same family stay with parents")
+    @Test("Children from same family stay with parents when no child table")
     func childrenWithParents() {
         let fid = UUID()
         let parent = makeGuest("Mama")
@@ -127,5 +127,98 @@ struct SeatingOptimizerTests {
             constraints: []
         )
         #expect(result[parent.id] == result[child.id])
+    }
+
+    @Test("Children prefer the child table when one exists")
+    func childrenGoToChildTable() {
+        let fid = UUID()
+        let mama = makeGuest("Mama")
+        mama.familyID = fid
+        let papa = makeGuest("Papa", assignment: .partner2)
+        papa.familyID = fid
+        let kind1 = Guest(firstName: "Kind1", ageCategory: .child, familyID: fid)
+        let kind2 = Guest(firstName: "Kind2", ageCategory: .child, familyID: fid)
+
+        let adultTable = GuestTable(name: "Erwachsene", shape: .round, diameter: 180)
+        let childTable = GuestTable(name: "Kindertisch", shape: .round, diameter: 180, isChildTable: true)
+
+        let result = SeatingOptimizer.solve(
+            guests: [mama, papa, kind1, kind2],
+            tables: [adultTable, childTable],
+            tags: [],
+            constraints: [],
+            iterations: 3000
+        )
+        #expect(result[kind1.id] == childTable.id)
+        #expect(result[kind2.id] == childTable.id)
+    }
+
+    @Test("Adults avoid the child table")
+    func adultsAvoidChildTable() {
+        let adults = (0..<6).map { makeGuest("A\($0)") }
+        let kids = (0..<4).map { Guest(firstName: "K\($0)", ageCategory: .child) }
+
+        let adultTable = GuestTable(name: "Erwachsene", shape: .round, diameter: 200)
+        let childTable = GuestTable(name: "Kindertisch", shape: .round, diameter: 180, isChildTable: true)
+
+        let result = SeatingOptimizer.solve(
+            guests: adults + kids,
+            tables: [adultTable, childTable],
+            tags: [],
+            constraints: [],
+            iterations: 3000
+        )
+        for adult in adults {
+            // Adults should not end up at the child table when adult seats are available.
+            #expect(result[adult.id] != childTable.id)
+        }
+    }
+
+    @Test("Partner pair stays together")
+    func partnerPairStays() {
+        // Two adults sharing a family ID (no kids) should be treated as a partner pair.
+        let fid = UUID()
+        let max = makeGuest("Max")
+        max.familyID = fid
+        let laura = makeGuest("Laura", assignment: .partner2)
+        laura.familyID = fid
+
+        // Lots of noise guests to give SA room to split them.
+        let others = (0..<8).map { makeGuest("O\($0)") }
+        let t1 = GuestTable(name: "T1", shape: .round, diameter: 180)
+        let t2 = GuestTable(name: "T2", shape: .round, diameter: 180)
+
+        let result = SeatingOptimizer.solve(
+            guests: [max, laura] + others,
+            tables: [t1, t2],
+            tags: [],
+            constraints: [],
+            iterations: 3000
+        )
+        #expect(result[max.id] == result[laura.id])
+    }
+
+    @Test("Child table preference survives noise")
+    func childTableRobust() {
+        // Mixed family with kids + adult friends, child table should still attract kids.
+        let fid = UUID()
+        let mama = makeGuest("Mama")
+        mama.familyID = fid
+        let kind = Guest(firstName: "Kind", ageCategory: .child, familyID: fid)
+
+        let friends = (0..<6).map { makeGuest("F\($0)") }
+
+        let t1 = GuestTable(name: "T1", shape: .round, diameter: 180)
+        let t2 = GuestTable(name: "T2", shape: .round, diameter: 180)
+        let childTable = GuestTable(name: "Kindertisch", shape: .round, diameter: 140, isChildTable: true)
+
+        let result = SeatingOptimizer.solve(
+            guests: [mama, kind] + friends,
+            tables: [t1, t2, childTable],
+            tags: [],
+            constraints: [],
+            iterations: 4000
+        )
+        #expect(result[kind.id] == childTable.id)
     }
 }

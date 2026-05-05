@@ -52,7 +52,7 @@ enum CSVParser {
     }
 }
 
-struct RegistrationRow: Sendable {
+struct RegistrationRow: Sendable, Equatable {
     let familyName: String
     let guestCount: Int
     let guestDetails: String

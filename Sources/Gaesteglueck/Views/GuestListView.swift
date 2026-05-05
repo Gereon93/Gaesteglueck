@@ -67,6 +67,9 @@ struct GuestListView: View {
             }
             #endif
             ToolbarItem(placement: .secondaryAction) {
+                GoogleSheetsImportButton()
+            }
+            ToolbarItem(placement: .secondaryAction) {
                 Button {
                     showingEnrichment = true
                 } label: {

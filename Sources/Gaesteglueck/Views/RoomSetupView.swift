@@ -26,6 +26,9 @@ struct RoomSetupView: View {
     @State private var customName: String = ""
     @State private var customIsBridal: Bool = false
     @State private var customIsChild: Bool = false
+    @State private var showingKonfigurator = false
+    @State private var showingFloorPlanSetup = false
+    @Query private var roomPlans: [RoomPlan]
 
     private var event: Event? { events.first }
 
@@ -94,6 +97,24 @@ struct RoomSetupView: View {
             subtitle: "Bevor wir Gäste platzieren — sag uns, was eure Location an Tischen hergibt."
         ) {
             Button {
+                showingFloorPlanSetup = true
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "photo")
+                    Text(roomPlans.first?.imageData == nil ? "Raumplan" : "Plan ändern")
+                }
+            }
+            .warmButton(.secondary)
+            Button {
+                showingKonfigurator = true
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "sparkles")
+                    Text("KI-Vorschlag")
+                }
+            }
+            .warmButton(.secondary)
+            Button {
                 dismiss()
             } label: {
                 HStack(spacing: 4) {
@@ -103,6 +124,20 @@ struct RoomSetupView: View {
             }
             .warmButton(.primary)
         }
+        .sheet(isPresented: $showingKonfigurator) {
+            SaalKonfiguratorView()
+        }
+        .sheet(isPresented: $showingFloorPlanSetup) {
+            FloorPlanSetupView(roomPlan: ensureRoomPlan())
+        }
+    }
+
+    @MainActor
+    private func ensureRoomPlan() -> RoomPlan {
+        if let plan = roomPlans.first { return plan }
+        let plan = RoomPlan()
+        modelContext.insert(plan)
+        return plan
     }
 
     // MARK: - Template Library

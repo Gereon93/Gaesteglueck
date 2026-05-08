@@ -231,9 +231,23 @@ enum LocalTagDeriver {
         if n.contains("nichte") || n.contains("neffe") {
             roles.formUnion([.niece, .nephew])
         }
-        // Patenkind/Patenonkel/Patentante: kommen via VersionedSchema-Migration
-        // zurück. Bis dahin als "Sonstige" einsortiert (kein Skip notwendig
-        // weil sie nicht in FamilyRole sind).
+        if n.contains("patenkind") || n.contains("patenkinder") {
+            roles.insert(.godchild)
+        }
+        if n.contains("patenonkel") || n.contains("paten-onkel") {
+            roles.insert(.godfather)
+        }
+        if n.contains("patentante") || n.contains("paten-tante") {
+            roles.insert(.godmother)
+        }
+        if n.contains("patin") {
+            roles.insert(.godmother)
+        }
+        if n.contains("paten ") || n.hasSuffix("paten") {
+            if !roles.contains(.godfather) && !roles.contains(.godmother) && !roles.contains(.godchild) {
+                roles.formUnion([.godfather, .godmother])
+            }
+        }
         return roles
     }
 

@@ -120,6 +120,7 @@ extension AgeCategory {
     var icon: String {
         switch self {
         case .adult: "person.fill"
+        case .teenager: "figure.stand"
         case .child: "figure.child"
         case .toddler: "figure.child.and.lock"
         case .baby: "figure.and.child.holdinghands"

@@ -1,6 +1,9 @@
 #if canImport(SwiftUI) && canImport(SwiftData)
 import SwiftUI
 import SwiftData
+#if canImport(AppKit)
+import AppKit
+#endif
 
 /// S6 — Tisch- & Raumplan-Canvas (siehe design_handoff_gaesteglueck → S6).
 /// Drei Spalten: links 240pt Inbox unzugewiesener Gäste, Mitte Canvas mit
@@ -21,6 +24,11 @@ struct RoomCanvasView: View {
     @State private var showingFloorPlanSetup = false
     @State private var showingAISheet = false
     @State private var showingRoomSetup = false
+    @State private var showingCoPilot = false
+    #if canImport(AppKit)
+    @State private var cachedRoomPlanImageRef: NSImage?
+    @State private var cachedImageDataLength: Int = 0
+    #endif
 
     private var event: Event? { events.first }
 
@@ -81,6 +89,9 @@ struct RoomCanvasView: View {
         .sheet(isPresented: $showingAISheet) {
             AISuggestionSheet()
         }
+        .sheet(isPresented: $showingFloorPlanSetup) {
+            FloorPlanSetupView(roomPlan: ensureRoomPlan())
+        }
     }
 
     private var canvasLayout: some View {
@@ -95,11 +106,25 @@ struct RoomCanvasView: View {
                     .frame(maxWidth: .infinity)
 
                 Divider().background(Tokens.Colors.line)
-                detailPanel
-                    .frame(width: 280)
+                rightSideStack
+                    .frame(width: 320)
             }
         }
         .background(Tokens.Colors.bg)
+    }
+
+    @ViewBuilder
+    private var rightSideStack: some View {
+        if showingCoPilot {
+            VSplitView {
+                detailPanel
+                    .frame(minHeight: 200)
+                SitzplanCoPilotPanel()
+                    .frame(minHeight: 280)
+            }
+        } else {
+            detailPanel
+        }
     }
 
     // MARK: - Toolbar
@@ -134,6 +159,24 @@ struct RoomCanvasView: View {
                     date: event.date
                 )
             }
+            Button {
+                showingFloorPlanSetup = true
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "photo")
+                    Text(roomPlans.first?.imageData == nil ? "Raumplan" : "Plan ändern")
+                }
+            }
+            .warmButton(.secondary)
+            Button {
+                showingCoPilot.toggle()
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: showingCoPilot ? "bubble.left.and.bubble.right.fill" : "bubble.left.and.bubble.right")
+                    Text("Co-Pilot")
+                }
+            }
+            .warmButton(showingCoPilot ? .primary : .secondary)
             Button {
                 showingAISheet = true
             } label: {
@@ -304,9 +347,46 @@ struct RoomCanvasView: View {
 
     // MARK: - Canvas
 
+    @MainActor
+    private func ensureRoomPlan() -> RoomPlan {
+        if let plan = roomPlans.first { return plan }
+        let plan = RoomPlan()
+        modelContext.insert(plan)
+        return plan
+    }
+
+    @ViewBuilder
+    private var roomPlanBackgroundIfAvailable: some View {
+        #if canImport(AppKit)
+        if let nsImage = cachedRoomPlanImage {
+            Image(nsImage: nsImage)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .opacity(0.35)
+                .padding(28)
+                .allowsHitTesting(false)
+        }
+        #endif
+    }
+
+    #if canImport(AppKit)
+    private var cachedRoomPlanImage: NSImage? {
+        guard let data = roomPlans.first?.imageData else { return nil }
+        if cachedImageDataLength == data.count, let cached = cachedRoomPlanImageRef {
+            return cached
+        }
+        let img = NSImage(data: data)
+        Task { @MainActor in
+            cachedImageDataLength = data.count
+            cachedRoomPlanImageRef = img
+        }
+        return img
+    }
+    #endif
+
     private var canvas: some View {
         ZStack {
-            // Grid pattern
+            roomPlanBackgroundIfAvailable
             CanvasGridBackground()
             // Floor outline
             RoundedRectangle(cornerRadius: 8, style: .continuous)

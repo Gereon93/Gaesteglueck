@@ -30,11 +30,21 @@ struct GaesteglueckApp: App {
     ///      werden sie einmal-malig in den neuen Ordner kopiert — dadurch
     ///      gehen vorhandene Anmeldungen NICHT verloren.
     private static func makeContainer() throws -> ModelContainer {
-        let schema = Schema([
-            Event.self, Guest.self, GuestTable.self,
-            Tag.self, Constraint.self, RoomPlan.self,
-            TableInventoryItem.self,
-        ])
+        let schema = Schema(versionedSchema: SchemaV2.self)
+        let storeURL = try resolveStoreURL()
+        try migrateLegacyDefaultStoreIfNeeded(to: storeURL)
+        try snapshotPreMigrationBackupIfNeeded(storeURL: storeURL)
+        let config = ModelConfiguration(schema: schema, url: storeURL)
+        let container = try ModelContainer(
+            for: schema,
+            migrationPlan: AppMigrationPlan.self,
+            configurations: [config]
+        )
+        fixupLegacyTagCategories(container)
+        return container
+    }
+
+    private static func resolveStoreURL() throws -> URL {
         let fm = FileManager.default
         let appSupport = try fm.url(
             for: .applicationSupportDirectory,
@@ -44,28 +54,72 @@ struct GaesteglueckApp: App {
         )
         let appDir = appSupport.appendingPathComponent("Gaesteglueck", isDirectory: true)
         try fm.createDirectory(at: appDir, withIntermediateDirectories: true)
-        let storeURL = appDir.appendingPathComponent("Gaesteglueck.store")
+        return appDir.appendingPathComponent("Gaesteglueck.store")
+    }
 
-        // Einmalige Migration: alte default.store von Apple's Default-Pfad
-        // an unseren neuen Ort kopieren, falls noch nicht vorhanden. Wir
-        // KOPIEREN statt verschieben — der alte Ort bleibt als Notnagel
-        // bestehen bis der User selbst aufräumt.
+    private static func migrateLegacyDefaultStoreIfNeeded(to storeURL: URL) throws {
+        let fm = FileManager.default
+        let appSupport = try fm.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: false
+        )
         let oldStore = appSupport.appendingPathComponent("default.store")
-        if fm.fileExists(atPath: oldStore.path),
-           !fm.fileExists(atPath: storeURL.path) {
-            for ext in ["", "-shm", "-wal"] {
-                let src = URL(fileURLWithPath: oldStore.path + ext)
-                let dst = URL(fileURLWithPath: storeURL.path + ext)
-                if fm.fileExists(atPath: src.path) {
-                    try? fm.copyItem(at: src, to: dst)
-                }
+        guard fm.fileExists(atPath: oldStore.path),
+              !fm.fileExists(atPath: storeURL.path) else { return }
+        for ext in ["", "-shm", "-wal"] {
+            let src = URL(fileURLWithPath: oldStore.path + ext)
+            let dst = URL(fileURLWithPath: storeURL.path + ext)
+            if fm.fileExists(atPath: src.path) {
+                try? fm.copyItem(at: src, to: dst)
             }
         }
+    }
 
-        let config = ModelConfiguration(schema: schema, url: storeURL)
-        let container = try ModelContainer(for: schema, configurations: [config])
-        fixupLegacyTagCategories(container)
-        return container
+    /// Vor jeder Migration ein Sicherungs-Backup ablegen. Wenn die Migration
+    /// destruktiv ausfällt (z.B. SwiftData entscheidet sich für Schema-Rebuild),
+    /// kann der User aus diesem Snapshot manuell wiederherstellen.
+    private static func snapshotPreMigrationBackupIfNeeded(storeURL: URL) throws {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: storeURL.path) else { return }
+        let backupDir = storeURL.deletingLastPathComponent().appendingPathComponent("Backups")
+        try fm.createDirectory(at: backupDir, withIntermediateDirectories: true)
+        let stamp = preMigrationTimestamp()
+        let target = backupDir.appendingPathComponent("\(stamp)-pre-launch.store")
+        if fm.fileExists(atPath: target.path) { return }
+        for ext in ["", "-shm", "-wal"] {
+            let src = URL(fileURLWithPath: storeURL.path + ext)
+            let dst = URL(fileURLWithPath: target.path + ext)
+            if fm.fileExists(atPath: src.path) {
+                try? fm.copyItem(at: src, to: dst)
+            }
+        }
+        pruneStartupBackups(in: backupDir, keep: 3)
+    }
+
+    private static func preMigrationTimestamp() -> String {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy-MM-dd_HH"
+        fmt.locale = Locale(identifier: "en_US_POSIX")
+        return fmt.string(from: Date())
+    }
+
+    private static func pruneStartupBackups(in dir: URL, keep: Int) {
+        let fm = FileManager.default
+        guard let entries = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else { return }
+        var byPrefix: [String: [URL]] = [:]
+        for url in entries where url.lastPathComponent.contains("-pre-launch") {
+            let name = url.lastPathComponent
+            guard name.count >= 13 else { continue }
+            let prefix = String(name.prefix(13))
+            byPrefix[prefix, default: []].append(url)
+        }
+        let sorted = byPrefix.keys.sorted(by: >)
+        guard sorted.count > keep else { return }
+        for prefix in sorted.dropFirst(keep) {
+            for url in byPrefix[prefix] ?? [] { try? fm.removeItem(at: url) }
+        }
     }
 
     /// Bestehende Tags die VOR der Categorize-Heuristik-Korrektur erstellt

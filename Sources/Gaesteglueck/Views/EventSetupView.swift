@@ -25,45 +25,56 @@ struct EventSetupView: View {
         NavigationStack {
             Form {
                 Section("Event") {
-                    TextField("Name (z.B. Hochzeit Müller)", text: $name)
-                    Toggle("Datum", isOn: $hasDate)
+                    LabeledContent("Name") {
+                        TextField("z.B. Hochzeit Müller", text: $name)
+                    }
+                    Toggle("Datum festlegen", isOn: $hasDate)
                     if hasDate {
                         DatePicker("Datum", selection: $date, displayedComponents: .date)
                     }
-                    TextField("Veranstaltungsort", text: $venue)
+                    LabeledContent("Veranstaltungsort") {
+                        TextField("Location", text: $venue)
+                    }
                 }
 
                 Section("Partner") {
-                    TextField("Name Partner 1", text: $partner1Name)
-                    TextField("Name Partner 2", text: $partner2Name)
-                    TextField("Geburtsname Partner 1", text: $partner1PreMarriageName)
-                    TextField("Geburtsname Partner 2", text: $partner2PreMarriageName)
+                    LabeledContent("Partner 1 — Name") {
+                        TextField("Vorname", text: $partner1Name)
+                    }
+                    LabeledContent("Partner 2 — Name") {
+                        TextField("Vorname", text: $partner2Name)
+                    }
+                    LabeledContent("Partner 1 — Geburtsname") {
+                        TextField("optional", text: $partner1PreMarriageName)
+                    }
+                    LabeledContent("Partner 2 — Geburtsname") {
+                        TextField("optional", text: $partner2PreMarriageName)
+                    }
                 }
 
                 Section("Menü") {
-                    TextField("Menüoptionen (kommagetrennt)", text: $menuOptionsString)
+                    LabeledContent("Menüoptionen") {
+                        TextField("kommagetrennt", text: $menuOptionsString)
+                    }
                     Text("z.B. Fleisch, Vegetarisch, Vegan, Kinderportion")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
 
                 Section("Raum") {
-                    HStack {
-                        Text("Breite (cm)")
-                        Spacer()
+                    LabeledContent("Breite (cm)") {
                         TextField("z.B. 1500", text: $roomWidthCM)
                             .multilineTextAlignment(.trailing)
-                            .frame(width: 100)
+                            .frame(maxWidth: 120)
                     }
-                    HStack {
-                        Text("Länge (cm)")
-                        Spacer()
+                    LabeledContent("Länge (cm)") {
                         TextField("z.B. 2000", text: $roomLengthCM)
                             .multilineTextAlignment(.trailing)
-                            .frame(width: 100)
+                            .frame(maxWidth: 120)
                     }
                 }
             }
+            .formStyle(.grouped)
             .navigationTitle(existingEvent == nil ? "Event einrichten" : "Event bearbeiten")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -76,6 +87,7 @@ struct EventSetupView: View {
             }
             .onAppear { loadExisting() }
         }
+        .frame(minWidth: 560, minHeight: 620)
     }
 
     private func loadExisting() {

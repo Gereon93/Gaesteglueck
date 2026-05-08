@@ -1,71 +1,691 @@
-#if canImport(SwiftUI)
+#if canImport(SwiftUI) && canImport(SwiftData)
 import SwiftUI
+import SwiftData
+#if canImport(AppKit)
+import AppKit
+#endif
 
+/// S9 — Einstellungen (siehe design_handoff_gaesteglueck → S9). Vier
+/// Karten in zentrierter 720pt-Spalte: Lokale KI, Akzentfarbe (5 Swatches),
+/// Event-Daten, Daten.
 struct SettingsView: View {
     @AppStorage("lmStudioEndpoint") private var lmStudioEndpoint = "http://localhost:1234"
-    @State private var connectionStatus: String? = nil
+    @AppStorage("accentColorHex") private var accentColorHex = "#c8788c"
+    @AppStorage("autoBackup") private var autoBackup = true
+    @AppStorage("cacheResponses") private var cacheResponses = true
+    @AppStorage("algorithmFallback") private var algorithmFallback = true
+    @AppStorage("bridalTablePolicy") private var bridalTablePolicyRaw: String = BridalTablePolicy.trauzeugen.rawValue
+
+    private var bridalTablePolicy: BridalTablePolicy {
+        get { BridalTablePolicy(rawValue: bridalTablePolicyRaw) ?? .trauzeugen }
+        nonmutating set { bridalTablePolicyRaw = newValue.rawValue }
+    }
+
+    @Environment(\.modelContext) private var modelContext
+    @Query private var events: [Event]
+    @Query private var guests: [Guest]
+    @Query private var tags: [Tag]
+    @Query private var constraints: [Constraint]
+    @Query private var tables: [GuestTable]
+    @Query private var roomPlans: [RoomPlan]
+    @State private var connectionState: ConnectionState = .unknown
+    @State private var connectedModel: String = ""
     @State private var isTestingConnection = false
     @State private var showingEventSetup = false
+    @State private var resetTarget: ResetTarget? = nil
+    @State private var dataActionMessage: String? = nil
+    @State private var dataActionMessageIsError: Bool = false
+
+    enum ResetTarget: String, Identifiable {
+        case guests, tags, tables, guestsAndTags, everything
+        var id: String { rawValue }
+    }
+
+    enum ConnectionState {
+        case unknown, connected, offline, checking
+    }
+
+    private static let accentSwatches: [String] = [
+        "#c8788c", // Rose (default)
+        "#b88a5c", // Amber
+        "#7a8b6c", // Sage
+        "#6e8aab", // Slate Blue
+        "#9b7bae", // Mauve
+    ]
+
+    private var event: Event? { events.first }
 
     var body: some View {
-        Form {
-            Section("Event") {
-                Button("Event einrichten / bearbeiten") {
-                    showingEventSetup = true
+        VStack(spacing: 0) {
+            toolbar
+            ScrollView {
+                VStack(spacing: 16) {
+                    aiCard
+                    accentCard
+                    eventCard
+                    seatingCard
+                    dataCard
                 }
-            }
-
-            Section("LM Studio") {
-                TextField("Endpoint (z.B. http://localhost:1234)", text: $lmStudioEndpoint)
-                Button {
-                    testConnection()
-                } label: {
-                    HStack {
-                        Text("Verbindung testen")
-                        if isTestingConnection {
-                            Spacer()
-                            ProgressView()
-                        }
-                    }
-                }
-                .disabled(isTestingConnection)
-
-                if let status = connectionStatus {
-                    HStack(spacing: 6) {
-                        Image(systemName: status.hasPrefix("Verbunden") ? "checkmark.circle.fill" : "xmark.circle.fill")
-                            .foregroundStyle(status.hasPrefix("Verbunden") ? Color.green : Color.red)
-                        Text(status)
-                            .font(.caption)
-                            .foregroundStyle(status.hasPrefix("Verbunden") ? Color.green : Color.red)
-                    }
-                }
+                .frame(maxWidth: 720)
+                .padding(.horizontal, 32)
+                .padding(.vertical, 24)
             }
         }
-        .navigationTitle("Einstellungen")
+        .background(Tokens.Colors.bg)
         .sheet(isPresented: $showingEventSetup) {
             EventSetupView()
         }
+        .task {
+            await checkConnection()
+        }
     }
 
-    private func testConnection() {
-        isTestingConnection = true
-        connectionStatus = nil
-        let endpoint = lmStudioEndpoint
-        Task {
-            let client = LMStudioClient(endpoint: endpoint)
-            do {
-                let modelID = try await client.checkConnection()
-                await MainActor.run {
-                    connectionStatus = "Verbunden: \(modelID)"
-                    isTestingConnection = false
+    // MARK: - Toolbar
+
+    private var toolbar: some View {
+        ScreenToolbar(
+            title: "Einstellungen",
+            subtitle: "Lokale Konfiguration · ändert nichts außerhalb dieses Macs."
+        )
+    }
+
+    // MARK: - KI Card
+
+    private var aiCard: some View {
+        SettingsCard(
+            title: "Lokale KI",
+            subtitle: "Deine Gästeliste verlässt nie den Mac. Wir sprechen nur mit LM Studio auf dieser Maschine."
+        ) {
+            VStack(spacing: 10) {
+                SettingsRow(label: "Status") {
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(connectionDotColor)
+                            .frame(width: 8, height: 8)
+                        Text(connectionLabel)
+                            .font(.system(size: 12.5, weight: .medium, design: .rounded))
+                            .foregroundStyle(connectionDotColor)
+                    }
                 }
-            } catch {
-                await MainActor.run {
-                    connectionStatus = "Fehler: \(error.localizedDescription)"
-                    isTestingConnection = false
+                SettingsRow(label: "Endpoint") {
+                    HStack(spacing: 8) {
+                        TextField("http://localhost:1234", text: $lmStudioEndpoint)
+                            .textFieldStyle(.plain)
+                            .font(Tokens.Typography.mono)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 5)
+                            .background(Tokens.Colors.surface)
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .strokeBorder(Tokens.Colors.line2, lineWidth: 1)
+                            }
+                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                            .frame(maxWidth: 240)
+                        Button {
+                            Task { await checkConnection() }
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 11))
+                        }
+                        .warmButton(.ghost, size: .sm)
+                    }
+                }
+                if !connectedModel.isEmpty {
+                    SettingsRow(label: "Modell") {
+                        Text(connectedModel)
+                            .font(Tokens.Typography.mono)
+                            .foregroundStyle(Tokens.Colors.ink)
+                    }
+                }
+                SettingsRow(label: "Antworten zwischenspeichern") {
+                    GGToggle(isOn: $cacheResponses)
+                }
+                SettingsRow(label: "Algorithmus als Fallback") {
+                    GGToggle(isOn: $algorithmFallback)
                 }
             }
         }
+    }
+
+    private var connectionDotColor: Color {
+        switch connectionState {
+        case .unknown, .checking: Tokens.Colors.ink4
+        case .connected: Tokens.Colors.sage
+        case .offline: Tokens.Colors.warn
+        }
+    }
+
+    private var connectionLabel: String {
+        switch connectionState {
+        case .unknown: "Status unbekannt"
+        case .checking: "Prüfe…"
+        case .connected: "Verbunden"
+        case .offline: "Nicht erreichbar"
+        }
+    }
+
+    // MARK: - Accent Card
+
+    private var accentCard: some View {
+        SettingsCard(
+            title: "Akzentfarbe",
+            subtitle: "Erscheint auf Buttons, Sidebar-Selektionen und im Export."
+        ) {
+            HStack(spacing: 10) {
+                ForEach(Self.accentSwatches, id: \.self) { hex in
+                    Button {
+                        accentColorHex = hex
+                    } label: {
+                        ZStack {
+                            Circle()
+                                .fill(Color(hex: hex))
+                                .frame(width: 32, height: 32)
+                            if accentColorHex == hex {
+                                Circle()
+                                    .strokeBorder(Tokens.Colors.surface, lineWidth: 3)
+                                    .frame(width: 32, height: 32)
+                                Circle()
+                                    .strokeBorder(Color(hex: hex), lineWidth: 1.5)
+                                    .frame(width: 38, height: 38)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+                Spacer()
+                Button("Eigene Farbe…") {}
+                    .warmButton(.secondary, size: .sm)
+            }
+        }
+    }
+
+    // MARK: - Event Card
+
+    private var eventCard: some View {
+        SettingsCard(
+            title: "Event-Daten",
+            subtitle: "Erscheinen auf jeder PDF-Seite und auf dem Dashboard."
+        ) {
+            if let event {
+                VStack(spacing: 10) {
+                    SettingsRow(label: "Partnernamen") {
+                        Text("\(event.partnerDisplayName1) & \(event.partnerDisplayName2)")
+                            .font(.system(size: 12.5, design: .rounded))
+                            .foregroundStyle(Tokens.Colors.ink)
+                    }
+                    SettingsRow(label: "Hochzeitsdatum") {
+                        if let date = event.date {
+                            Text(formatDate(date))
+                                .font(.system(size: 12.5, design: .rounded))
+                                .foregroundStyle(Tokens.Colors.ink)
+                        } else {
+                            Text("Noch offen")
+                                .font(.system(size: 12.5, design: .rounded))
+                                .foregroundStyle(Tokens.Colors.ink3)
+                        }
+                    }
+                    SettingsRow(label: "Location") {
+                        Text(event.venue.isEmpty ? "Noch offen" : event.venue)
+                            .font(.system(size: 12.5, design: .rounded))
+                            .foregroundStyle(event.venue.isEmpty ? Tokens.Colors.ink3 : Tokens.Colors.ink)
+                    }
+                    SettingsRow(label: "Menüoptionen") {
+                        HStack(spacing: 4) {
+                            ForEach(event.menuOptions, id: \.self) { option in
+                                TagChip(label: option, kind: chipKindFor(menu: option), size: .sm)
+                            }
+                        }
+                    }
+
+                    HStack {
+                        Spacer()
+                        Button("Bearbeiten") { showingEventSetup = true }
+                            .warmButton(.secondary, size: .sm)
+                    }
+                    .padding(.top, 4)
+                }
+            } else {
+                HStack {
+                    Text("Noch kein Event eingerichtet.")
+                        .font(.system(size: 12.5, design: .rounded))
+                        .foregroundStyle(Tokens.Colors.ink3)
+                    Spacer()
+                    Button("Event einrichten") { showingEventSetup = true }
+                        .warmButton(.primary, size: .sm)
+                }
+            }
+        }
+    }
+
+    private func chipKindFor(menu: String) -> TagChip.Kind {
+        switch menu.lowercased() {
+        case "vegetarisch", "vegan": .friends
+        case "fleisch": .role
+        default: .custom
+        }
+    }
+
+    private func formatDate(_ date: Date) -> String {
+        let fmt = DateFormatter()
+        fmt.dateStyle = .long
+        fmt.locale = Locale(identifier: "de_DE")
+        return fmt.string(from: date)
+    }
+
+    // MARK: - Seating Card
+
+    private var seatingCard: some View {
+        SettingsCard(
+            title: "Sitzplan-Regeln",
+            subtitle: "Wer sitzt am Brautpaartisch? Wird vom Auto-Sitzplaner als harte Regel respektiert."
+        ) {
+            VStack(alignment: .leading, spacing: 10) {
+                Picker("Brautpaartisch-Regel", selection: Binding(
+                    get: { bridalTablePolicy },
+                    set: { bridalTablePolicy = $0 }
+                )) {
+                    ForEach(BridalTablePolicy.allCases) { policy in
+                        Text(policy.label).tag(policy)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                Text(bridalTablePolicy.explanation)
+                    .font(.system(size: 11.5, design: .rounded))
+                    .foregroundStyle(Tokens.Colors.ink3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    // MARK: - Data Card
+
+    private var dataCard: some View {
+        SettingsCard(
+            title: "Daten",
+            subtitle: "Gästeglück speichert alle Daten in einem lokalen SwiftData-Container."
+        ) {
+            VStack(spacing: 10) {
+                SettingsRow(label: "Speicherort") {
+                    Text("~/Library/Application Support/Gaesteglueck/")
+                        .font(Tokens.Typography.mono)
+                        .foregroundStyle(Tokens.Colors.ink)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                SettingsRow(label: "Auto-Backup täglich") {
+                    GGToggle(isOn: $autoBackup)
+                }
+                HStack(spacing: 8) {
+                    Button("Im Finder anzeigen") { revealStoreInFinder() }
+                        .warmButton(.secondary, size: .sm)
+                    Button("Backup jetzt erstellen") { createBackupNow() }
+                        .warmButton(.secondary, size: .sm)
+                    Spacer()
+                }
+                .padding(.top, 4)
+
+                if let dataActionMessage {
+                    HStack(spacing: 6) {
+                        Image(systemName: dataActionMessageIsError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                            .foregroundStyle(dataActionMessageIsError ? Tokens.Colors.warn : Tokens.Colors.sage)
+                        Text(dataActionMessage)
+                            .font(.system(size: 11.5, design: .rounded))
+                            .foregroundStyle(Tokens.Colors.ink2)
+                            .lineLimit(2)
+                            .truncationMode(.middle)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background((dataActionMessageIsError ? Tokens.Colors.warn : Tokens.Colors.sage).opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                }
+
+                // Reset / Wipe — explizit destruktive Aktionen am Ende
+                Divider().background(Tokens.Colors.line).padding(.vertical, 4)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Daten zurücksetzen")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Tokens.Colors.ink)
+
+                    HStack(spacing: 6) {
+                        Button("Gäste (\(guests.count))") { resetTarget = .guests }
+                            .warmButton(.secondary, size: .sm)
+                            .disabled(guests.isEmpty)
+                        Button("Tags (\(tags.count))") { resetTarget = .tags }
+                            .warmButton(.secondary, size: .sm)
+                            .disabled(tags.isEmpty)
+                        Button("Tische (\(tables.count))") { resetTarget = .tables }
+                            .warmButton(.secondary, size: .sm)
+                            .disabled(tables.isEmpty)
+                        Spacer()
+                    }
+
+                    HStack(spacing: 6) {
+                        Button("Gäste & Tags") { resetTarget = .guestsAndTags }
+                            .warmButton(.ghost, size: .sm)
+                            .disabled(guests.isEmpty && tags.isEmpty)
+                        Button("Alles zurücksetzen") { resetTarget = .everything }
+                            .warmButton(.ghost, size: .sm)
+                            .foregroundStyle(Tokens.Colors.error)
+                            .disabled(events.isEmpty && guests.isEmpty && tables.isEmpty)
+                        Spacer()
+                    }
+
+                    Text("Die einzelnen Buttons löschen nur den jeweiligen Bereich. 'Alles zurücksetzen' bringt dich zum Welcome-Screen zurück — Event, Gäste, Tische, alles weg.")
+                        .font(.system(size: 11, design: .rounded))
+                        .foregroundStyle(Tokens.Colors.ink3)
+                        .lineSpacing(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .alert(item: $resetTarget) { target in
+            resetAlert(for: target)
+        }
+    }
+
+    private func resetAlert(for target: ResetTarget) -> Alert {
+        switch target {
+        case .guests:
+            return Alert(
+                title: Text("\(guests.count) Gäste löschen?"),
+                message: Text("Tags, Tische und das Event bleiben. Tags verlieren ihre Gast-Verknüpfungen."),
+                primaryButton: .destructive(Text("Löschen")) { deleteGuests() },
+                secondaryButton: .cancel(Text("Abbrechen"))
+            )
+        case .tags:
+            return Alert(
+                title: Text("\(tags.count) Tags löschen?"),
+                message: Text("Gäste und Tische bleiben — sie verlieren nur ihre Tag-Zuordnungen."),
+                primaryButton: .destructive(Text("Löschen")) { deleteTags() },
+                secondaryButton: .cancel(Text("Abbrechen"))
+            )
+        case .tables:
+            return Alert(
+                title: Text("\(tables.count) Tische löschen?"),
+                message: Text("Gäste werden vom Tisch gelöst, bleiben aber erhalten."),
+                primaryButton: .destructive(Text("Löschen")) { deleteTables() },
+                secondaryButton: .cancel(Text("Abbrechen"))
+            )
+        case .guestsAndTags:
+            return Alert(
+                title: Text("\(guests.count) Gäste & \(tags.count) Tags löschen?"),
+                message: Text("Event und Tische bleiben — du kannst die Anmeldungen erneut importieren."),
+                primaryButton: .destructive(Text("Löschen")) { deleteGuestsAndTags() },
+                secondaryButton: .cancel(Text("Abbrechen"))
+            )
+        case .everything:
+            return Alert(
+                title: Text("Komplett zurücksetzen?"),
+                message: Text("Event, alle Gäste, Tische, Tags und Constraints werden gelöscht. Du landest wieder auf dem Welcome-Screen."),
+                primaryButton: .destructive(Text("Alles löschen")) { resetEverything() },
+                secondaryButton: .cancel(Text("Abbrechen"))
+            )
+        }
+    }
+
+    private func deleteGuests() {
+        for guest in guests { modelContext.delete(guest) }
+        // Tag-Verknüpfungen aufräumen
+        for tag in tags {
+            tag.guestIDs.removeAll()
+        }
+    }
+
+    private func deleteTags() {
+        for tag in tags { modelContext.delete(tag) }
+    }
+
+    private func deleteTables() {
+        // Gäste vom Tisch lösen, dann Tische löschen
+        for guest in guests where guest.table != nil {
+            guest.table = nil
+        }
+        for table in tables { modelContext.delete(table) }
+    }
+
+    private func deleteGuestsAndTags() {
+        deleteGuests()
+        deleteTags()
+        for constraint in constraints { modelContext.delete(constraint) }
+    }
+
+    private func resetEverything() {
+        for guest in guests { modelContext.delete(guest) }
+        for tag in tags { modelContext.delete(tag) }
+        for constraint in constraints { modelContext.delete(constraint) }
+        for table in tables { modelContext.delete(table) }
+        for plan in roomPlans { modelContext.delete(plan) }
+        for event in events { modelContext.delete(event) }
+    }
+
+    // MARK: - Connection check
+
+    @MainActor
+    private func checkConnection() async {
+        connectionState = .checking
+        let client = LMStudioClient(endpoint: lmStudioEndpoint)
+        do {
+            let model = try await client.checkConnection()
+            connectionState = .connected
+            connectedModel = model
+        } catch {
+            connectionState = .offline
+            connectedModel = ""
+        }
+    }
+
+    // MARK: - Daten: Finder & Backup
+
+    /// Findet den tatsächlichen Pfad der SwiftData-Store-Datei. Primär liegt
+    /// die Datei seit dem Custom-Container-Setup unter
+    /// `~/Library/Application Support/Gaesteglueck/Gaesteglueck.store`,
+    /// fällt aber auf alte Standorte zurück damit Bestandsdaten gefunden
+    /// werden falls noch nicht migriert wurde.
+    private func storeURL() -> URL? {
+        let fm = FileManager.default
+        let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+        let candidates: [URL] = [
+            appSupport?.appendingPathComponent("Gaesteglueck/Gaesteglueck.store"),
+            appSupport?.appendingPathComponent("default.store"),
+            appSupport?.appendingPathComponent("Default.store"),
+            URL(fileURLWithPath: NSHomeDirectory())
+                .appendingPathComponent("Library/Containers/Gaesteglueck/Data/Library/Application Support/default.store")
+        ].compactMap { $0 }
+        return candidates.first { fm.fileExists(atPath: $0.path) }
+    }
+
+    private func revealStoreInFinder() {
+        #if canImport(AppKit)
+        if let url = storeURL() {
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+            setDataMessage("Im Finder geöffnet: \(url.lastPathComponent)", isError: false)
+        } else if let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+            NSWorkspace.shared.open(appSupport)
+            setDataMessage("Speicherort nicht gefunden — Application Support geöffnet.", isError: true)
+        } else {
+            setDataMessage("Kein Speicherort gefunden.", isError: true)
+        }
+        #endif
+    }
+
+    private func createBackupNow() {
+        let fm = FileManager.default
+        guard let store = storeURL() else {
+            setDataMessage("Kein Speicherort gefunden — Backup nicht möglich.", isError: true)
+            return
+        }
+        let backupDir = store.deletingLastPathComponent().appendingPathComponent("Backups")
+        do {
+            try fm.createDirectory(at: backupDir, withIntermediateDirectories: true)
+            let stamp = backupTimestamp()
+            // SQLite-WAL-Triplets mitkopieren: .store, .store-shm, .store-wal
+            let storePath = store.path
+            let sources: [URL] = [store, URL(fileURLWithPath: storePath + "-shm"), URL(fileURLWithPath: storePath + "-wal")]
+            var copied: [URL] = []
+            for src in sources where fm.fileExists(atPath: src.path) {
+                let dst = backupDir.appendingPathComponent("\(stamp)-\(src.lastPathComponent)")
+                try fm.copyItem(at: src, to: dst)
+                copied.append(dst)
+            }
+            // Retention: nur die 3 neuesten Backup-Sets behalten, Rest löschen.
+            let pruned = pruneOldBackups(in: backupDir, keep: 3)
+            #if canImport(AppKit)
+            if let firstCopy = copied.first {
+                NSWorkspace.shared.activateFileViewerSelecting([firstCopy])
+            }
+            #endif
+            let prunedSuffix = pruned > 0 ? " · \(pruned) alte\(pruned == 1 ? "s" : "") Backup\(pruned == 1 ? "" : "s") gelöscht" : ""
+            setDataMessage("Backup erstellt: \(stamp) (\(copied.count) Datei\(copied.count == 1 ? "" : "en"))\(prunedSuffix)", isError: false)
+        } catch {
+            setDataMessage("Backup-Fehler: \(error.localizedDescription)", isError: true)
+        }
+    }
+
+    /// Behält die `keep` neuesten Backup-Sets und löscht den Rest.
+    /// Ein "Backup-Set" sind alle Dateien mit gleichem Timestamp-Prefix
+    /// (z.B. `2026-05-08_22-39-58-Gaesteglueck.store` + `-shm` + `-wal`).
+    /// Liefert die Anzahl der gelöschten Sets zurück.
+    @discardableResult
+    private func pruneOldBackups(in dir: URL, keep: Int) -> Int {
+        let fm = FileManager.default
+        guard let entries = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else {
+            return 0
+        }
+        // Timestamp-Prefix extrahieren: "2026-05-08_22-39-58" (19 Zeichen).
+        // Dateien deren Name nicht mit einem solchen Prefix anfängt ignorieren wir.
+        var setsByPrefix: [String: [URL]] = [:]
+        for url in entries {
+            let name = url.lastPathComponent
+            guard name.count >= 19 else { continue }
+            let prefix = String(name.prefix(19))
+            // Sanity-Check: Pattern yyyy-MM-dd_HH-mm-ss — beginnt mit "20"
+            guard prefix.hasPrefix("20") else { continue }
+            setsByPrefix[prefix, default: []].append(url)
+        }
+        // Nach Timestamp absteigend sortieren — die neuesten zuerst
+        let sortedPrefixes = setsByPrefix.keys.sorted(by: >)
+        guard sortedPrefixes.count > keep else { return 0 }
+        let toDelete = sortedPrefixes.dropFirst(keep)
+        var deletedSets = 0
+        for prefix in toDelete {
+            for url in setsByPrefix[prefix] ?? [] {
+                try? fm.removeItem(at: url)
+            }
+            deletedSets += 1
+        }
+        return deletedSets
+    }
+
+    private func backupTimestamp() -> String {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy-MM-dd_HH-mm-ss"
+        fmt.locale = Locale(identifier: "en_US_POSIX")
+        return fmt.string(from: Date())
+    }
+
+    private func setDataMessage(_ text: String, isError: Bool) {
+        dataActionMessage = text
+        dataActionMessageIsError = isError
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 6_000_000_000)
+            if dataActionMessage == text {
+                dataActionMessage = nil
+            }
+        }
+    }
+}
+
+// MARK: - Settings Card
+
+private struct SettingsCard<Content: View>: View {
+    let title: String
+    let subtitle: String?
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Tokens.Colors.ink)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.system(size: 12.5, design: .rounded))
+                        .foregroundStyle(Tokens.Colors.ink2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(Tokens.Colors.line).frame(height: 1)
+            }
+
+            VStack(alignment: .leading, spacing: 0) {
+                content()
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
+        }
+        .background(Tokens.Colors.surface)
+        .overlay {
+            RoundedRectangle(cornerRadius: Tokens.Radius.lg, style: .continuous)
+                .strokeBorder(Tokens.Colors.line, lineWidth: 1)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: Tokens.Radius.lg, style: .continuous))
+        .cardShadow()
+    }
+}
+
+// MARK: - Settings Row
+
+private struct SettingsRow<Trailing: View>: View {
+    let label: String
+    @ViewBuilder var trailing: () -> Trailing
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 16) {
+            Text(label)
+                .font(.system(size: 12.5, design: .rounded))
+                .foregroundStyle(Tokens.Colors.ink2)
+                .frame(width: 200, alignment: .leading)
+            trailing()
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.vertical, 6)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(Tokens.Colors.line).frame(height: 1)
+        }
+    }
+}
+
+// MARK: - Toggle
+
+private struct GGToggle: View {
+    @Binding var isOn: Bool
+
+    var body: some View {
+        Button {
+            isOn.toggle()
+        } label: {
+            ZStack(alignment: isOn ? .trailing : .leading) {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(isOn ? Tokens.Colors.accent : Tokens.Colors.bg3)
+                    .frame(width: 34, height: 20)
+                Circle()
+                    .fill(.white)
+                    .frame(width: 16, height: 16)
+                    .padding(.horizontal, 2)
+                    .shadow(color: .black.opacity(0.2), radius: 1, x: 0, y: 1)
+            }
+            .animation(.easeOut(duration: 0.12), value: isOn)
+        }
+        .buttonStyle(.plain)
     }
 }
 #endif

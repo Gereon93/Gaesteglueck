@@ -27,4 +27,5 @@ struct ImportedGuest: Sendable {
     let ageCategory: AgeCategory
     let funFact: String
     let notes: String
+    var tagNames: [String] = []
 }

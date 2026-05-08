@@ -21,6 +21,9 @@ final class GuestTable {
     var combinationGroup: UUID?
     var combinationRole: CombinationRole?
     var guests: [Guest]
+    /// Markiert diesen Tisch als Brautpaar-/Brauttafel. Wird visuell hervorgehoben
+    /// und das Brautpaar wird vom Auto-Place bevorzugt hier platziert.
+    var isBridalTable: Bool = false
 
     var capacity: Int {
         let seatWidth: Double = 60
@@ -50,7 +53,8 @@ final class GuestTable {
         positionX: Double = 0,
         positionY: Double = 0,
         rotation: Double = 0,
-        isChildTable: Bool = false
+        isChildTable: Bool = false,
+        isBridalTable: Bool = false
     ) {
         self.id = UUID()
         self.name = name
@@ -63,6 +67,7 @@ final class GuestTable {
         self.rotation = rotation
         self.isLocked = false
         self.isChildTable = isChildTable
+        self.isBridalTable = isBridalTable
         self.combinationGroup = nil
         self.combinationRole = nil
         self.guests = []

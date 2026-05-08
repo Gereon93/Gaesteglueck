@@ -34,11 +34,16 @@ final class Guest {
     var rsvpStatus: RSVPStatus
     var isPinned: Bool
     var table: GuestTable?
+    /// Stabile Quellen-ID aus dem Import (Email, Telefon, Zeitstempel, Zeilennummer).
+    /// Wird beim Re-Import als primärer Match-Schlüssel benutzt — Name allein ist
+    /// zu unzuverlässig (zwei Horst Maiers sind nicht dieselbe Person).
+    var sourceID: String = ""
+    var sourceEmail: String = ""
 
     init(
         firstName: String,
         lastName: String = "",
-        partnerAssignment: PartnerAssignment = .both,
+        partnerAssignment: PartnerAssignment = .unassigned,
         ageCategory: AgeCategory = .adult,
         age: Int? = nil,
         familyID: UUID? = nil,
@@ -49,7 +54,9 @@ final class Guest {
         funFact: String = "",
         notes: String = "",
         rsvpStatus: RSVPStatus = .confirmed,
-        registrationGroup: UUID? = nil
+        registrationGroup: UUID? = nil,
+        sourceID: String = "",
+        sourceEmail: String = ""
     ) {
         self.id = UUID()
         self.firstName = firstName
@@ -71,6 +78,8 @@ final class Guest {
         self.registrationGroup = registrationGroup
         self.rsvpStatus = rsvpStatus
         self.isPinned = false
+        self.sourceID = sourceID
+        self.sourceEmail = sourceEmail
     }
 
     var fullName: String {

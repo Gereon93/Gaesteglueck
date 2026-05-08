@@ -27,7 +27,7 @@ playground.xcworkspace
 #
 # Xcode automatically generates this directory with a .xcworkspacedata file and xcuserdata
 # hence it is not needed unless you have added a package configuration file to your project
-# .swiftpm
+.swiftpm/
 
 .build/
 
@@ -62,3 +62,21 @@ fastlane/screenshots/**/*.png
 fastlane/test_output
 .gitnexus
 .claude/settings.local.json
+
+# Echte Hochzeits-Anmeldedaten (Privatsphäre — gehören nicht in den Repo)
+*.csv
+*.xlsx
+*.numbers
+*.xls
+*.ods
+*.xltx
+
+# Persönliche Brainstorm-Notizen (nicht für OS-Release)
+docs/notes/
+
+# Lokale Daten-Backups (SwiftData-Stores) — gehören nie ins Repo
+backup/
+Backups/
+
+# macOS
+.DS_Store

@@ -13,6 +13,8 @@ struct TableFormView: View {
     @State private var diameter: Double
     @State private var width: Double
     @State private var depth: Double
+    @State private var isBridalTable: Bool
+    @State private var isChildTable: Bool
 
     init(table: GuestTable? = nil) {
         self.table = table
@@ -21,6 +23,8 @@ struct TableFormView: View {
         _diameter = State(initialValue: table?.diameter ?? 180)
         _width = State(initialValue: table?.width ?? 200)
         _depth = State(initialValue: table?.depth ?? 100)
+        _isBridalTable = State(initialValue: table?.isBridalTable ?? false)
+        _isChildTable = State(initialValue: table?.isChildTable ?? false)
     }
 
     private var isValid: Bool {
@@ -78,6 +82,15 @@ struct TableFormView: View {
                             .bold()
                     }
                 }
+
+                Section("Markierungen") {
+                    Toggle(isOn: $isBridalTable) {
+                        Label("Brautpaar-Tisch", systemImage: "heart.circle")
+                    }
+                    Toggle(isOn: $isChildTable) {
+                        Label("Kindertisch", systemImage: "figure.child")
+                    }
+                }
             }
             .navigationTitle(table == nil ? "Tisch erstellen" : "Tisch bearbeiten")
             .toolbar {
@@ -99,6 +112,8 @@ struct TableFormView: View {
             table.diameter = diameter
             table.width = width
             table.depth = depth
+            table.isBridalTable = isBridalTable
+            table.isChildTable = isChildTable
         } else {
             let newTable = GuestTable(
                 name: name.trimmingCharacters(in: .whitespaces),
@@ -107,7 +122,9 @@ struct TableFormView: View {
                 width: width,
                 depth: depth,
                 positionX: 500,
-                positionY: 400
+                positionY: 400,
+                isChildTable: isChildTable,
+                isBridalTable: isBridalTable
             )
             modelContext.insert(newTable)
         }

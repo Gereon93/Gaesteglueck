@@ -19,5 +19,8 @@ enum FamilyRole: String, Codable, CaseIterable, Identifiable, Sendable {
     case nephew = "Neffe"
     case child = "Kind"
     case other = "Sonstige"
+    // ACHTUNG: Patenkind/Patenonkel/Patentante kommen via VersionedSchema-
+    // Migration zurück — bis dahin schema-stabil halten damit Bestandsdaten
+    // beim Restart nicht wieder weggewipt werden.
     var id: String { rawValue }
 }

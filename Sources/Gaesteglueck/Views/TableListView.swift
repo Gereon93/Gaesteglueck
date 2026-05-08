@@ -52,7 +52,19 @@ struct TableListView: View {
         }
         .overlay {
             if tables.isEmpty {
-                ContentUnavailableView("Noch keine Tische", systemImage: "plus.square.dashed", description: Text("Tippe auf + um den ersten Tisch zu erstellen."))
+                ContentUnavailableView {
+                    Label("Noch keine Tische", systemImage: "tablecells.badge.ellipsis")
+                } description: {
+                    Text("Wie viele Tische habt ihr im Saal? Form und Größe legst du hier fest — Platzierung passiert dann auf eurem Grundriss.")
+                } actions: {
+                    Button {
+                        showingAddSheet = true
+                    } label: {
+                        Label("Ersten Tisch erstellen", systemImage: "plus.circle")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                }
             }
         }
         .navigationTitle("Tische")

@@ -1,11 +1,14 @@
 #if canImport(SwiftUI) && canImport(SwiftData)
 import SwiftUI
 import SwiftData
+#if canImport(AppKit)
+import AppKit
+#endif
 
 // MARK: - Chat Message
 
-struct ChatMessage: Identifiable {
-    let id = UUID()
+struct ChatMessage: Identifiable, Codable {
+    var id: UUID = UUID()
     let role: String // "user" | "assistant"
     let content: String
 }
@@ -21,13 +24,29 @@ struct ChatBubble: View {
         HStack {
             if isUser { Spacer(minLength: 48) }
             Text(message.content)
+                .textSelection(.enabled)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(isUser ? Color.blue : Color.secondary.opacity(0.15))
                 .foregroundStyle(isUser ? .white : .primary)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
+                .contextMenu {
+                    Button {
+                        copyToClipboard(message.content)
+                    } label: {
+                        Label("Nachricht kopieren", systemImage: "doc.on.doc")
+                    }
+                }
             if !isUser { Spacer(minLength: 48) }
         }
+    }
+
+    private func copyToClipboard(_ text: String) {
+        #if canImport(AppKit)
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(text, forType: .string)
+        #endif
     }
 }
 
@@ -90,12 +109,19 @@ struct KIWizardView: View {
     @Query private var tags: [Tag]
     @Query private var constraints: [Constraint]
     @Query private var tables: [GuestTable]
+    @Query private var events: [Event]
 
     @State private var currentPhase: WizardPhase = .clusters
     @State private var messages: [ChatMessage] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var showingChat = false
+    @State private var customInput: String = ""
+    /// Persistierter Chat-Verlauf — überlebt App-Restarts. Gespeichert als
+    /// JSON-Array im UserDefaults damit kein Schema-Change nötig ist.
+    @AppStorage("kiAssistantChatHistory") private var chatHistoryJSON: String = ""
+    @AppStorage("kiAssistantPhaseRaw") private var phaseRaw: Int = WizardPhase.clusters.rawValue
+    @State private var didLoadHistory = false
 
     // Structured plan from LLMSeatingPlanner.
     @State private var proposedPlan: LLMSeatingPlanner.ProposedAssignment?
@@ -103,16 +129,58 @@ struct KIWizardView: View {
     @State private var planApplied = false
 
     private var systemContext: String {
-        let context = GroupAnalyzer.buildLLMContext(guests: guests, tags: tags, constraints: constraints, tables: tables)
+        let context = GroupAnalyzer.buildLLMContext(guests: guests, tags: tags, constraints: constraints, tables: tables, event: events.first)
         return "Du bist ein freundlicher Hochzeitsplaner-Assistent. Du hilfst dabei, den perfekten Sitzplan für eine Hochzeit zu erstellen. Hier sind alle relevanten Informationen:\n\n\(context)"
     }
 
     var body: some View {
-        if showingChat {
-            KIChatView()
-        } else {
-            wizardView
+        Group {
+            if showingChat {
+                KIChatView()
+            } else {
+                wizardView
+            }
         }
+        .onAppear { loadHistoryIfNeeded() }
+        .onChange(of: messages.count) { _, _ in saveHistory() }
+        .onChange(of: currentPhase) { _, new in phaseRaw = new.rawValue }
+    }
+
+    private func loadHistoryIfNeeded() {
+        guard !didLoadHistory else { return }
+        didLoadHistory = true
+        if let phase = WizardPhase(rawValue: phaseRaw) { currentPhase = phase }
+        guard !chatHistoryJSON.isEmpty,
+              let data = chatHistoryJSON.data(using: .utf8),
+              let decoded = try? JSONDecoder().decode([ChatMessage].self, from: data) else { return }
+        messages = decoded
+    }
+
+    private func saveHistory() {
+        if let data = try? JSONEncoder().encode(messages),
+           let str = String(data: data, encoding: .utf8) {
+            chatHistoryJSON = str
+        }
+    }
+
+    private func clearHistory() {
+        messages = []
+        chatHistoryJSON = ""
+        currentPhase = .clusters
+        phaseRaw = WizardPhase.clusters.rawValue
+        errorMessage = nil
+    }
+
+    private func copyEntireChat() {
+        let text = messages.map { msg in
+            let prefix = msg.role == "user" ? "🧑 Du:" : "🤖 KI:"
+            return "\(prefix)\n\(msg.content)"
+        }.joined(separator: "\n\n---\n\n")
+        #if canImport(AppKit)
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(text, forType: .string)
+        #endif
     }
 
     private var wizardView: some View {
@@ -164,49 +232,55 @@ struct KIWizardView: View {
                 Divider()
             }
 
-            // Bottom bar
-            HStack {
+            // Eigene Nachricht — User kann Kontext ergänzen ("Trauzeugen sind
+            // X, Y, Z; sollen mit Partnern + Sohn Emil am Brautpaartisch
+            // sitzen") bevor er den nächsten Wizard-Step startet. Die Nachricht
+            // wird Teil der Conversation und reichert den nächsten LLM-Call an.
+            customMessageInput
+            Divider()
+
+            // Bottom bar — der KONKRETE Plan-Button ist immer verfügbar.
+            // Das Wizard ist nur optionaler Context-Aufbau, kein Pflicht-Pfad.
+            HStack(spacing: 8) {
+                Button {
+                    requestStructuredPlan()
+                } label: {
+                    HStack(spacing: 4) {
+                        if isRequestingPlan { ProgressView().controlSize(.small) }
+                        Image(systemName: "wand.and.stars")
+                        Text(proposedPlan == nil ? "Sitzplan jetzt erstellen" : "Sitzplan neu erstellen")
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(isRequestingPlan || guests.isEmpty || tables.isEmpty)
+
                 if currentPhase != .done {
                     Button {
                         callLLM()
                     } label: {
                         HStack {
                             Image(systemName: "sparkles")
-                            Text("Nächster Schritt: \(currentPhase.title)")
+                            Text("Mehr Kontext: \(currentPhase.title)")
                         }
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.bordered)
                     .disabled(isLoading || guests.isEmpty)
-                } else {
-                    Button {
-                        requestStructuredPlan()
-                    } label: {
-                        HStack {
-                            if isRequestingPlan { ProgressView().controlSize(.small) }
-                            Image(systemName: "wand.and.stars")
-                            Text(proposedPlan == nil ? "Konkreten Plan anfordern" : "Plan neu anfordern")
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(isRequestingPlan || guests.isEmpty || tables.isEmpty)
-
-                    Button {
-                        showingChat = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "bubble.left.and.bubble.right")
-                            Text("Freier Chat")
-                        }
-                    }
                 }
+
+                Button {
+                    copyEntireChat()
+                } label: {
+                    Image(systemName: "doc.on.clipboard")
+                }
+                .help("Gesamten Chat-Verlauf kopieren")
+                .buttonStyle(.bordered)
+                .disabled(messages.isEmpty)
 
                 Spacer()
 
-                if currentPhase != .clusters && currentPhase != .done {
-                    Button("Zurücksetzen") {
-                        currentPhase = .clusters
-                        messages = []
-                        errorMessage = nil
+                if !messages.isEmpty {
+                    Button("Chat zurücksetzen") {
+                        clearHistory()
                         proposedPlan = nil
                         planApplied = false
                     }
@@ -216,6 +290,49 @@ struct KIWizardView: View {
             .padding()
         }
         .navigationTitle("KI-Assistent")
+        .safeAreaInset(edge: .top) {
+            if guests.isEmpty || tables.isEmpty {
+                ki_assistant_warning
+            } else if proposedPlan == nil && messages.isEmpty {
+                ki_assistant_intro
+            }
+        }
+    }
+
+    /// Erklärt was die Buttons machen — verhindert dass der User durch alle
+    /// Phasen klickt in der Hoffnung dass dann irgendwann ein Plan rauskommt.
+    @ViewBuilder
+    private var ki_assistant_intro: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "info.circle.fill")
+                .foregroundStyle(.blue)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("So funktioniert's")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                Text("'Sitzplan jetzt erstellen' macht direkt einen konkreten Tisch-Vorschlag den du übernehmen kannst. Die 'Mehr Kontext'-Phasen sind optional — sie bauen Hintergrundwissen für die KI auf (Cluster, Konflikte, Kindertisch). Brauchst du sie nicht: einfach direkt den Plan erstellen.")
+                    .font(.system(size: 11.5, design: .rounded))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.blue.opacity(0.08))
+    }
+
+    @ViewBuilder
+    private var ki_assistant_warning: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+            Text(guests.isEmpty
+                ? "Importiere erst deine Gästeliste — sonst kann die KI keinen Plan bauen."
+                : "Lege erst Tische im Sitzplan-Setup an — sonst gibt's nichts zum Verteilen.")
+                .font(.system(size: 12, design: .rounded))
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.12))
     }
 
     // MARK: - Proposed plan panel
@@ -333,6 +450,64 @@ struct KIWizardView: View {
         if phase.rawValue < currentPhase.rawValue { return .green }
         if phase == currentPhase { return .blue }
         return .secondary.opacity(0.4)
+    }
+
+    /// Input-Zeile unter den Nachrichten — der User kann eigenen Kontext
+    /// hinzufügen (z.B. Trauzeugen-Definition, Tabu-Hinweise), bevor er den
+    /// nächsten Wizard-Step startet. "Senden" appended User-Message + holt
+    /// eine KI-Antwort. Der Wizard-Phase ändert sich dabei NICHT — der User
+    /// kann mehrfach Kontext ergänzen und dann den nächsten Schritt klicken.
+    @ViewBuilder
+    private var customMessageInput: some View {
+        HStack(alignment: .bottom, spacing: 8) {
+            TextField("Eigene Info ergänzen — z.B. 'Trauzeugen sind Theo, Patrick, Sina, Lena → mit Partnern + Sinas Sohn Emil am Brautpaartisch'", text: $customInput, axis: .vertical)
+                .textFieldStyle(.roundedBorder)
+                .lineLimit(2...4)
+                .font(.system(size: 12.5, design: .rounded))
+                .onSubmit { sendCustomMessage() }
+            Button {
+                sendCustomMessage()
+            } label: {
+                Image(systemName: "paperplane.fill")
+                    .frame(width: 28, height: 28)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(customInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isLoading)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+    }
+
+    private func sendCustomMessage() {
+        let trimmed = customInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !isLoading else { return }
+        customInput = ""
+        isLoading = true
+        errorMessage = nil
+
+        messages.append(ChatMessage(role: "user", content: trimmed))
+
+        let allMessages: [LMStudioClient.Message] = [
+            LMStudioClient.Message(role: "system", content: systemContext)
+        ] + messages.map { LMStudioClient.Message(role: $0.role, content: $0.content) }
+
+        let endpoint = lmStudioEndpoint
+        Task {
+            let client = LMStudioClient(endpoint: endpoint)
+            do {
+                let reply = try await client.chat(messages: allMessages)
+                await MainActor.run {
+                    messages.append(ChatMessage(role: "assistant", content: reply))
+                    isLoading = false
+                }
+            } catch {
+                await MainActor.run {
+                    messages.removeLast()
+                    errorMessage = error.localizedDescription
+                    isLoading = false
+                }
+            }
+        }
     }
 
     // MARK: - LLM Call

@@ -12,13 +12,13 @@ struct LLMGuestParserTests {
           {"firstName": "Johannes", "lastName": "Sommer", "dietary": "Fleisch", "intolerances": [], "isChild": true, "funFact": "spielt Schach"}
         ]
         """
-        let guests = try LLMGuestParser.parseResponse(json)
+        let guests = try LLMGuestParser.parseResponse(json, expectedCount: 2)
         #expect(guests.count == 2)
         #expect(guests[0].firstName == "Peter")
         #expect(guests[0].lastName == "Sommer")
-        #expect(guests[0].ageCategory == .adult)
+        #expect(guests[0].ageCategory == AgeCategory.adult)
         #expect(guests[1].firstName == "Johannes")
-        #expect(guests[1].ageCategory == .child)
+        #expect(guests[1].ageCategory == AgeCategory.child)
     }
 
     @Test("Build prompt from registration row")
@@ -40,7 +40,7 @@ struct LLMGuestParserTests {
         [{"firstName": "Kai", "lastName": "Hofer", "dietary": "Fleisch", "intolerances": [], "isChild": false, "funFact": ""}]
         ```
         """
-        let guests = try LLMGuestParser.parseResponse(response)
+        let guests = try LLMGuestParser.parseResponse(response, expectedCount: 1)
         #expect(guests.count == 1)
         #expect(guests[0].firstName == "Kai")
     }

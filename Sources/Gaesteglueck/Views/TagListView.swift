@@ -5,9 +5,13 @@ import SwiftData
 struct TagListView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Tag.name) private var tags: [Tag]
+    @Query private var guests: [Guest]
+    @Query private var events: [Event]
     @State private var selectedTag: Tag?
     @State private var newTagName = ""
     @State private var newTagCategory: TagCategory = .friendGroup
+    @State private var showingEnrichment = false
+    @State private var showingGenerator = false
 
     private var groupedTags: [(TagCategory, [Tag])] {
         let grouped = Dictionary(grouping: tags, by: \.category)
@@ -19,25 +23,73 @@ struct TagListView: View {
 
     var body: some View {
         NavigationSplitView {
-            List(selection: $selectedTag) {
+            List {
+                if tags.isEmpty {
+                    Section {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Label("Noch keine Tags", systemImage: "tag")
+                                .font(.headline)
+                            Text("Tags entstehen oft beim Anreichern — die App schlägt Gruppen aus euren Anmeldungen vor. Du kannst aber auch jetzt schon eigene anlegen.")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                            HStack {
+                                if !guests.isEmpty {
+                                    Button {
+                                        showingGenerator = true
+                                    } label: {
+                                        Label("Tags automatisch generieren", systemImage: "sparkles")
+                                    }
+                                    .buttonStyle(.borderedProminent)
+                                    .controlSize(.regular)
+                                    Button {
+                                        showingEnrichment = true
+                                    } label: {
+                                        Label("Gäste anreichern", systemImage: "wand.and.sparkles")
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .controlSize(.regular)
+                                }
+                            }
+                        }
+                        .padding(.vertical, 8)
+                    }
+                }
+
                 ForEach(groupedTags, id: \.0) { category, categoryTags in
                     Section(category.rawValue) {
                         ForEach(categoryTags) { tag in
-                            HStack {
-                                Circle()
-                                    .fill(Color(hex: tag.color))
-                                    .frame(width: 10, height: 10)
-                                Text(tag.name)
-                                Spacer()
-                                Text("\(tag.guestCount)")
-                                    .foregroundStyle(.secondary)
-                                    .font(.caption)
+                            // Explizite Button-Zeile statt List(selection:)+.tag —
+                            // SwiftData @Model-Selection war im macOS-Sidebar-List
+                            // nicht zuverlässig anklickbar (Klick wurde geschluckt).
+                            Button {
+                                selectedTag = tag
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Circle()
+                                        .fill(Color(hex: tag.color))
+                                        .frame(width: 10, height: 10)
+                                    Text(tag.name)
+                                        .foregroundStyle(.primary)
+                                    if let pa = tag.partnerAssignment {
+                                        partnerBadge(pa)
+                                    }
+                                    Spacer()
+                                    Text("\(tag.guestCount)")
+                                        .foregroundStyle(.secondary)
+                                        .font(.caption)
+                                }
+                                .contentShape(Rectangle())
                             }
-                            .tag(tag as Tag?)
-                        }
-                        .onDelete { indexSet in
-                            for index in indexSet {
-                                modelContext.delete(categoryTags[index])
+                            .buttonStyle(.plain)
+                            .listRowBackground(selectedTag?.id == tag.id ? Color.accentColor.opacity(0.2) : nil)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button(role: .destructive) {
+                                    modelContext.delete(tag)
+                                    if selectedTag?.id == tag.id { selectedTag = nil }
+                                } label: {
+                                    Label("Löschen", systemImage: "trash")
+                                }
                             }
                         }
                     }
@@ -58,6 +110,22 @@ struct TagListView: View {
             }
             .navigationTitle("Tags & Gruppen")
             .listStyle(.sidebar)
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        showingGenerator = true
+                    } label: {
+                        Label("Auto-Tags", systemImage: "sparkles")
+                    }
+                    .help("Tags per KI aus Beziehungs-Beschreibung erzeugen")
+                }
+            }
+            .sheet(isPresented: $showingEnrichment) {
+                EnrichmentWizardView()
+            }
+            .sheet(isPresented: $showingGenerator) {
+                TagGeneratorView()
+            }
         } detail: {
             if let tag = selectedTag {
                 TagDetailView(tag: tag)
@@ -74,6 +142,17 @@ struct TagListView: View {
         modelContext.insert(tag)
         selectedTag = tag
         newTagName = ""
+    }
+
+    @ViewBuilder
+    private func partnerBadge(_ pa: PartnerAssignment) -> some View {
+        Text(pa.displayName(for: events.first))
+            .font(.caption2)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1)
+            .background(pa.color.opacity(0.18))
+            .foregroundStyle(pa.color)
+            .clipShape(Capsule())
     }
 }
 #endif

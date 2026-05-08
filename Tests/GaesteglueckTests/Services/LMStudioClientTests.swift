@@ -27,7 +27,8 @@ struct LMStudioClientTests {
                 LMStudioClient.Message(role: "user", content: "Hallo")
             ],
             temperature: 0.3,
-            max_tokens: 4096
+            max_tokens: 4096,
+            response_format: nil
         )
         let data = try JSONEncoder().encode(request)
         let json = try JSONDecoder().decode(LMStudioClient.ChatRequest.self, from: data)

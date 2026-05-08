@@ -5,6 +5,7 @@ import SwiftData
 struct GuestRowView: View {
     let guest: Guest
     var tags: [Tag] = []
+    var event: Event? = nil
 
     private var guestTags: [Tag] {
         tags.filter { $0.guestIDs.contains(guest.id) }
@@ -14,7 +15,7 @@ struct GuestRowView: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
                 // Partner badge
-                Text(guest.partnerAssignment.rawValue)
+                Text(guest.partnerAssignment.displayName(for: event))
                     .font(.caption2)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)

@@ -106,6 +106,7 @@ Eine Woche vor der Hochzeit: PDF-Export für den Caterer. Tischliste mit Allergi
 - **FA-2.4** ✅ Import-Preview mit Übernehmen/Korrigieren/Überspringen pro Anmeldung
 - **FA-2.5** ✅ Wiederholbarer Import — Duplikat-Erkennung über Vor+Nachname, neue Anmeldungen werden gemergt
 - **FA-2.6** ✅ Google-Sheets-Import via öffentlicher CSV-Export-URL (kein OAuth)
+- **FA-2.7** ⬜ **Backlog (OS-Release):** Konfigurierbares CSV-/Excel-Spalten-Mapping. Aktuell ist die Spalten-Erkennung auf das Format der Hochzeit Gereon-Maria zugeschnitten (Familienname, Anzahl, Gäste-Details, Fun Facts, Anmerkungen). Andere Paare haben andere Spalten (Heimatort, Liedwunsch, Anreise, Übernachtungsbedarf, Allergiehinweise eigene Spalte, …) und wollen entscheiden welche davon als Gast-Notiz übernommen werden, welche als eigene Tags fungieren, welche ignoriert werden. Lösung: Mapping-UI nach dem Datei-Upload, vor dem KI-Parsing — User markiert pro Spalte: "Familienname / Personenanzahl / Gäste-Freitext / Fun Fact / Notiz / Tag-Quelle / Ignorieren". Mapping wird pro Datei-Header-Signatur gespeichert, beim erneuten Import desselben Schemas vorgeschlagen.
 
 ### 5.3 Beziehungen, Tags, Constraints
 - **FA-3.1** ✅ Multi-Tag-System pro Gast (Familie, Freundeskreis, Rolle, Aktivität, Arbeit, Custom)
@@ -130,16 +131,16 @@ Eine Woche vor der Hochzeit: PDF-Export für den Caterer. Tischliste mit Allergi
 - **FA-5.3** ✅ Strukturierter Sitzplan-Vorschlag mit Begründung
 - **FA-5.4** ✅ Algorithmischer Solver als Fallback (Simulated Annealing, Brücken-Personen-Bonus, Generationsmix, Diet-Cluster)
 - **FA-5.5** ✅ Apply-Button für KI-Vorschlag
-- **FA-5.6** 🟡 Iterativer Chat-Modus für Anpassungen (Phase B im Spec) — Skeleton vorhanden, UX-Feinschliff offen
+- **FA-5.6** ✅ Iterativer Chat-Modus mit Verbindungs-Status, Quick Actions, klickbaren Beispielprompts und Abbrechen-Button
 
 ### 5.6 Export & Caterer
 - **FA-6.1** ✅ PDF-Export pro Tisch mit Gästen, Menüwahl, Allergien-Markierung
 - **FA-6.2** ✅ Caterer-Zusammenfassung (X Fleisch, Y Vegetarisch, Z Vegan)
-- **FA-6.3** ⬜ Tischkarten-Export (Name + Fun Fact, druckfertig)
-- **FA-6.4** ⬜ Gesamt-Übersicht als Plakat / Poster
+- **FA-6.3** ✅ Tischkarten-Export (Name + Fun Fact, druckfertig)
+- **FA-6.4** ✅ Gesamt-Übersicht als Plakat / Poster (A3-Querformat)
 
 ### 5.7 Onboarding & Hilfe
-- **FA-7.1** 🟡 Erst-Onboarding (begrüßt, fragt Eckdaten ab)
+- **FA-7.1** ✅ Erst-Onboarding (Wizard mit Welcome → Namen → Datum/Location → Done)
 - **FA-7.2** ⬜ Empty States mit nächstem-Schritt-Hinweis (Dashboard zeigt "Du hast noch keine Gäste — Datei importieren?")
 - **FA-7.3** ⬜ In-App-Hilfe / Tooltip-Schicht für Erst-Nutzer
 

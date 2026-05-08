@@ -7,6 +7,8 @@ struct StatisticsView: View {
     @Query private var tables: [GuestTable]
     @Query private var tags: [Tag]
     @Query private var constraints: [Constraint]
+    @Query private var events: [Event]
+    private var event: Event? { events.first }
 
     private var confirmedGuests: Int {
         guests.filter { $0.rsvpStatus == .confirmed }.count
@@ -33,8 +35,8 @@ struct StatisticsView: View {
             Section("Gäste") {
                 StatRow(label: "Gesamt", value: "\(guests.count)", icon: "person.3")
                 StatRow(label: "Zugesagt", value: "\(confirmedGuests)", icon: "checkmark.circle")
-                StatRow(label: "Partner 1", value: "\(guests.filter { $0.partnerAssignment == .partner1 }.count)", icon: "circle.fill", color: .pink)
-                StatRow(label: "Partner 2", value: "\(guests.filter { $0.partnerAssignment == .partner2 }.count)", icon: "circle.fill", color: .blue)
+                StatRow(label: PartnerAssignment.partner1.displayName(for: event), value: "\(guests.filter { $0.partnerAssignment == .partner1 }.count)", icon: "circle.fill", color: .pink)
+                StatRow(label: PartnerAssignment.partner2.displayName(for: event), value: "\(guests.filter { $0.partnerAssignment == .partner2 }.count)", icon: "circle.fill", color: .blue)
             }
             Section("Tische") {
                 StatRow(label: "Anzahl", value: "\(tables.count)", icon: "tablecells")

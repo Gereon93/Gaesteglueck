@@ -6,6 +6,7 @@ struct TagDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Bindable var tag: Tag
     @Query(sort: \Guest.firstName) private var allGuests: [Guest]
+    @Query private var events: [Event]
 
     private var memberGuests: [Guest] {
         allGuests.filter { tag.guestIDs.contains($0.id) }
@@ -18,26 +19,28 @@ struct TagDetailView: View {
     var body: some View {
         Form {
             Section("Tag-Info") {
-                TextField("Name", text: $tag.name)
+                LabeledContent("Name") {
+                    TextField("Tag-Name", text: $tag.name)
+                }
                 Picker("Kategorie", selection: $tag.category) {
                     ForEach(TagCategory.allCases) { cat in
                         Text(cat.rawValue).tag(cat)
                     }
                 }
-                HStack {
-                    Text("Farbe")
-                    Spacer()
-                    Circle()
-                        .fill(Color(hex: tag.color))
-                        .frame(width: 24, height: 24)
-                    TextField("#Hex", text: $tag.color)
-                        .frame(width: 80)
-                        .multilineTextAlignment(.trailing)
+                LabeledContent("Farbe") {
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(Color(hex: tag.color))
+                            .frame(width: 22, height: 22)
+                        TextField("#Hex", text: $tag.color)
+                            .frame(width: 100)
+                            .multilineTextAlignment(.trailing)
+                    }
                 }
                 Picker("Partner-Zuordnung", selection: $tag.partnerAssignment) {
                     Text("Alle").tag(nil as PartnerAssignment?)
                     ForEach(PartnerAssignment.allCases) { pa in
-                        Text(pa.rawValue).tag(pa as PartnerAssignment?)
+                        Text(pa.displayName(for: events.first)).tag(pa as PartnerAssignment?)
                     }
                 }
             }
@@ -84,6 +87,7 @@ struct TagDetailView: View {
                 }
             }
         }
+        .formStyle(.grouped)
         .navigationTitle(tag.name)
     }
 }

@@ -30,7 +30,7 @@ struct GaesteglueckApp: App {
     ///      werden sie einmal-malig in den neuen Ordner kopiert — dadurch
     ///      gehen vorhandene Anmeldungen NICHT verloren.
     private static func makeContainer() throws -> ModelContainer {
-        let schema = Schema(versionedSchema: SchemaV2.self)
+        let schema = Schema(versionedSchema: SchemaV3.self)
         let storeURL = try resolveStoreURL()
         try migrateLegacyDefaultStoreIfNeeded(to: storeURL)
         try snapshotPreMigrationBackupIfNeeded(storeURL: storeURL)

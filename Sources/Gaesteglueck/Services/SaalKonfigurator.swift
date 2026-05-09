@@ -96,8 +96,31 @@ KARDINALREGELN — NICHT ÜBERSEHEN:
 - Das Inventar ist eine OBERGRENZE, keine Zielzahl. Wenn 88 Sitzplätze gebraucht werden und das Inventar 147 hergibt, NIMM NUR SO VIELE TISCHE WIE NÖTIG. Lass den Rest ungenutzt.
 - TISCHE MÜSSEN VOLL SEIN. Maximal 1 leerer Platz pro Tisch ist akzeptabel. Ein 10er-Tisch mit nur 4 Personen ist STRENG VERBOTEN — kombiniere kleinere Cluster oder nimm einen kleineren Tisch.
 - Faustregel: Gesamt-Kapazität = SeatingNeed + max 5 Reserveplätze über ALLE Tische verteilt.
-- Wenn ein Cluster nicht zur Tisch-Größe passt: kombiniere mit einem nahen Cluster (Brücken-Personen!) oder splittet — aber niemals halb-leere Tische.
 - Wenige große Tafeln + wenige runde Tische sind besser als viele kleine Tische verteilt.
+
+PLATZIERUNGS-PRIORITÄT — Tische in dieser REIHENFOLGE planen:
+1. BRAUTTISCH zuerst: Brautpaar + Trauzeugen-Crew (mit Partnern + Kinder von Trauzeugen). Das sind nie aufzubrechende Personen.
+2. ELTERN-TISCH(E): Eltern beider Seiten + ggf. Schwiegereltern. Oft an einem Familientisch zusammengeführt, niemals getrennt.
+3. GESCHWISTER-TISCH(E): Geschwister + Schwager/Schwägerin + Nichten/Neffen jeder Seite. Eine Sippe nicht aufteilen.
+4. FAMILIENTISCH(E) erweitert: Onkel/Tanten + Cousins + ggf. Patenfamilie pro Seite.
+5. FREUNDESKREISE-TISCHE: Realschule, Studium, Wohnheim, JGA, Fasching, Sportverein etc. Jeder Cluster bevorzugt zusammen.
+6. RESTTISCHE: Einzeln eingeladene + nicht-zuordbare. Mit Brücken-Personen oder geografischer/Hobby-Affinität auffüllen.
+
+UNAUFBRECHBARE GRUPPEN — niemals splitten:
+- Anmeldungs-Gruppen (gleiche registrationGroup) müssen IMMER zusammen.
+- Eltern-Paare (Mutter + Vater einer Seite) sitzen zusammen am Eltern-Tisch.
+- Geschwister-mit-Familie (Schwester + Schwager + Kinder) bleiben als Block zusammen.
+- Trauzeugen mit ihren Partnern und Kindern sitzen zusammen am Brauttisch.
+
+CLUSTER-KOMBINATIONEN bei kleinen Resten:
+- Kleine thematisch verwandte Cluster (Motorrad + S7-Sanierung + SCF wenn überlappend) zu einem Tisch.
+- Brücken-Personen sind die Anker: wenn 3 kleine Cluster eine gemeinsame Brücke haben, sie zusammen platzieren.
+- Wenn ein Freundeskreis-Tisch voll ist und Einzelpersonen übrig bleiben:
+  • Suche gemeinsame Brücken zur Brautpaar-Crew (Brautpaar selbst ist universelle Brücke)
+  • Geografische Nähe (Funfact/Notizen-Hinweise auf Wohnort/Bundesland)
+  • Geteilte Hobbys (z.B. zwei „Motorrad"-Tagger an einen Tisch obwohl sonst keine Verbindung)
+  • Lebensphase (Berufstätigkeit, Alter)
+- Begründe pro Tisch konkret WELCHE Cluster du verschmolzen hast und WARUM.
 
 WEITERE REGELN:
 - Brautpaar bekommt einen prominenten Tisch (entweder separate Brauttafel oder Trauzeugen sitzen mit am Brautpaartisch — je nach Inventar).

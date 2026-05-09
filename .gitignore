@@ -80,3 +80,4 @@ Backups/
 
 # macOS
 .DS_Store
+dist/

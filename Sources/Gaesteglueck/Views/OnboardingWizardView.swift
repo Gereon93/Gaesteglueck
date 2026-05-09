@@ -247,7 +247,6 @@ struct OnboardingWizardView: View {
             notes: "",
             registrationGroup: group
         )
-        g1.isPinned = true
         modelContext.insert(g1)
 
         let g2 = Guest(
@@ -260,7 +259,6 @@ struct OnboardingWizardView: View {
             notes: "",
             registrationGroup: group
         )
-        g2.isPinned = true
         modelContext.insert(g2)
 
         let tag = Tag(name: "Brautpaar", category: .role)

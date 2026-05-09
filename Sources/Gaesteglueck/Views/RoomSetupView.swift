@@ -128,16 +128,8 @@ struct RoomSetupView: View {
             SaalKonfiguratorView()
         }
         .sheet(isPresented: $showingFloorPlanSetup) {
-            FloorPlanSetupView(roomPlan: ensureRoomPlan())
+            FloorPlanSetupView(roomPlan: RoomPlanFactory.ensure(in: modelContext, existing: roomPlans))
         }
-    }
-
-    @MainActor
-    private func ensureRoomPlan() -> RoomPlan {
-        if let plan = roomPlans.first { return plan }
-        let plan = RoomPlan()
-        modelContext.insert(plan)
-        return plan
     }
 
     // MARK: - Template Library

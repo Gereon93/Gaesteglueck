@@ -5,33 +5,34 @@ import Foundation
 /// ist Trauzeugen-Kreis weil das deutschlandweit am häufigsten ist; manche
 /// Hochzeiten setzen aber lieber die Eltern hin.
 enum BridalTablePolicy: String, CaseIterable, Identifiable, Sendable {
-    /// Tags der Kategorie `.role` deren Name "Trauzeug"/"Bestman" enthält
-    /// (egal ob Partner-Zuordnung Maria, Gereon oder Beide) → Brautpaartisch.
+    case brautpaarOnly
     case trauzeugen
-    /// Gäste mit familyRole ∈ {Mutter, Vater} (beide Seiten) → Brautpaartisch.
     case eltern
-    /// Trauzeugen UND Eltern beider Seiten am Brautpaartisch.
     case both
-    /// Keine Auto-Regel — der User pinnt selbst per Hand.
+    case trauzeugenGeschwister
     case manual
 
     var id: String { rawValue }
 
     var label: String {
         switch self {
-        case .trauzeugen: return "Trauzeugen"
-        case .eltern: return "Eltern"
-        case .both: return "Trauzeugen + Eltern"
+        case .brautpaarOnly: return "Nur Brautpaar"
+        case .trauzeugen: return "+ Trauzeugen"
+        case .eltern: return "+ Eltern"
+        case .both: return "+ Trauzeugen + Eltern"
+        case .trauzeugenGeschwister: return "+ Trauzeugen + Geschwister"
         case .manual: return "Manuell"
         }
     }
 
     var explanation: String {
         switch self {
-        case .trauzeugen: return "Trauzeugen / Brautjungfern sitzen automatisch am Brautpaartisch. Eltern bekommen einen eigenen Tisch."
-        case .eltern: return "Eltern beider Seiten sitzen am Brautpaartisch. Trauzeugen kriegen einen eigenen oder werden vom Sitzplaner platziert."
-        case .both: return "Trauzeugen UND Eltern beider Seiten am Brautpaartisch (kann eng werden — Brauttafel sollte mind. 10 Plätze haben)."
-        case .manual: return "Keine Auto-Regel — du pinnst selbst wer am Brautpaartisch sitzt."
+        case .brautpaarOnly: return "Nur das Brautpaar selbst sitzt am Brauttisch. Alle anderen verteilen sich frei."
+        case .trauzeugen: return "Trauzeugen / Brautjungfern sitzen mit am Brauttisch. Eltern bekommen einen eigenen Tisch."
+        case .eltern: return "Eltern beider Seiten sitzen am Brauttisch. Trauzeugen kriegen einen eigenen Tisch."
+        case .both: return "Trauzeugen UND Eltern beider Seiten am Brauttisch (kann eng werden — Brauttafel sollte mind. 10 Plätze haben)."
+        case .trauzeugenGeschwister: return "Trauzeugen + Geschwister beider Seiten am Brauttisch. Eltern bekommen einen eigenen Tisch."
+        case .manual: return "Keine Auto-Regel — du pinnst selbst wer am Brauttisch sitzt."
         }
     }
 }

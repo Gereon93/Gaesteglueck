@@ -61,17 +61,23 @@ struct EventSetupView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Section("Raum") {
+                Section {
                     LabeledContent("Breite (cm)") {
-                        TextField("z.B. 1500", text: $roomWidthCM)
+                        TextField("z.B. 1200 für 12 m", text: $roomWidthCM)
                             .multilineTextAlignment(.trailing)
-                            .frame(maxWidth: 120)
+                            .frame(maxWidth: 140)
                     }
                     LabeledContent("Länge (cm)") {
-                        TextField("z.B. 2000", text: $roomLengthCM)
+                        TextField("z.B. 2000 für 20 m", text: $roomLengthCM)
                             .multilineTextAlignment(.trailing)
-                            .frame(maxWidth: 120)
+                            .frame(maxWidth: 140)
                     }
+                } header: {
+                    Text("Raum")
+                } footer: {
+                    Text("Eingabe in Zentimetern (1 m = 100 cm). Sobald gesetzt, skalieren die Tische im Sitzplan-Canvas proportional zum echten Raum.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
             .formStyle(.grouped)
@@ -121,6 +127,7 @@ struct EventSetupView: View {
             e.menuOptions = menuOptions.isEmpty ? ["Fleisch", "Vegetarisch", "Vegan"] : menuOptions
             e.roomWidthCM = Double(roomWidthCM)
             e.roomLengthCM = Double(roomLengthCM)
+            try? modelContext.save()
         } else {
             let e = Event(
                 name: name.trimmingCharacters(in: .whitespaces),
@@ -135,6 +142,7 @@ struct EventSetupView: View {
             e.roomWidthCM = Double(roomWidthCM)
             e.roomLengthCM = Double(roomLengthCM)
             modelContext.insert(e)
+            try? modelContext.save()
         }
         dismiss()
     }

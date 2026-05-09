@@ -12,13 +12,33 @@ struct TableCanvasItemView: View {
     let isSelected: Bool
     let onTap: () -> Void
     @Query private var allTables: [GuestTable]
+    @Query private var allGuests: [Guest]
+    @Environment(\.canvasScale) private var canvasScale
 
     @State private var dragOffset: CGSize = .zero
     @State private var showingCombineSheet = false
 
+    private var seatPositions: [CGPoint] {
+        SeatLayout.positions(
+            shape: table.shape,
+            capacity: table.capacity,
+            scaledDiameter: scaledDiameter,
+            scaledWidth: scaledWidth,
+            scaledDepth: scaledDepth
+        )
+    }
+
+    private func occupant(at seatIndex: Int) -> Guest? {
+        table.guests.first { $0.seatIndex == seatIndex }
+    }
+
     private var hasPinnedGuest: Bool {
         table.guests.contains(where: { $0.isPinned })
     }
+
+    private var scaledDiameter: CGFloat { max(table.diameter * canvasScale, 40) }
+    private var scaledWidth: CGFloat { max(table.width * canvasScale, 40) }
+    private var scaledDepth: CGFloat { max(table.depth * canvasScale, 28) }
 
     private var fillColor: Color {
         if table.isBridalTable { return Tokens.Colors.accentTint }
@@ -33,11 +53,18 @@ struct TableCanvasItemView: View {
 
     private var borderWidth: CGFloat { isSelected ? 2 : 1.5 }
 
+    private var allergyCount: Int {
+        table.guests.filter(\.hasIntolerances).count
+    }
+
     var body: some View {
         ZStack {
             tableShape
                 .overlay(alignment: .topTrailing) {
                     badgeOverlay
+                }
+                .overlay(alignment: .bottomTrailing) {
+                    allergyBadge
                 }
             VStack(spacing: 3) {
                 Text(table.name)
@@ -56,6 +83,9 @@ struct TableCanvasItemView: View {
                 }
             }
             .padding(.horizontal, 6)
+
+            // Sitze um den Tisch — fest zugewiesen oder leer
+            seatChips
         }
         .position(x: table.positionX + dragOffset.width, y: table.positionY + dragOffset.height)
         .gesture(
@@ -102,7 +132,7 @@ struct TableCanvasItemView: View {
                 Circle().fill(fillColor)
                 Circle().strokeBorder(borderColor, lineWidth: borderWidth)
             }
-            .frame(width: table.diameter / 3, height: table.diameter / 3)
+            .frame(width: scaledDiameter, height: scaledDiameter)
             .shadow(
                 color: isSelected ? Tokens.Colors.accent.opacity(0.2) : Color.black.opacity(0.06),
                 radius: isSelected ? 16 : 6,
@@ -114,7 +144,7 @@ struct TableCanvasItemView: View {
                 RoundedRectangle(cornerRadius: 6, style: .continuous).fill(fillColor)
                 RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(borderColor, lineWidth: borderWidth)
             }
-            .frame(width: table.width / 3, height: table.depth / 3)
+            .frame(width: scaledWidth, height: scaledDepth)
             .shadow(
                 color: isSelected ? Tokens.Colors.accent.opacity(0.2) : Color.black.opacity(0.06),
                 radius: isSelected ? 16 : 6,
@@ -126,7 +156,7 @@ struct TableCanvasItemView: View {
                 RoundedRectangle(cornerRadius: 8, style: .continuous).fill(fillColor)
                 RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(borderColor, lineWidth: borderWidth)
             }
-            .frame(width: table.width / 3, height: table.width / 3)
+            .frame(width: scaledWidth, height: scaledWidth)
             .shadow(
                 color: isSelected ? Tokens.Colors.accent.opacity(0.2) : Color.black.opacity(0.06),
                 radius: isSelected ? 16 : 6,
@@ -134,6 +164,75 @@ struct TableCanvasItemView: View {
                 y: isSelected ? 4 : 2
             )
         }
+    }
+
+    @ViewBuilder
+    private var seatChips: some View {
+        let positions = seatPositions
+        ForEach(0..<positions.count, id: \.self) { idx in
+            SeatChipView(
+                seatIndex: idx,
+                occupant: occupant(at: idx),
+                onDrop: { guestID in
+                    assignGuestToSeat(guestID: guestID, seatIndex: idx)
+                },
+                onClear: {
+                    if let occ = occupant(at: idx) {
+                        occ.seatIndex = nil
+                    }
+                }
+            )
+            .offset(x: positions[idx].x, y: positions[idx].y)
+        }
+    }
+
+    /// Drop auf konkreten Sitz: Gast bekommt diesen Tisch + diesen Sitz-Index.
+    /// Falls dort schon jemand sitzt → Swap (der bisherige Sitzende verliert
+    /// seinen `seatIndex`, bleibt aber am Tisch).
+    private func assignGuestToSeat(guestID: UUID, seatIndex: Int) -> Bool {
+        guard let guest = allGuests.first(where: { $0.id == guestID }) else { return false }
+        if guest.isPinned { return false }
+
+        // Wechsel des Tisches → Kapazität checken
+        if guest.table?.id != table.id {
+            let availableSeats = table.capacity - table.guests.count
+            if availableSeats <= 0 { return false }
+        }
+
+        // Sitz vorher räumen, falls jemand drauf sitzt
+        if let prior = occupant(at: seatIndex), prior.id != guest.id {
+            prior.seatIndex = nil
+        }
+
+        guest.table = table
+        guest.seatIndex = seatIndex
+        return true
+    }
+
+    @ViewBuilder
+    private var allergyBadge: some View {
+        if allergyCount > 0 {
+            HStack(spacing: 2) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 8, weight: .bold))
+                Text("\(allergyCount)")
+                    .font(.system(size: 9, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(Color(hex: "#c44a4a"))
+            .clipShape(Capsule())
+            .offset(x: 6, y: 6)
+            .shadow(color: .black.opacity(0.15), radius: 2, x: 0, y: 1)
+            .help(allergyTooltip)
+        }
+    }
+
+    private var allergyTooltip: String {
+        let names = table.guests.filter(\.hasIntolerances).map(\.fullName).sorted().joined(separator: ", ")
+        return "\(allergyCount) Gast\(allergyCount == 1 ? "" : "ä")ste mit Unverträglichkeiten: \(names)"
     }
 
     @ViewBuilder

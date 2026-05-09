@@ -34,6 +34,10 @@ final class Guest {
     var rsvpStatus: RSVPStatus
     var isPinned: Bool
     var table: GuestTable?
+    /// Optionaler fester Sitzplatz am Tisch (0-basierter Index, abhängig von
+    /// Tischform + Kapazität). nil = "irgendwo am Tisch", was der Default-Fall
+    /// bleiben soll — wir wollen niemanden zur fixen Sitzwahl zwingen.
+    var seatIndex: Int?
     /// Stabile Quellen-ID aus dem Import (Email, Telefon, Zeitstempel, Zeilennummer).
     /// Wird beim Re-Import als primärer Match-Schlüssel benutzt — Name allein ist
     /// zu unzuverlässig (zwei Horst Maiers sind nicht dieselbe Person).
@@ -78,6 +82,7 @@ final class Guest {
         self.registrationGroup = registrationGroup
         self.rsvpStatus = rsvpStatus
         self.isPinned = false
+        self.seatIndex = nil
         self.sourceID = sourceID
         self.sourceEmail = sourceEmail
     }

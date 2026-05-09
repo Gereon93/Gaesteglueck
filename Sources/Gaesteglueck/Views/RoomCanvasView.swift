@@ -27,7 +27,7 @@ struct RoomCanvasView: View {
     @State private var showingCoPilot = false
     #if canImport(AppKit)
     @State private var cachedRoomPlanImageRef: NSImage?
-    @State private var cachedImageDataLength: Int = 0
+    @State private var cachedRoomPlanImageDigest: Int = 0
     #endif
 
     private var event: Event? { events.first }
@@ -90,7 +90,7 @@ struct RoomCanvasView: View {
             AISuggestionSheet()
         }
         .sheet(isPresented: $showingFloorPlanSetup) {
-            FloorPlanSetupView(roomPlan: ensureRoomPlan())
+            FloorPlanSetupView(roomPlan: RoomPlanFactory.ensure(in: modelContext, existing: roomPlans))
         }
     }
 
@@ -330,6 +330,10 @@ struct RoomCanvasView: View {
         let availableSeats = table.capacity - table.guests.count + table.guests.filter { unpinned.contains($0) }.count
         guard needsSeats <= availableSeats else { return false }
         for peer in unpinned {
+            // Tischwechsel → fester Sitzplatz wird ungültig, also leeren
+            if peer.table?.id != table.id {
+                peer.seatIndex = nil
+            }
             peer.table = table
         }
         return true
@@ -347,18 +351,10 @@ struct RoomCanvasView: View {
 
     // MARK: - Canvas
 
-    @MainActor
-    private func ensureRoomPlan() -> RoomPlan {
-        if let plan = roomPlans.first { return plan }
-        let plan = RoomPlan()
-        modelContext.insert(plan)
-        return plan
-    }
-
     @ViewBuilder
     private var roomPlanBackgroundIfAvailable: some View {
         #if canImport(AppKit)
-        if let nsImage = cachedRoomPlanImage {
+        if let nsImage = cachedRoomPlanImageRef {
             Image(nsImage: nsImage)
                 .resizable()
                 .aspectRatio(contentMode: .fit)
@@ -370,21 +366,55 @@ struct RoomCanvasView: View {
     }
 
     #if canImport(AppKit)
-    private var cachedRoomPlanImage: NSImage? {
-        guard let data = roomPlans.first?.imageData else { return nil }
-        if cachedImageDataLength == data.count, let cached = cachedRoomPlanImageRef {
-            return cached
+    private func refreshRoomPlanImageCache() {
+        guard let data = roomPlans.first?.imageData else {
+            cachedRoomPlanImageRef = nil
+            cachedRoomPlanImageDigest = 0
+            return
         }
-        let img = NSImage(data: data)
-        Task { @MainActor in
-            cachedImageDataLength = data.count
-            cachedRoomPlanImageRef = img
-        }
-        return img
+        let digest = data.hashValue
+        if digest == cachedRoomPlanImageDigest, cachedRoomPlanImageRef != nil { return }
+        cachedRoomPlanImageRef = NSImage(data: data)
+        cachedRoomPlanImageDigest = digest
     }
     #endif
 
     private var canvas: some View {
+        GeometryReader { geo in
+            canvasContents
+                .environment(\.canvasScale, computeCanvasScale(canvasSize: geo.size))
+        }
+    }
+
+    private func computeCanvasScale(canvasSize: CGSize) -> CGFloat {
+        let usableWidth = max(canvasSize.width - 56, 200)
+        let usableHeight = max(canvasSize.height - 56, 200)
+        let widthCM = roomWidthInCM
+        let depthCM = roomDepthInCM
+        let widthScale: CGFloat? = widthCM.flatMap { value in
+            value > 0 ? usableWidth / CGFloat(value) : nil
+        }
+        let heightScale: CGFloat? = depthCM.flatMap { value in
+            value > 0 ? usableHeight / CGFloat(value) : nil
+        }
+        if let widthScale, let heightScale {
+            return min(widthScale, heightScale)
+        }
+        return widthScale ?? heightScale ?? (1.0 / 3.0)
+    }
+
+    /// Raum-Maße aus Event ODER RoomPlan ziehen — beide werden vom User an
+    /// verschiedenen Stellen gepflegt. Event ist der Onboarding-Eintrag,
+    /// RoomPlan kommt aus dem Floor-Plan-Setup.
+    private var roomWidthInCM: Double? {
+        event?.roomWidthCM ?? roomPlans.first?.roomWidthCM
+    }
+
+    private var roomDepthInCM: Double? {
+        event?.roomLengthCM ?? roomPlans.first?.roomDepthCM
+    }
+
+    private var canvasContents: some View {
         ZStack {
             roomPlanBackgroundIfAvailable
             CanvasGridBackground()

@@ -14,6 +14,28 @@ enum GroupAnalyzer {
         let sharedTags: [String]
     }
 
+    struct TagOverlap: Sendable {
+        let tagA: String
+        let tagB: String
+        let sharedCount: Int
+    }
+
+    static func computeClusterOverlaps(tags: [Tag], minShared: Int = 2) -> [TagOverlap] {
+        let nonEmptyTags = tags.filter { !$0.guestIDs.isEmpty }
+        var overlaps: [TagOverlap] = []
+        for i in 0..<nonEmptyTags.count {
+            for j in (i + 1)..<nonEmptyTags.count {
+                let a = nonEmptyTags[i]
+                let b = nonEmptyTags[j]
+                let shared = Set(a.guestIDs).intersection(Set(b.guestIDs))
+                if shared.count >= minShared {
+                    overlaps.append(TagOverlap(tagA: a.name, tagB: b.name, sharedCount: shared.count))
+                }
+            }
+        }
+        return overlaps.sorted { $0.sharedCount > $1.sharedCount }
+    }
+
     static func detectClusters(guests: [Guest], tags: [Tag]) -> [Cluster] {
         tags.filter { !$0.guestIDs.isEmpty }
             .map { tag in
@@ -64,6 +86,10 @@ enum GroupAnalyzer {
             if guest.hasIntolerances { line += " ⚠️\(guest.intolerances.joined(separator: ","))" }
             let guestTags = tags.filter { $0.guestIDs.contains(guest.id) }.map(\.name)
             if !guestTags.isEmpty { line += " Tags: \(guestTags.joined(separator: ", "))" }
+            if !guest.hobbies.isEmpty { line += " Hobbys: \(guest.hobbies.joined(separator: ", "))" }
+            if !guest.profession.isEmpty { line += " Beruf: \(guest.profession)" }
+            if !guest.notes.isEmpty { line += " Notizen: \(guest.notes.prefix(120))" }
+            if !guest.funFact.isEmpty { line += " FunFact: \(guest.funFact.prefix(120))" }
             ctx += line + "\n"
         }
 
@@ -102,9 +128,19 @@ enum GroupAnalyzer {
 
         let bridges = findBridgePersons(guests: guests, tags: tags)
         if !bridges.isEmpty {
-            ctx += "\n## Brücken-Personen\n\n"
+            ctx += "\n## Brücken-Personen — wichtig für Cluster-Kombinationen\n\n"
+            ctx += "Diese Gäste sind in MEHREREN Tags gleichzeitig. Cluster die sich eine Brücke teilen, sollten am gleichen Tisch sitzen — der Brücken-Gast hält die Verbindung. Sortiert nach Tag-Anzahl absteigend:\n\n"
             for bridge in bridges {
-                ctx += "- \(bridge.guestName): verbindet \(bridge.sharedTags.joined(separator: " + "))\n"
+                ctx += "- \(bridge.guestName): \(bridge.sharedTags.joined(separator: " + "))\n"
+            }
+        }
+
+        let overlaps = computeClusterOverlaps(tags: tags)
+        if !overlaps.isEmpty {
+            ctx += "\n## Cluster-Überlappungen — Kandidaten für gemeinsame Tische\n\n"
+            ctx += "Diese Tag-Paare teilen sich ≥2 Personen. Wenn beide Cluster klein sind (≤7 Personen), sind sie gute Kandidaten für einen gemeinsamen Tisch:\n\n"
+            for overlap in overlaps {
+                ctx += "- '\(overlap.tagA)' ⇄ '\(overlap.tagB)': \(overlap.sharedCount) gemeinsame Personen\n"
             }
         }
 

@@ -1,13 +1,7 @@
 #if canImport(SwiftUI)
 import SwiftUI
 
-/// Berechnet die Sitzpositionen rund um einen Tisch, RELATIV zum Tisch-
-/// Zentrum (also der `.position(...)` des `TableCanvasItemView`). Positiv-y
-/// zeigt nach unten (SwiftUI-Konvention).
-///
-/// Skalierung: alle Maße kommen bereits skaliert (in Punkt) rein.
 enum SeatLayout {
-    /// Mindest-Abstand der Sitz-Mitte zur Tisch-Außenkante.
     static let seatGap: CGFloat = 14
 
     static func positions(
@@ -31,7 +25,6 @@ enum SeatLayout {
     private static func roundPositions(capacity: Int, scaledDiameter: CGFloat) -> [CGPoint] {
         let radius = scaledDiameter / 2 + seatGap
         var result: [CGPoint] = []
-        // Start oben (12 Uhr) und im Uhrzeigersinn — wirkt am Canvas natürlich
         let startAngle = -CGFloat.pi / 2
         for i in 0..<capacity {
             let angle = startAngle + 2 * .pi * CGFloat(i) / CGFloat(capacity)

@@ -404,7 +404,11 @@ struct RoomSetupView: View {
                     .font(.system(size: 16, weight: .medium, design: .rounded))
                     .foregroundStyle(Tokens.Colors.ink)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.65)
+                    .truncationMode(.middle)
             }
+            .frame(minWidth: 110, alignment: .leading)
+            .layoutPriority(1)
             Rectangle()
                 .fill(Tokens.Colors.line)
                 .frame(width: 1, height: 32)

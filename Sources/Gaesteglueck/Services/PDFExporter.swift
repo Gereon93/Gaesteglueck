@@ -7,6 +7,7 @@ enum PDFExporter {
         var includeTableLists: Bool = true
         var includeCatererSummary: Bool = true
         var highlightAllergies: Bool = true
+        var withSeatNumbers: Bool = false
         var withFooter: Bool = true
         var blackAndWhite: Bool = false
 
@@ -66,8 +67,26 @@ enum PDFExporter {
                     drawText("Keine Gäste zugewiesen", at: CGPoint(x: 60, y: y), font: .systemFont(ofSize: 12), color: secondaryColor)
                     y += 18
                 } else {
-                    for guest in table.guests.sorted(by: { $0.fullName < $1.fullName }) {
-                        var line = "\u{2022} \(guest.fullName)"
+                    let sortedGuests: [Guest] = options.withSeatNumbers
+                        ? table.guests.sorted { lhs, rhs in
+                            switch (lhs.seatIndex, rhs.seatIndex) {
+                            case let (l?, r?): return l < r
+                            case (_?, nil): return true
+                            case (nil, _?): return false
+                            default: return lhs.fullName < rhs.fullName
+                            }
+                        }
+                        : table.guests.sorted { $0.fullName < $1.fullName }
+                    for guest in sortedGuests {
+                        var line = "\u{2022} "
+                        if options.withSeatNumbers {
+                            if let idx = guest.seatIndex {
+                                line += "Sitz \(idx + 1) · "
+                            } else {
+                                line += "ohne Platz · "
+                            }
+                        }
+                        line += guest.fullName
                         if guest.dietaryChoice != "Fleisch" { line += " \(guest.dietaryChoice)" }
                         if guest.hasIntolerances { line += " \u{26A0}\u{FE0F} \(guest.intolerances.joined(separator: ", ")) " }
                         if guest.ageCategory != .adult { line += " [\(guest.ageCategory.rawValue)]" }

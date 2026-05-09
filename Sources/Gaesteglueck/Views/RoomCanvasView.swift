@@ -92,6 +92,20 @@ struct RoomCanvasView: View {
         .sheet(isPresented: $showingFloorPlanSetup) {
             FloorPlanSetupView(roomPlan: RoomPlanFactory.ensure(in: modelContext, existing: roomPlans))
         }
+        .onAppear { backfillSeatIndices() }
+    }
+
+    private func backfillSeatIndices() {
+        for table in tables {
+            var used = Set(table.guests.compactMap(\.seatIndex))
+            for guest in table.guests where guest.seatIndex == nil {
+                for idx in 0..<table.capacity where !used.contains(idx) {
+                    guest.seatIndex = idx
+                    used.insert(idx)
+                    break
+                }
+            }
+        }
     }
 
     private var canvasLayout: some View {
@@ -330,13 +344,22 @@ struct RoomCanvasView: View {
         let availableSeats = table.capacity - table.guests.count + table.guests.filter { unpinned.contains($0) }.count
         guard needsSeats <= availableSeats else { return false }
         for peer in unpinned {
-            // Tischwechsel → fester Sitzplatz wird ungültig, also leeren
             if peer.table?.id != table.id {
                 peer.seatIndex = nil
             }
             peer.table = table
+            assignNextFreeSeat(to: peer, in: table)
         }
         return true
+    }
+
+    private func assignNextFreeSeat(to guest: Guest, in table: GuestTable) {
+        if guest.seatIndex != nil { return }
+        let used = Set(table.guests.compactMap { $0.id == guest.id ? nil : $0.seatIndex })
+        for idx in 0..<table.capacity where !used.contains(idx) {
+            guest.seatIndex = idx
+            return
+        }
     }
 
     private func registrationGroupCompanions(for guest: Guest) -> [Guest] {
@@ -380,10 +403,14 @@ struct RoomCanvasView: View {
     #endif
 
     private var canvas: some View {
-        GeometryReader { geo in
-            canvasContents
-                .environment(\.canvasScale, computeCanvasScale(canvasSize: geo.size))
-        }
+        canvasContents
+    }
+
+    private func formatMeters(_ value: Double) -> String {
+        let rounded = (value * 10).rounded() / 10
+        return rounded.truncatingRemainder(dividingBy: 1) == 0
+            ? String(Int(rounded))
+            : String(format: "%.1f", rounded)
     }
 
     private func computeCanvasScale(canvasSize: CGSize) -> CGFloat {
@@ -415,58 +442,100 @@ struct RoomCanvasView: View {
     }
 
     private var canvasContents: some View {
-        ZStack {
-            roomPlanBackgroundIfAvailable
-            CanvasGridBackground()
-            // Floor outline
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .strokeBorder(
-                    Tokens.Colors.line2,
-                    style: StrokeStyle(lineWidth: 1.5, dash: [6, 4])
-                )
-                .padding(28)
+        GeometryReader { geo in
+            let scale = computeCanvasScale(canvasSize: geo.size)
+            let floorWidth: CGFloat? = roomWidthInCM.map { CGFloat($0) * scale }
+            let floorHeight: CGFloat? = roomDepthInCM.map { CGFloat($0) * scale }
 
-            // Door + Stage labels
-            VStack {
-                HStack {
-                    Text("EINGANG ↓")
-                        .font(.system(size: 10.5, weight: .semibold, design: .rounded))
-                        .foregroundStyle(Tokens.Colors.ink3)
-                        .tracking(0.5)
-                        .padding(.leading, 28)
-                        .padding(.top, 10)
-                    Spacer()
-                }
-                Spacer()
-                HStack {
-                    Spacer()
-                    Text("BÜHNE ↑")
-                        .font(.system(size: 10.5, weight: .semibold, design: .rounded))
-                        .foregroundStyle(Tokens.Colors.ink3)
-                        .tracking(0.5)
-                        .padding(.trailing, 28)
-                        .padding(.bottom, 10)
-                }
-            }
+            ZStack {
+                roomPlanBackgroundIfAvailable
+                CanvasGridBackground()
 
-            // Tische
-            ForEach(tables) { table in
-                TableCanvasItemView(
-                    table: table,
-                    isSelected: selectedTable?.id == table.id,
-                    onTap: { selectedTable = table }
-                )
-                .dropDestination(for: String.self) { items, _ in
-                    guard let guestIDString = items.first,
-                          let guestID = UUID(uuidString: guestIDString),
-                          let guest = guests.first(where: { $0.id == guestID }) else {
-                        return false
+                Group {
+                    if let w = floorWidth, let h = floorHeight {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .strokeBorder(
+                                Tokens.Colors.line2,
+                                style: StrokeStyle(lineWidth: 1.5, dash: [6, 4])
+                            )
+                            .frame(width: w, height: h)
+                    } else {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .strokeBorder(
+                                Tokens.Colors.line2,
+                                style: StrokeStyle(lineWidth: 1.5, dash: [6, 4])
+                            )
+                            .padding(28)
                     }
-                    return assignGuestAndPeersToTable(guest: guest, table: table)
+                }
+                .frame(width: geo.size.width, height: geo.size.height)
+
+                if let w = floorWidth, let h = floorHeight,
+                   let widthCM = roomWidthInCM, let depthCM = roomDepthInCM {
+                    let widthM = widthCM / 100, depthM = depthCM / 100
+                    Text("\(formatMeters(widthM)) × \(formatMeters(depthM)) m")
+                        .font(.system(size: 10.5, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Tokens.Colors.ink3)
+                        .tracking(0.5)
+                        .position(x: geo.size.width / 2 - w / 2 + 50, y: geo.size.height / 2 - h / 2 + 14)
+                }
+
+                Group {
+                    if let w = floorWidth, let h = floorHeight {
+                        Text("EINGANG ↓")
+                            .font(.system(size: 10.5, weight: .semibold, design: .rounded))
+                            .foregroundStyle(Tokens.Colors.ink3)
+                            .tracking(0.5)
+                            .position(x: geo.size.width / 2 - w / 2 + 50, y: geo.size.height / 2 + h / 2 + 16)
+                        Text("BÜHNE ↑")
+                            .font(.system(size: 10.5, weight: .semibold, design: .rounded))
+                            .foregroundStyle(Tokens.Colors.ink3)
+                            .tracking(0.5)
+                            .position(x: geo.size.width / 2 + w / 2 - 50, y: geo.size.height / 2 - h / 2 - 16)
+                    } else {
+                        VStack {
+                            HStack {
+                                Text("EINGANG ↓")
+                                    .font(.system(size: 10.5, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(Tokens.Colors.ink3)
+                                    .tracking(0.5)
+                                    .padding(.leading, 28)
+                                    .padding(.top, 10)
+                                Spacer()
+                            }
+                            Spacer()
+                            HStack {
+                                Spacer()
+                                Text("BÜHNE ↑")
+                                    .font(.system(size: 10.5, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(Tokens.Colors.ink3)
+                                    .tracking(0.5)
+                                    .padding(.trailing, 28)
+                                    .padding(.bottom, 10)
+                            }
+                        }
+                    }
+                }
+
+                ForEach(tables) { table in
+                    TableCanvasItemView(
+                        table: table,
+                        isSelected: selectedTable?.id == table.id,
+                        onTap: { selectedTable = table }
+                    )
+                    .dropDestination(for: String.self) { items, _ in
+                        guard let guestIDString = items.first,
+                              let guestID = UUID(uuidString: guestIDString),
+                              let guest = guests.first(where: { $0.id == guestID }) else {
+                            return false
+                        }
+                        return assignGuestAndPeersToTable(guest: guest, table: table)
+                    }
                 }
             }
+            .environment(\.canvasScale, scale)
+            .background(Tokens.Colors.bg)
         }
-        .background(Tokens.Colors.bg)
     }
 
     // MARK: - Inspector
@@ -517,6 +586,16 @@ struct RoomCanvasView: View {
                                     Text(guest.fullName)
                                         .font(.system(size: 12.5, design: .rounded))
                                         .foregroundStyle(Tokens.Colors.ink)
+                                    if guest.seatIndex == nil {
+                                        Text("ohne Platz")
+                                            .font(.system(size: 10, weight: .semibold, design: .rounded))
+                                            .foregroundStyle(.white)
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 2)
+                                            .background(Tokens.Colors.warn)
+                                            .clipShape(Capsule())
+                                            .help("Tisch ist voll — diesem Gast wurde noch kein Sitz zugewiesen.")
+                                    }
                                     Spacer()
                                     Button {
                                         guest.isPinned.toggle()

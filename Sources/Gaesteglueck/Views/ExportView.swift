@@ -17,6 +17,7 @@ struct ExportView: View {
     @State private var includePoster = false
 
     @State private var highlightAllergies = true
+    @State private var withSeatNumbers = false
     @State private var withWavePattern = true
     @State private var withFooter = true
     @State private var blackAndWhite = false
@@ -200,7 +201,7 @@ struct ExportView: View {
 
             ForEach(table.guests.prefix(8)) { guest in
                 HStack {
-                    Text(guest.fullName)
+                    Text(seatPrefix(for: guest) + guest.fullName)
                         .font(.system(size: 12, weight: .medium, design: .rounded))
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Text(guest.dietaryChoice)
@@ -218,6 +219,12 @@ struct ExportView: View {
             }
         }
         .foregroundStyle(blackAndWhite ? Color.black : Tokens.Colors.ink)
+    }
+
+    private func seatPrefix(for guest: Guest) -> String {
+        guard withSeatNumbers else { return "" }
+        if let idx = guest.seatIndex { return "Sitz \(idx + 1) · " }
+        return "ohne Platz · "
     }
 
     private func footerLine(event: Event, table: GuestTable) -> some View {
@@ -257,6 +264,7 @@ struct ExportView: View {
                 InspectorSection("Optionen") {
                     VStack(alignment: .leading, spacing: 10) {
                         CheckRow(label: "Allergien hervorheben", hint: nil, isOn: $highlightAllergies)
+                        CheckRow(label: "Mit Sitzzuweisung", hint: "Sitz 1, Sitz 2…", isOn: $withSeatNumbers)
                         CheckRow(label: "Mit Wellen-Pattern", hint: "nur Vorschau", isOn: $withWavePattern)
                         CheckRow(label: "Mit Fußzeile", hint: "Stand, Seitenzahl", isOn: $withFooter)
                         CheckRow(label: "Schwarz-weiß", hint: nil, isOn: $blackAndWhite)
@@ -289,6 +297,7 @@ struct ExportView: View {
                 includeTableLists: includeTableLists,
                 includeCatererSummary: includeCatererSummary,
                 highlightAllergies: highlightAllergies,
+                withSeatNumbers: withSeatNumbers,
                 withFooter: withFooter,
                 blackAndWhite: blackAndWhite
             )

@@ -2,11 +2,6 @@
 import SwiftUI
 import SwiftData
 
-/// Tisch-Shape im Canvas (siehe design_handoff_gaesteglueck → S6 → Table).
-/// Akzent-Tint Fill für gepinnte Tische, Sage-Tint für KI-vorgeschlagene
-/// Cluster, weißer Surface für offene Tische. Border 2pt-Akzent wenn
-/// selektiert, Warn-Border bei Constraint-Verletzungen. Kleine Pin-/Warn-
-/// Badges oben rechts.
 struct TableCanvasItemView: View {
     @Bindable var table: GuestTable
     let isSelected: Bool
@@ -63,19 +58,19 @@ struct TableCanvasItemView: View {
                 .overlay(alignment: .topTrailing) {
                     badgeOverlay
                 }
-                .overlay(alignment: .bottomTrailing) {
-                    allergyBadge
-                }
             VStack(spacing: 3) {
                 Text(table.name)
                     .font(.system(size: 11.5, weight: .medium, design: .rounded))
                     .foregroundStyle(Tokens.Colors.ink)
                     .multilineTextAlignment(.center)
                     .lineLimit(1)
-                Text("\(table.guests.count)/\(table.capacity)")
-                    .font(.system(size: 10, design: .rounded))
-                    .foregroundStyle(table.isFull ? Tokens.Colors.warn : Tokens.Colors.ink3)
-                    .monospacedDigit()
+                HStack(spacing: 4) {
+                    Text("\(table.guests.count)/\(table.capacity)")
+                        .font(.system(size: 10, design: .rounded))
+                        .foregroundStyle(table.isFull ? Tokens.Colors.warn : Tokens.Colors.ink3)
+                        .monospacedDigit()
+                    allergyBadge
+                }
                 if table.combinationGroup != nil {
                     Image(systemName: "link")
                         .font(.system(size: 9))
@@ -84,7 +79,6 @@ struct TableCanvasItemView: View {
             }
             .padding(.horizontal, 6)
 
-            // Sitze um den Tisch — fest zugewiesen oder leer
             seatChips
         }
         .position(x: table.positionX + dragOffset.width, y: table.positionY + dragOffset.height)
@@ -193,15 +187,16 @@ struct TableCanvasItemView: View {
         guard let guest = allGuests.first(where: { $0.id == guestID }) else { return false }
         if guest.isPinned { return false }
 
-        // Wechsel des Tisches → Kapazität checken
         if guest.table?.id != table.id {
             let availableSeats = table.capacity - table.guests.count
             if availableSeats <= 0 { return false }
         }
 
-        // Sitz vorher räumen, falls jemand drauf sitzt
-        if let prior = occupant(at: seatIndex), prior.id != guest.id {
-            prior.seatIndex = nil
+        let prior = occupant(at: seatIndex)
+        let guestPriorSeat = guest.table?.id == table.id ? guest.seatIndex : nil
+
+        if let prior, prior.id != guest.id {
+            prior.seatIndex = guestPriorSeat
         }
 
         guest.table = table
@@ -221,11 +216,9 @@ struct TableCanvasItemView: View {
             }
             .foregroundStyle(.white)
             .padding(.horizontal, 5)
-            .padding(.vertical, 2)
+            .padding(.vertical, 1.5)
             .background(Color(hex: "#c44a4a"))
             .clipShape(Capsule())
-            .offset(x: 6, y: 6)
-            .shadow(color: .black.opacity(0.15), radius: 2, x: 0, y: 1)
             .help(allergyTooltip)
         }
     }

@@ -36,12 +36,27 @@ struct SeatChipView: View {
     private var tooltip: String {
         if let g = occupant {
             var t = "Sitz \(seatIndex + 1) — \(g.fullName)"
+            switch g.dietaryChoice.lowercased() {
+            case "vegetarisch": t += " · Vegetarisch"
+            case "vegan": t += " · Vegan"
+            default: break
+            }
             if g.hasIntolerances {
                 t += " ⚠️ \(g.intolerances.joined(separator: ", "))"
             }
             return t
         }
         return "Sitz \(seatIndex + 1) — frei. Gast hierher ziehen."
+    }
+
+    private var dietColor: Color? {
+        guard let g = occupant else { return nil }
+        if g.hasIntolerances { return Tokens.Colors.error }
+        switch g.dietaryChoice.lowercased() {
+        case "vegan": return Color(hex: "#5a8a4a")
+        case "vegetarisch": return Tokens.Colors.sage
+        default: return nil
+        }
     }
 
     var body: some View {
@@ -54,9 +69,9 @@ struct SeatChipView: View {
                     .foregroundStyle(Tokens.Colors.ink)
                     .monospacedDigit()
             }
-            if let g = occupant, g.hasIntolerances {
+            if let color = dietColor {
                 Circle()
-                    .fill(Tokens.Colors.error)
+                    .fill(color)
                     .frame(width: 6, height: 6)
                     .offset(x: 7, y: -7)
             }
@@ -76,7 +91,7 @@ struct SeatChipView: View {
                 Button(role: .destructive) {
                     onClear()
                 } label: {
-                    Label("Sitzplatz leeren", systemImage: "person.fill.xmark")
+                    Label("Sitzplatz freigeben", systemImage: "person.fill.xmark")
                 }
             }
         }

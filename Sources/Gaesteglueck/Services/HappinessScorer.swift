@@ -5,10 +5,11 @@ enum HappinessScorer {
         let guests = table.guests
         let guestIDs = Set(guests.map(\.id))
         guard !guestIDs.isEmpty else { return 0 }
+        let activeTags = tags.filter(\.isActive)
         var score: Double = 0
 
         // Tag cohesion: guests sharing a tag at the same table.
-        for tag in tags {
+        for tag in activeTags {
             let atTable = tag.guestIDs.filter { guestIDs.contains($0) }
             if atTable.count >= 2 {
                 let weight: Double = tag.category == .family ? 70 : 40
@@ -29,7 +30,7 @@ enum HappinessScorer {
 
         // Bridge persons: guest at this table with 2+ tags connects groups → +15 each.
         let bridgeCount = guests.filter { guest in
-            tags.filter { $0.guestIDs.contains(guest.id) }.count >= 2
+            activeTags.filter { $0.guestIDs.contains(guest.id) }.count >= 2
         }.count
         score += Double(bridgeCount) * 15
 

@@ -68,5 +68,39 @@ struct SeatLayoutTests {
         )
         #expect(positions.count == 8)
     }
+
+    @Test("Rect with capacity 6 splits long sides evenly: 2 top + 2 bottom + 2 ends")
+    func rectSymmetric6() {
+        let positions = SeatLayout.positions(
+            shape: .rectangular,
+            capacity: 6,
+            scaledDiameter: 0,
+            scaledWidth: 140,
+            scaledDepth: 80
+        )
+        #expect(positions.count == 6)
+        let top = positions.filter { $0.y < -10 }
+        let bottom = positions.filter { $0.y > 10 }
+        let ends = positions.filter { abs($0.y) <= 10 }
+        #expect(top.count == 2)
+        #expect(bottom.count == 2)
+        #expect(ends.count == 2)
+    }
+
+    @Test("Rect with capacity 8 splits 3 top + 3 bottom + 2 ends")
+    func rectSymmetric8() {
+        let positions = SeatLayout.positions(
+            shape: .rectangular,
+            capacity: 8,
+            scaledDiameter: 0,
+            scaledWidth: 200,
+            scaledDepth: 100
+        )
+        #expect(positions.count == 8)
+        let top = positions.filter { $0.y < -10 }
+        let bottom = positions.filter { $0.y > 10 }
+        #expect(top.count == 3)
+        #expect(bottom.count == 3)
+    }
 }
 #endif

@@ -1,6 +1,8 @@
 #if canImport(AppKit)
 import Foundation
 import AppKit
+import CoreText
+import CoreGraphics
 
 enum PDFExporter {
     struct Options: Sendable {
@@ -20,23 +22,51 @@ enum PDFExporter {
         guard let consumer = CGDataConsumer(data: pdfData as CFMutableData),
               let context = CGContext(consumer: consumer, mediaBox: nil, nil) else { return Data() }
 
-        let primaryColor: NSColor = options.blackAndWhite ? .black : .labelColor
-        let secondaryColor: NSColor = options.blackAndWhite ? NSColor(white: 0.35, alpha: 1) : .secondaryLabelColor
-        let allergyColor: NSColor = options.blackAndWhite ? .black : NSColor(srgbRed: 0.77, green: 0.29, blue: 0.29, alpha: 1)
+        let primaryColor: CGColor = options.blackAndWhite
+            ? NSColor.black.cgColor
+            : NSColor(srgbRed: 0.10, green: 0.10, blue: 0.10, alpha: 1).cgColor
+        let secondaryColor: CGColor = options.blackAndWhite
+            ? NSColor(srgbRed: 0.30, green: 0.30, blue: 0.30, alpha: 1).cgColor
+            : NSColor(srgbRed: 0.40, green: 0.40, blue: 0.40, alpha: 1).cgColor
+        let allergyColor: CGColor = options.blackAndWhite
+            ? NSColor.black.cgColor
+            : NSColor(srgbRed: 0.77, green: 0.29, blue: 0.29, alpha: 1).cgColor
 
         var pageNumber = 0
+        var pageOpen = false
+
+        // Wir zeichnen Top-Down: y=0 ist oben. Beim CGContext ist y=0 unten,
+        // also rechnet drawText die y-Koordinate intern um (pageHeight - y - lineHeight).
+        // Kein eigener flip-Transform nötig → Core Text rendert sauber.
 
         func beginPage() {
             pageNumber += 1
             var mediaBox = pageRect
             context.beginPage(mediaBox: &mediaBox)
-            context.translateBy(x: 0, y: pageRect.height)
-            context.scaleBy(x: 1, y: -1)
+            pageOpen = true
         }
 
-        func drawText(_ text: String, at point: CGPoint, font: NSFont, color: NSColor? = nil) {
-            let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color ?? primaryColor]
-            (text as NSString).draw(at: point, withAttributes: attrs)
+        func endPage() {
+            guard pageOpen else { return }
+            context.endPage()
+            pageOpen = false
+        }
+
+        /// Zeichnet eine Zeile Text per Core Text. point ist Top-Left in
+        /// Top-Down-Koordinaten (y=0 oben, y=pageHeight unten).
+        func drawText(_ text: String, at point: CGPoint, font: NSFont, color: CGColor? = nil) {
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: font,
+                .foregroundColor: color ?? primaryColor
+            ]
+            let attributed = NSAttributedString(string: text, attributes: attrs)
+            let line = CTLineCreateWithAttributedString(attributed)
+            // Baseline-Y so wählen dass Top-Left bei (point.x, point.y) landet.
+            let ascent = font.ascender
+            let baselineFromTop = ascent
+            let cgY = pageRect.height - point.y - baselineFromTop
+            context.textPosition = CGPoint(x: point.x, y: cgY)
+            CTLineDraw(line, context)
         }
 
         func drawFooterIfWanted() {
@@ -57,11 +87,12 @@ enum PDFExporter {
             for table in tables.sorted(by: { $0.name < $1.name }) {
                 if y > pageRect.height - 100 {
                     drawFooterIfWanted()
-                    context.endPage()
+                    endPage()
                     beginPage()
                     y = 40
                 }
-                drawText("\(table.name) (\(table.shape.rawValue), \(table.guests.count)/\(table.capacity) Plätze)", at: CGPoint(x: 40, y: y), font: .boldSystemFont(ofSize: 16))
+                drawText("\(table.name) (\(table.shape.rawValue), \(table.guests.count)/\(table.capacity) Plätze)",
+                         at: CGPoint(x: 40, y: y), font: .boldSystemFont(ofSize: 16))
                 y += 22
                 if table.guests.isEmpty {
                     drawText("Keine Gäste zugewiesen", at: CGPoint(x: 60, y: y), font: .systemFont(ofSize: 12), color: secondaryColor)
@@ -78,7 +109,7 @@ enum PDFExporter {
                         }
                         : table.guests.sorted { $0.fullName < $1.fullName }
                     for guest in sortedGuests {
-                        var line = "\u{2022} "
+                        var line = "• "
                         if options.withSeatNumbers {
                             if let idx = guest.seatIndex {
                                 line += "Sitz \(idx + 1) · "
@@ -88,11 +119,11 @@ enum PDFExporter {
                         }
                         line += guest.fullName
                         if guest.dietaryChoice != "Fleisch" { line += " \(guest.dietaryChoice)" }
-                        if guest.hasIntolerances { line += " \u{26A0}\u{FE0F} \(guest.intolerances.joined(separator: ", ")) " }
+                        if guest.hasIntolerances { line += " ⚠ \(guest.intolerances.joined(separator: ", "))" }
                         if guest.ageCategory != .adult { line += " [\(guest.ageCategory.rawValue)]" }
                         let isFlagged = options.highlightAllergies && guest.hasIntolerances
                         let font: NSFont = isFlagged ? .boldSystemFont(ofSize: 12) : .systemFont(ofSize: 12)
-                        let color: NSColor = isFlagged ? allergyColor : primaryColor
+                        let color = isFlagged ? allergyColor : primaryColor
                         drawText(line, at: CGPoint(x: 60, y: y), font: font, color: color)
                         y += 18
                     }
@@ -103,7 +134,7 @@ enum PDFExporter {
         }
 
         if options.includeCatererSummary {
-            if options.includeTableLists { context.endPage() }
+            if options.includeTableLists { endPage() }
             beginPage()
             y = 40
             drawText("Übersicht für den Caterer", at: CGPoint(x: 40, y: y), font: .boldSystemFont(ofSize: 24))
@@ -115,9 +146,18 @@ enum PDFExporter {
                 drawText("\(choice): \(count)", at: CGPoint(x: 40, y: y), font: .systemFont(ofSize: 12))
                 y += 20
             }
-            let childCount = allGuests.filter { $0.ageCategory != .adult }.count
-            drawText("Kinder: \(childCount)", at: CGPoint(x: 40, y: y), font: .systemFont(ofSize: 12))
-            y += 30
+            y += 6
+            // Altersgruppen einzeln auflisten — Caterer braucht das fuer
+            // Kindermenue, Hochstuhl-Anzahl etc.
+            let ageOrder: [AgeCategory] = [.adult, .teenager, .child, .toddler, .baby]
+            let ageCounts = Dictionary(grouping: allGuests, by: \.ageCategory).mapValues(\.count)
+            for category in ageOrder {
+                let n = ageCounts[category] ?? 0
+                if n == 0 { continue }
+                drawText("\(category.rawValue): \(n)", at: CGPoint(x: 40, y: y), font: .systemFont(ofSize: 12))
+                y += 20
+            }
+            y += 10
 
             let withIntolerances = allGuests.filter(\.hasIntolerances)
             if !withIntolerances.isEmpty {
@@ -125,15 +165,16 @@ enum PDFExporter {
                 y += 22
                 for guest in withIntolerances.sorted(by: { $0.fullName < $1.fullName }) {
                     let font: NSFont = options.highlightAllergies ? .boldSystemFont(ofSize: 12) : .systemFont(ofSize: 12)
-                    let color: NSColor = options.highlightAllergies ? allergyColor : primaryColor
-                    drawText("  \(guest.fullName): \(guest.intolerances.joined(separator: ", "))", at: CGPoint(x: 60, y: y), font: font, color: color)
+                    let color = options.highlightAllergies ? allergyColor : primaryColor
+                    drawText("  \(guest.fullName): \(guest.intolerances.joined(separator: ", "))",
+                             at: CGPoint(x: 60, y: y), font: font, color: color)
                     y += 18
                 }
             }
             drawFooterIfWanted()
         }
 
-        if pageNumber > 0 { context.endPage() }
+        endPage()
         context.closePDF()
         return pdfData as Data
     }
@@ -141,8 +182,8 @@ enum PDFExporter {
     private static func drawDocumentHeader(
         title: String,
         date: Date?,
-        drawText: (String, CGPoint, NSFont, NSColor?) -> Void,
-        secondaryColor: NSColor,
+        drawText: (String, CGPoint, NSFont, CGColor?) -> Void,
+        secondaryColor: CGColor,
         atY startY: CGFloat
     ) -> CGFloat {
         var y = startY

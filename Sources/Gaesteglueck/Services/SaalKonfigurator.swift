@@ -6,6 +6,7 @@ struct SaalInventar: Sendable, Equatable {
     var rectangularMaxCount: Int = 8
     var rectangularWidthCM: Double = 200
     var rectangularDepthCM: Double = 90
+    var rectangularMaxTafelLength: Int = 1   // 1 = nur Solo; >1 = Tafeln aus bis zu N Tischen
     var withSeparateBridalTable: Bool = true
     var bridalTableWidthCM: Double = 320
     var bridalTableDepthCM: Double = 90
@@ -13,19 +14,26 @@ struct SaalInventar: Sendable, Equatable {
     var childTableWidthCM: Double = 100
 
     var roundCapacityEach: Int {
-        Int(Double.pi * roundDiameterCM / 60)
+        Int(Double.pi * roundDiameterCM / GuestTable.activeRules.seatWidthCm)
     }
 
     var rectCapacityEach: Int {
-        max(Int((2 * (rectangularWidthCM + rectangularDepthCM)) / 60) - 2, 4)
+        Self.rectangularSeats(width: rectangularWidthCM, depth: rectangularDepthCM)
     }
 
     var bridalCapacity: Int {
-        max(Int((2 * (bridalTableWidthCM + bridalTableDepthCM)) / 60) - 2, 4)
+        Self.rectangularSeats(width: bridalTableWidthCM, depth: bridalTableDepthCM)
     }
 
     var childCapacity: Int {
-        Int(4 * childTableWidthCM / 60)
+        Self.rectangularSeats(width: childTableWidthCM, depth: childTableWidthCM)
+    }
+
+    private static func rectangularSeats(width: Double, depth: Double) -> Int {
+        let seatWidth = GuestTable.activeRules.seatWidthCm
+        let longSeats  = 2 * Int(width / seatWidth)
+        let shortSeats = 2 * (depth >= seatWidth ? 1 : 0)
+        return longSeats + shortSeats
     }
 
     var maxTotalCapacity: Int {
@@ -48,6 +56,8 @@ struct ProposedTable: Sendable, Identifiable, Equatable {
     var isChild: Bool
     var clusters: [String]
     var reason: String
+    var tafelGroup: String?
+    var tafelOrder: Int?
 }
 
 struct SaalProposal: Sendable, Equatable {
@@ -153,6 +163,32 @@ OUTPUT (NUR JSON):
       "isChild": false,
       "clusters": ["Familie Maier", "Familienfreunde Gereon"],
       "reason": "Großfamilie der Brautmutter, 8 Personen."
+    },
+    {
+      "shape": "rectangular",
+      "widthCM": 140,
+      "depthCM": 80,
+      "name": "Großfamilie Maier",
+      "capacity": 6,
+      "isBridal": false,
+      "isChild": false,
+      "tafelGroup": "G1",
+      "tafelOrder": 0,
+      "clusters": ["Familie Maier"],
+      "reason": "Erster von 3 verbundenen Tischen — ergibt 16 Plätze."
+    },
+    {
+      "shape": "rectangular",
+      "widthCM": 140,
+      "depthCM": 80,
+      "name": "Großfamilie Maier",
+      "capacity": 6,
+      "isBridal": false,
+      "isChild": false,
+      "tafelGroup": "G1",
+      "tafelOrder": 1,
+      "clusters": ["Familie Maier"],
+      "reason": "Mittelteil der 16er-Tafel."
     }
   ]
 }
@@ -183,6 +219,38 @@ Wenn das Inventar nicht reicht: weniger oder kleinere Tische vorschlagen, kein I
         prompt += "## Gäste\n\n"
         prompt += "Gesamt: \(guestCount) Gäste, \(seatingNeed) brauchen einen Platz (Babys ohne Stuhl)\n\n"
         prompt += clusterContext
+
+        let rules = GuestTable.activeRules
+        prompt += "\n## Sitzregel\n\nSitzabstand: \(Int(rules.seatWidthCm)) cm pro Person.\n"
+
+        if inventory.rectangularMaxTafelLength > 1 {
+            let maxLen = inventory.rectangularMaxTafelLength
+            let w = Int(inventory.rectangularWidthCM)
+            let d = Int(inventory.rectangularDepthCM)
+            let sw = rules.seatWidthCm
+            let cap2 = 2 * Int(Double(2 * w) / sw) + 2
+            let cap3 = 2 * Int(Double(3 * w) / sw) + 2
+            let cap4 = 2 * Int(Double(4 * w) / sw) + 2
+            prompt += """
+
+## Tafel-Möglichkeit
+
+Aus den rechteckigen \(w)×\(d) cm Tischen kannst du Tafeln bauen, indem du sie aneinanderschiebst. Erlaubte Tafel-Längen: 2 bis \(maxLen) Tische.
+
+Eine Tafel aus N solchen Tischen hat 2*floor(N*\(w)/\(Int(sw))) + 2 Plätze.
+Beispiel-Tafeln (mit Sitzabstand \(Int(sw))cm):
+- 2×\(w)×\(d) → \(cap2) Plätze
+- 3×\(w)×\(d) → \(cap3) Plätze
+- 4×\(w)×\(d) → \(cap4) Plätze
+
+Bevorzuge Tafeln, wenn eine zusammenhängende Gruppe größer ist als ein einzelner Tisch fasst. Markiere Tafel-Mitglieder im Output:
+- "tafelGroup": "G1" (oder G2, G3 ...) bei allen Mitgliedern derselben Tafel
+- "tafelOrder": 0, 1, 2 ... in Reihenfolge der Tafel
+- Alle Mitglieder einer Tafel haben gleiche depthCM
+
+"""
+        }
+
         return prompt
     }
 
@@ -198,8 +266,48 @@ Wenn das Inventar nicht reicht: weniger oder kleinere Tische vorschlagen, kein I
         let reasoning = (parsed["reasoning"] as? String) ?? ""
         let tablesRaw = parsed["tables"] as? [[String: Any]] ?? []
         let parsed_ = tablesRaw.compactMap { entry in parseTable(entry, inventory: inventory) }
-        let validated = enforceInventoryLimits(parsed_, inventory: inventory)
+        let groupValidated = validateAndFixTafelGroups(parsed_, inventory: inventory)
+        let validated = enforceInventoryLimits(groupValidated, inventory: inventory)
         return SaalProposal(tables: validated, reasoning: reasoning)
+    }
+
+    private func validateAndFixTafelGroups(_ tables: [ProposedTable], inventory: SaalInventar) -> [ProposedTable] {
+        var bySolo: [ProposedTable] = []
+        var byGroup: [String: [ProposedTable]] = [:]
+        for t in tables {
+            if let g = t.tafelGroup {
+                byGroup[g, default: []].append(t)
+            } else {
+                bySolo.append(t)
+            }
+        }
+
+        var result = bySolo
+        for (_, members) in byGroup {
+            let sorted = members.sorted { ($0.tafelOrder ?? 0) < ($1.tafelOrder ?? 0) }
+            let depths = Set(sorted.map { $0.depthCM })
+            let orders = sorted.compactMap { $0.tafelOrder }
+            let expectedOrders = Array(0..<sorted.count)
+            let withinMax = sorted.count <= inventory.rectangularMaxTafelLength
+            let allRect = sorted.allSatisfy { $0.shape == .rectangular }
+
+            let valid = depths.count == 1
+                && orders == expectedOrders
+                && withinMax
+                && allRect
+                && sorted.count >= 2
+
+            if valid {
+                result.append(contentsOf: sorted)
+            } else {
+                for var m in sorted {
+                    m.tafelGroup = nil
+                    m.tafelOrder = nil
+                    result.append(m)
+                }
+            }
+        }
+        return result
     }
 
     private func enforceInventoryLimits(_ tables: [ProposedTable], inventory: SaalInventar) -> [ProposedTable] {
@@ -246,6 +354,8 @@ Wenn das Inventar nicht reicht: weniger oder kleinere Tische vorschlagen, kein I
         let clusters = (entry["clusters"] as? [String]) ?? []
         let reason = (entry["reason"] as? String) ?? ""
         let capacity = computeCapacity(shape: shape, widthCM: widthCM, depthCM: depthCM, diameterCM: diameterCM)
+        let tafelGroup = entry["tafelGroup"] as? String
+        let tafelOrder = entry["tafelOrder"] as? Int
         return ProposedTable(
             shape: shape,
             name: name,
@@ -256,7 +366,9 @@ Wenn das Inventar nicht reicht: weniger oder kleinere Tische vorschlagen, kein I
             isBridal: isBridal,
             isChild: isChild,
             clusters: clusters,
-            reason: reason
+            reason: reason,
+            tafelGroup: tafelGroup,
+            tafelOrder: tafelOrder
         )
     }
 
@@ -279,15 +391,24 @@ Wenn das Inventar nicht reicht: weniger oder kleinere Tische vorschlagen, kein I
         }
     }
 
-    private func computeCapacity(shape: TableShape, widthCM: Double, depthCM: Double, diameterCM: Double) -> Int {
-        let seatWidth: Double = 60
+    private func computeCapacity(
+        shape: TableShape,
+        widthCM: Double,
+        depthCM: Double,
+        diameterCM: Double,
+        seatWidth: Double = 60
+    ) -> Int {
         switch shape {
         case .round:
             return Int(Double.pi * diameterCM / seatWidth)
         case .rectangular:
-            return max(Int(2 * (widthCM + depthCM) / seatWidth) - 2, 4)
+            let longSeats  = 2 * Int(widthCM / seatWidth)
+            let shortSeats = 2 * (depthCM >= seatWidth ? 1 : 0)
+            return longSeats + shortSeats
         case .square:
-            return Int(4 * widthCM / seatWidth)
+            let longSeats  = 2 * Int(widthCM / seatWidth)
+            let shortSeats = 2 * (widthCM >= seatWidth ? 1 : 0)
+            return longSeats + shortSeats
         }
     }
 

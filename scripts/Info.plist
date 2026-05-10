@@ -30,5 +30,7 @@
     <string>© 2026 Gereon Godde — Open Source unter MIT-Lizenz</string>
     <key>NSPhotoLibraryUsageDescription</key>
     <string>Gästeglück liest Raumpläne und Hochzeitsfotos um sie als Hintergrund im Sitzplan zu nutzen.</string>
+    <key>NSContactsUsageDescription</key>
+    <string>Gästeglück liest Telefonnummern aus deinem Adressbuch — nur wenn du im Rechtsklick-Menü auf einen Gast „Telefonnummer aus Kontakten…" wählst.</string>
 </dict>
 </plist>

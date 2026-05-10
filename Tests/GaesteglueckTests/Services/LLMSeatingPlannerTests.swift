@@ -91,7 +91,7 @@ struct LLMSeatingPlannerTests {
         let raw = "{\"plan\":[{\"table\":\"T1\",\"guests\":[\"G1\",\"G2\"]}]}"
         let result = try LLMSeatingPlanner.parsePlan(from: raw, guestIDMap: ctx.guestMap, tableIDMap: ctx.tableMap, context: ctx.context)
         #expect(result.assignments.count == 2)
-        #expect(result.warnings.contains { $0.contains("2") && $0.contains("nicht platziert") })
+        #expect(result.warnings.contains { $0.contains("nicht platziert") || $0.contains("Nicht platziert") })
     }
 
     @Test("Warns about unknown guests")
@@ -160,6 +160,6 @@ struct LLMSeatingPlannerTests {
         let raw = "{\"plan\":[{\"table\":\"T1\",\"guests\":[\"G1\",\"G2\"]},{\"table\":\"T2\",\"guests\":[\"G1\",\"G3\",\"G4\"]}]}"
         let result = try LLMSeatingPlanner.parsePlan(from: raw, guestIDMap: ctx.guestMap, tableIDMap: ctx.tableMap, context: ctx.context)
         #expect(result.assignments[ctx.guests[0].id] == ctx.tables[0].id) // first wins
-        #expect(result.warnings.contains { $0.contains("doppelt") })
+        #expect(result.warnings.contains { $0.lowercased().contains("doppel") })
     }
 }

@@ -15,6 +15,11 @@ enum LLMSeatingPlanner {
         let tables: [GuestTable]
         let tags: [Tag]
         let constraints: [Constraint]
+        var bridalRule: String? = nil
+        /// Pro Tisch die noch verfügbare Kapazität (effectiveCapacity minus
+        /// bereits platzierte Gäste). Falls nil: effectiveCapacity wird
+        /// genutzt, alle Gäste gelten als noch unplatziert.
+        var tableRemainingCapacity: [UUID: Int]? = nil
     }
 
     struct ProposedAssignment: Sendable {
@@ -56,12 +61,31 @@ enum LLMSeatingPlanner {
         und harte Constraints.
 
         Deine Aufgabe: verteile ALLE Gäste auf die Tische. Beachte:
-        - Harte Constraints (müssen/dürfen nicht zusammen) sind bindend.
+        - HARTE CONSTRAINTS sind ABSOLUT bindend. Wenn zwei Gäste mit "MÜSSEN ZUSAMMEN" \
+          markiert sind, MÜSSEN sie auf demselben Tisch landen. Wenn "DÜRFEN NICHT ZUSAMMEN", \
+          dann auf unterschiedlichen Tischen. Verletzung dieser Regeln ist NICHT erlaubt.
         - Kapazitäten dürfen nicht überschritten werden.
-        - Tag-Mitglieder sollen möglichst zusammen sitzen.
+        - Brauttafel-Regel (falls genannt) ist HARTE Anforderung — keine Freunde/Aktivitäts-Cluster \
+          am Brauttisch wenn dort die genannten Familien-Gruppen Platz haben.
         - Kindertische bevorzugt für Kinder.
-        - Paare (mit selber Familie, beide Erwachsene) bleiben zusammen.
-        - Jeder Gast genau 1x.
+        - Paare bleiben zusammen.
+        - Jeder Gast erscheint GENAU EINMAL im gesamten Plan. NICHT zweimal in \
+          unterschiedlichen Tischen, NICHT zweimal in derselben Tisch-Liste. \
+          Vor der Antwort: prüfe deine Liste auf Doppelnennungen.
+
+        WICHTIG — Tag-Hierarchie für Sitz-Cluster (in dieser Reihenfolge anwenden):
+        1. ZUERST nach Familie-Tags clustern. Familien-Mitglieder zusammen, auch \
+           wenn sie zu unterschiedlichen Brautpaar-Seiten gehören (Cousinen \
+           untereinander mögen sich oft auch).
+        2. DANN nach Freundesgruppe-Tags clustern (z.B. "JGA Gereon", "Kommilitonen").
+        3. DANN nach Eigene/User-Tags clustern.
+        4. NUR wenn nach Schritten 1-3 noch Gäste oder Plätze übrig sind: \
+           Aktivität und Arbeitskontext als Fallback nutzen.
+
+        Brauttafel-Befüllung: Wenn die Brauttafel nach den definierten Regeln \
+        (z.B. Trauzeugen) nicht voll ist, fülle die freien Plätze erst mit \
+        Eltern, dann mit Geschwistern auf, BEVOR Trauzeugen-Partner / andere \
+        nahe Verwandte hinkommen.
 
         Antworte AUSSCHLIESSLICH mit JSON in genau diesem Schema, ohne Markdown, ohne Erklärungen:
 
@@ -91,7 +115,7 @@ enum LLMSeatingPlanner {
             var line = "- \(key): \(guest.fullName) [\(guest.partnerAssignment.rawValue)]"
             if guest.ageCategory != .adult { line += " [\(guest.ageCategory.rawValue)]" }
             if guest.dietaryChoice != "Fleisch" { line += " \(guest.dietaryChoice)" }
-            let guestTags = context.tags.filter { $0.guestIDs.contains(guest.id) }.map(\.name)
+            let guestTags = context.tags.filter(\.isActive).filter { $0.guestIDs.contains(guest.id) }.map(\.name)
             if !guestTags.isEmpty { line += " Tags: \(guestTags.joined(separator: ", "))" }
             lines.append(line)
         }
@@ -101,23 +125,61 @@ enum LLMSeatingPlanner {
         for (i, table) in context.tables.enumerated() {
             let key = "T\(i + 1)"
             tableMap[key] = table.id
-            var line = "- \(key): \(table.name) | Kapazität \(table.capacity)"
+            let cap = context.tableRemainingCapacity?[table.id] ?? table.effectiveCapacity
+            var line = "- \(key): \(table.name) | freie Plätze \(cap)"
+            if context.tableRemainingCapacity != nil && cap < table.effectiveCapacity {
+                line += " (von \(table.effectiveCapacity), Rest schon vergeben)"
+            }
             if table.isChildTable { line += " [KINDERTISCH]" }
             lines.append(line)
         }
 
+        if let rule = context.bridalRule, !rule.isEmpty {
+            lines.append("")
+            lines.append("## Brauttafel-Regel (HARTE Anforderung)")
+            lines.append(rule)
+        }
+
+        let activeTags = context.tags.filter(\.isActive)
+        if !activeTags.isEmpty {
+            lines.append("")
+            lines.append("## Tags nach Kategorie (Cluster-Hierarchie)")
+            let priorityOrder: [TagCategory] = [.family, .friendGroup, .custom, .activity, .work]
+            let grouped = Dictionary(grouping: activeTags, by: { $0.category })
+            let extraCats = TagCategory.allCases.filter { !priorityOrder.contains($0) }
+            for cat in priorityOrder + extraCats {
+                guard let tagsInCat = grouped[cat], !tagsInCat.isEmpty else { continue }
+                lines.append("### \(cat.rawValue)")
+                for tag in tagsInCat.sorted(by: { $0.name < $1.name }) {
+                    lines.append("- \(tag.name) (\(tag.guestIDs.count) Gäste)")
+                }
+            }
+        }
+
         if !context.constraints.isEmpty {
             lines.append("")
-            lines.append("## Harte Constraints")
+            lines.append("## HARTE CONSTRAINTS — DÜRFEN NICHT VERLETZT WERDEN")
+            lines.append("Wenn eine dieser Regeln verletzt ist, ist der Plan UNGÜLTIG.")
             let reverseGuest = Dictionary(uniqueKeysWithValues: guestMap.map { ($0.value, $0.key) })
+            let guestNamesByID = Dictionary(uniqueKeysWithValues: context.guests.map { ($0.id, $0.fullName) })
             for constraint in context.constraints {
                 let keys = constraint.guestIDs.compactMap { reverseGuest[$0] }
-                lines.append("- \(constraint.type.rawValue): \(keys.joined(separator: ", "))")
+                let names = constraint.guestIDs.compactMap { guestNamesByID[$0] }
+                let labelled = zip(keys, names).map { "\($0) (\($1))" }.joined(separator: ", ")
+                let prefix: String
+                switch constraint.type {
+                case .mustSitTogether:
+                    prefix = "MÜSSEN ZUSAMMEN am gleichen Tisch sitzen"
+                case .mustNotSitTogether:
+                    prefix = "DÜRFEN NICHT zusammen am gleichen Tisch sitzen"
+                }
+                let reason = constraint.reason.isEmpty ? "" : " — Grund: \(constraint.reason)"
+                lines.append("- \(prefix): \(labelled)\(reason)")
             }
         }
 
         lines.append("")
-        lines.append("Gib jetzt den Plan als JSON zurück.")
+        lines.append("Gib jetzt den Plan als JSON zurück. Cluster-Reihenfolge: Familie → Freundesgruppe → Eigene → Aktivität/Arbeitskontext.")
 
         return (lines.joined(separator: "\n"), guestMap, tableMap)
     }
@@ -147,8 +209,16 @@ enum LLMSeatingPlanner {
         allGuestIDs: Set<UUID>,
         tableCapacities: [UUID: Int],
         tableNames: [UUID: String],
+        guestNames: [UUID: String] = [:],
         hardConstraints: [(type: ConstraintType, guestIDs: [UUID], reason: String)]
     ) throws -> ProposedAssignment {
+        func displayName(forKey key: String) -> String {
+            guard let id = guestIDMap[key], let name = guestNames[id], !name.isEmpty else { return key }
+            return name
+        }
+        func displayName(forID id: UUID) -> String {
+            guestNames[id] ?? "Gast"
+        }
         let json = extractJSONObject(from: text)
         guard let data = json.data(using: .utf8) else {
             throw PlannerError.invalidJSON("kein UTF-8")
@@ -164,6 +234,7 @@ enum LLMSeatingPlanner {
         var rationale: [UUID: String] = [:]
         var warnings: [String] = []
         var seenGuests = Set<UUID>()
+        var duplicateCount = 0
 
         for entry in plan.plan {
             guard let tableUUID = tableIDMap[entry.table] else {
@@ -176,7 +247,7 @@ enum LLMSeatingPlanner {
                     continue
                 }
                 if seenGuests.contains(guestUUID) {
-                    warnings.append("Gast \(guestKey) doppelt im Plan")
+                    duplicateCount += 1
                     continue
                 }
                 assignments[guestUUID] = tableUUID
@@ -187,17 +258,34 @@ enum LLMSeatingPlanner {
             }
         }
 
-        let missing = allGuestIDs.subtracting(seenGuests)
-        if !missing.isEmpty {
-            warnings.append("\(missing.count) Gäste wurden nicht platziert")
-        }
-
+        // Überbesetzung auto-fixen: überzählige Gäste werden aus dem Plan entfernt
+        // und gelten als nicht-platziert. ID-stabile Reihenfolge.
         let countsByTable = Dictionary(grouping: assignments, by: \.value).mapValues(\.count)
         for (tableID, capacity) in tableCapacities {
             let count = countsByTable[tableID] ?? 0
-            if count > capacity {
-                let name = tableNames[tableID] ?? "Tisch"
-                warnings.append("\(name) überbelegt: \(count)/\(capacity)")
+            guard count > capacity else { continue }
+            let name = tableNames[tableID] ?? "Tisch"
+            let assigned = assignments.filter { $0.value == tableID }.keys.sorted { $0.uuidString < $1.uuidString }
+            for guestID in assigned.dropFirst(capacity) {
+                assignments.removeValue(forKey: guestID)
+            }
+            warnings.append("\(name) wäre überbelegt gewesen (\(count)/\(capacity)) — \(count - capacity) Gäste sind woanders zu platzieren")
+        }
+
+        // Doppelt-Vorschläge: collapsed in eine Zeile.
+        if duplicateCount > 0 {
+            warnings.append("\(duplicateCount) Doppel-Vorschlag\(duplicateCount == 1 ? "" : "e") automatisch bereinigt (Gast nimmt erste Tischzuweisung)")
+        }
+
+        // Missing nach Auto-Fix: alles was nicht in finalen assignments ist.
+        let placedGuests = Set(assignments.keys)
+        let missing = allGuestIDs.subtracting(placedGuests)
+        if !missing.isEmpty {
+            let names = missing.compactMap { guestNames[$0] }.sorted()
+            if names.isEmpty {
+                warnings.append("\(missing.count) Gäste wurden nicht platziert")
+            } else {
+                warnings.append("Nicht platziert: \(names.joined(separator: ", "))")
             }
         }
 
@@ -232,8 +320,9 @@ enum LLMSeatingPlanner {
             guestIDMap: guestIDMap,
             tableIDMap: tableIDMap,
             allGuestIDs: Set(context.guests.map(\.id)),
-            tableCapacities: Dictionary(uniqueKeysWithValues: context.tables.map { ($0.id, $0.capacity) }),
+            tableCapacities: Dictionary(uniqueKeysWithValues: context.tables.map { ($0.id, $0.effectiveCapacity) }),
             tableNames: Dictionary(uniqueKeysWithValues: context.tables.map { ($0.id, $0.name) }),
+            guestNames: Dictionary(uniqueKeysWithValues: context.guests.map { ($0.id, $0.fullName) }),
             hardConstraints: context.constraints.map { ($0.type, $0.guestIDs, $0.reason) }
         )
     }

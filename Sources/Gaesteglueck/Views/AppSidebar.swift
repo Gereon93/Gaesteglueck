@@ -11,6 +11,10 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
     case export = "Export"
     case settings = "Einstellungen"
 
+    static var sidebarVisible: [AppSection] {
+        [.dashboard, .guests, .tags, .tables, .export, .settings]
+    }
+
     var id: String { rawValue }
 
     var icon: String {
@@ -80,7 +84,7 @@ struct AppSidebar: View {
 
             // Nav-Gruppen
             ForEach(AppSection.Group.allCases, id: \.self) { group in
-                let items = AppSection.allCases.filter { $0.group == group }
+                let items = AppSection.sidebarVisible.filter { $0.group == group }
                 if !items.isEmpty {
                     sidebarGroup(label: group.rawValue, items: items)
                         .padding(.bottom, 14)

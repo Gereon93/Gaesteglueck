@@ -13,8 +13,14 @@ struct SeatChipView: View {
     let onDrop: (UUID) -> Bool
     /// Wird gerufen wenn der User den Sitz leert (Doppelklick / Context-Menü).
     let onClear: () -> Void
+    let isDisabled: Bool
+    let onToggleDisabled: () -> Void
+    /// Damit Initialen lesbar bleiben wenn der Tisch rotiert ist: wir
+    /// drehen den Text gegen die Tisch-Rotation. Default 0 = nicht rotiert.
+    var counterRotation: Double = 0
 
     @State private var isDropTargeted: Bool = false
+    @State private var isHovering: Bool = false
 
     private var initials: String {
         guard let g = occupant else { return "" }
@@ -24,6 +30,7 @@ struct SeatChipView: View {
     }
 
     private var fillColor: Color {
+        if isDisabled { return Tokens.Colors.surface.opacity(0.4) }
         if isDropTargeted { return Tokens.Colors.accentSoft }
         return occupant == nil ? Tokens.Colors.surface : Tokens.Colors.accentTint
     }
@@ -63,11 +70,19 @@ struct SeatChipView: View {
         ZStack {
             Circle().fill(fillColor)
             Circle().strokeBorder(strokeColor, lineWidth: occupant == nil ? 1 : 1.5)
+            if isDisabled {
+                Path { p in
+                    p.move(to: CGPoint(x: 4, y: 18))
+                    p.addLine(to: CGPoint(x: 18, y: 4))
+                }
+                .stroke(Tokens.Colors.ink3, lineWidth: 1.5)
+            }
             if !initials.isEmpty {
                 Text(initials)
                     .font(.system(size: 8.5, weight: .semibold, design: .rounded))
                     .foregroundStyle(Tokens.Colors.ink)
                     .monospacedDigit()
+                    .rotationEffect(.degrees(counterRotation))
             }
             if let color = dietColor {
                 Circle()
@@ -78,13 +93,40 @@ struct SeatChipView: View {
         }
         .frame(width: 22, height: 22)
         .help(tooltip)
+        .overlay(alignment: .top) {
+            if isHovering, let g = occupant {
+                Text(g.fullName)
+                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                    .foregroundStyle(Tokens.Colors.ink)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(Tokens.Colors.surface)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .strokeBorder(Tokens.Colors.line2, lineWidth: 1)
+                    )
+                    .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
+                    .fixedSize()
+                    .offset(y: -28)
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+                    .zIndex(1000)
+            }
+        }
+        .onHover { hovering in
+            isHovering = hovering
+        }
         .contentShape(Circle())
         .conditionalDraggable(occupant: occupant)
         .dropDestination(for: String.self) { items, _ in
+            guard !isDisabled else { return false }
             guard let raw = items.first, let id = UUID(uuidString: raw) else { return false }
             return onDrop(id)
         } isTargeted: { targeted in
-            isDropTargeted = targeted
+            isDropTargeted = !isDisabled && targeted
         }
         .contextMenu {
             if occupant != nil {
@@ -93,6 +135,12 @@ struct SeatChipView: View {
                 } label: {
                     Label("Sitzplatz freigeben", systemImage: "person.fill.xmark")
                 }
+            }
+            Button {
+                onToggleDisabled()
+            } label: {
+                Label(isDisabled ? "Sitz aktivieren" : "Sitz sperren",
+                      systemImage: isDisabled ? "checkmark.circle" : "xmark.circle")
             }
         }
     }

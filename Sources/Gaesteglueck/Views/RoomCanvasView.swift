@@ -25,6 +25,9 @@ struct RoomCanvasView: View {
     @State private var showingAISheet = false
     @State private var showingRoomSetup = false
     @State private var showingCoPilot = false
+    @State private var showingVersionsSheet = false
+    @State private var showingResetAssignmentsAlert = false
+    @State private var inboxTagFilter: UUID? = nil
     #if canImport(AppKit)
     @State private var cachedRoomPlanImageRef: NSImage?
     @State private var cachedRoomPlanImageDigest: Int = 0
@@ -52,24 +55,24 @@ struct RoomCanvasView: View {
         HappinessScorer.findViolations(tables: tables, constraints: constraints)
     }
 
-    private var unassignedGrouped: [(String, [Guest])] {
-        var result: [(String, [Guest])] = []
-        var placed = Set<UUID>()
-
-        for tag in tags.sorted(by: { $0.name < $1.name }) {
-            let inTag = unassignedGuests.filter { tag.guestIDs.contains($0.id) && !placed.contains($0.id) }
-            if !inTag.isEmpty {
-                result.append((tag.name, inTag))
-                inTag.forEach { placed.insert($0.id) }
-            }
+    private var unassignedSorted: [Guest] {
+        let baseList = unassignedGuests.sorted { lhs, rhs in
+            if lhs.firstName == rhs.firstName { return lhs.lastName < rhs.lastName }
+            return lhs.firstName < rhs.firstName
         }
-
-        let ungrouped = unassignedGuests.filter { !placed.contains($0.id) }
-        if !ungrouped.isEmpty {
-            result.append(("Ohne Gruppe", ungrouped))
+        if let tagID = inboxTagFilter,
+           let tag = tags.first(where: { $0.id == tagID }) {
+            return baseList.filter { tag.guestIDs.contains($0.id) }
         }
+        return baseList
+    }
 
-        return result
+    private var currentInboxFilterLabel: String {
+        if let tagID = inboxTagFilter,
+           let tag = tags.first(where: { $0.id == tagID }) {
+            return tag.name
+        }
+        return "Alle Tags"
     }
 
     var body: some View {
@@ -92,14 +95,30 @@ struct RoomCanvasView: View {
         .sheet(isPresented: $showingFloorPlanSetup) {
             FloorPlanSetupView(roomPlan: RoomPlanFactory.ensure(in: modelContext, existing: roomPlans))
         }
+        .sheet(isPresented: $showingVersionsSheet) {
+            if let event = event {
+                LayoutVersionsSheet(event: event)
+            }
+        }
         .onAppear { backfillSeatIndices() }
+        .onAppear {
+            if let event = event {
+                GuestTable.activeRules = event.seatingRules
+            }
+        }
+        .onChange(of: event?.seatingRulesData) { _, _ in
+            if let event = event {
+                GuestTable.activeRules = event.seatingRules
+            }
+        }
     }
 
     private func backfillSeatIndices() {
         for table in tables {
             var used = Set(table.guests.compactMap(\.seatIndex))
+            let disabled = table.disabledSeatIndices
             for guest in table.guests where guest.seatIndex == nil {
-                for idx in 0..<table.capacity where !used.contains(idx) {
+                for idx in 0..<table.capacity where !used.contains(idx) && !disabled.contains(idx) {
                     guest.seatIndex = idx
                     used.insert(idx)
                     break
@@ -239,23 +258,42 @@ struct RoomCanvasView: View {
                 Rectangle().fill(Tokens.Colors.line).frame(height: 1)
             }
 
+            if !tags.isEmpty {
+                Menu {
+                    Button("Alle anzeigen") { inboxTagFilter = nil }
+                    Divider()
+                    ForEach(tags.sorted(by: { $0.name < $1.name }), id: \.id) { tag in
+                        Button(tag.name) { inboxTagFilter = tag.id }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "tag")
+                            .font(.system(size: 10))
+                        Text(currentInboxFilterLabel)
+                            .font(.system(size: 11, design: .rounded))
+                            .lineLimit(1)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 9))
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 5).fill(Tokens.Colors.bg)
+                    )
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .padding(.horizontal, 12)
+                .padding(.top, 6)
+            }
+
             ScrollView {
                 LazyVStack(spacing: 6) {
-                    ForEach(unassignedGrouped, id: \.0) { groupName, group in
-                        Text(groupName.uppercased())
-                            .font(.system(size: 10, weight: .semibold, design: .rounded))
-                            .foregroundStyle(Tokens.Colors.ink3)
-                            .tracking(0.5)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 8)
-                            .padding(.top, 8)
-
-                        ForEach(group) { guest in
-                            inboxRow(guest: guest)
-                        }
+                    ForEach(unassignedSorted) { guest in
+                        inboxRow(guest: guest)
                     }
 
-                    if unassignedGuests.isEmpty {
+                    if unassignedSorted.isEmpty && unassignedGuests.isEmpty {
                         VStack(spacing: 8) {
                             Image(systemName: "checkmark.circle.fill")
                                 .font(.system(size: 24))
@@ -266,13 +304,20 @@ struct RoomCanvasView: View {
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.top, 40)
+                    } else if unassignedSorted.isEmpty {
+                        Text("Keine Gäste mit diesem Tag — Filter ändern oder zurücksetzen.")
+                            .font(.system(size: 11, design: .rounded))
+                            .foregroundStyle(Tokens.Colors.ink3)
+                            .multilineTextAlignment(.center)
+                            .padding(.top, 40)
+                            .padding(.horizontal, 16)
                     } else {
                         Text("Zieh Gäste auf einen Tisch oder benutze die KI.")
                             .font(.system(size: 11, design: .rounded))
                             .foregroundStyle(Tokens.Colors.ink3)
                             .multilineTextAlignment(.center)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 12)
+                            .padding(.top, 16)
+                            .padding(.horizontal, 16)
                     }
                 }
                 .padding(.horizontal, 8)
@@ -356,7 +401,8 @@ struct RoomCanvasView: View {
     private func assignNextFreeSeat(to guest: Guest, in table: GuestTable) {
         if guest.seatIndex != nil { return }
         let used = Set(table.guests.compactMap { $0.id == guest.id ? nil : $0.seatIndex })
-        for idx in 0..<table.capacity where !used.contains(idx) {
+        let disabled = table.disabledSeatIndices
+        for idx in 0..<table.capacity where !used.contains(idx) && !disabled.contains(idx) {
             guest.seatIndex = idx
             return
         }
@@ -480,62 +526,66 @@ struct RoomCanvasView: View {
                         .position(x: geo.size.width / 2 - w / 2 + 50, y: geo.size.height / 2 - h / 2 + 14)
                 }
 
-                Group {
-                    if let w = floorWidth, let h = floorHeight {
-                        Text("EINGANG ↓")
-                            .font(.system(size: 10.5, weight: .semibold, design: .rounded))
-                            .foregroundStyle(Tokens.Colors.ink3)
-                            .tracking(0.5)
-                            .position(x: geo.size.width / 2 - w / 2 + 50, y: geo.size.height / 2 + h / 2 + 16)
-                        Text("BÜHNE ↑")
-                            .font(.system(size: 10.5, weight: .semibold, design: .rounded))
-                            .foregroundStyle(Tokens.Colors.ink3)
-                            .tracking(0.5)
-                            .position(x: geo.size.width / 2 + w / 2 - 50, y: geo.size.height / 2 - h / 2 - 16)
-                    } else {
-                        VStack {
-                            HStack {
-                                Text("EINGANG ↓")
-                                    .font(.system(size: 10.5, weight: .semibold, design: .rounded))
-                                    .foregroundStyle(Tokens.Colors.ink3)
-                                    .tracking(0.5)
-                                    .padding(.leading, 28)
-                                    .padding(.top, 10)
-                                Spacer()
-                            }
-                            Spacer()
-                            HStack {
-                                Spacer()
-                                Text("BÜHNE ↑")
-                                    .font(.system(size: 10.5, weight: .semibold, design: .rounded))
-                                    .foregroundStyle(Tokens.Colors.ink3)
-                                    .tracking(0.5)
-                                    .padding(.trailing, 28)
-                                    .padding(.bottom, 10)
-                            }
-                        }
-                    }
-                }
-
                 ForEach(tables) { table in
                     TableCanvasItemView(
                         table: table,
                         isSelected: selectedTable?.id == table.id,
                         onTap: { selectedTable = table }
                     )
-                    .dropDestination(for: String.self) { items, _ in
-                        guard let guestIDString = items.first,
-                              let guestID = UUID(uuidString: guestIDString),
-                              let guest = guests.first(where: { $0.id == guestID }) else {
-                            return false
-                        }
-                        return assignGuestAndPeersToTable(guest: guest, table: table)
-                    }
                 }
+
+                CanvasLabelsLayer(event: event)
             }
             .environment(\.canvasScale, scale)
             .background(Tokens.Colors.bg)
         }
+        .overlay(alignment: .topLeading) {
+            HStack {
+                Button {
+                    addNewLabel()
+                } label: {
+                    Label("Label", systemImage: "text.badge.plus")
+                }
+                .buttonStyle(.bordered)
+                Button {
+                    showingVersionsSheet = true
+                } label: {
+                    Label("Versionen", systemImage: "clock.arrow.circlepath")
+                }
+                .buttonStyle(.bordered)
+                .disabled(event == nil)
+                Button(role: .destructive) {
+                    showingResetAssignmentsAlert = true
+                } label: {
+                    Label("Zuweisungen löschen", systemImage: "person.fill.xmark")
+                }
+                .buttonStyle(.bordered)
+                .disabled(guests.allSatisfy { $0.table == nil })
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+        }
+        .alert("Alle Sitzzuweisungen löschen?", isPresented: $showingResetAssignmentsAlert) {
+            Button("Abbrechen", role: .cancel) {}
+            Button("Löschen", role: .destructive) {
+                for guest in guests where !guest.isPinned {
+                    guest.table = nil
+                    guest.seatIndex = nil
+                }
+                try? modelContext.save()
+            }
+        } message: {
+            Text("Tische, Labels und Versionen bleiben unverändert. Gepinnte Gäste behalten ihre Zuweisung. Alle anderen Gast-zu-Sitz-Zuordnungen werden entfernt.")
+        }
+    }
+
+    private func addNewLabel() {
+        guard let event = event else { return }
+        let label = CanvasLabel(text: "Neues Label", positionX: 0, positionY: 0)
+        label.event = event
+        modelContext.insert(label)
+        try? modelContext.save()
     }
 
     // MARK: - Inspector

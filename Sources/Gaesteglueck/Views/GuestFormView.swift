@@ -14,6 +14,8 @@ struct GuestFormView: View {
 
     @State private var firstName: String
     @State private var lastName: String
+    @State private var title: String
+    @State private var gender: Gender
     @State private var partnerAssignment: PartnerAssignment
     @State private var familyRole: FamilyRole?
     @State private var dietaryChoice: String
@@ -22,9 +24,11 @@ struct GuestFormView: View {
     @State private var rsvpStatus: RSVPStatus
     @State private var funFact: String
     @State private var notes: String
+    @State private var phoneNumber: String
     @State private var employer: String
     @State private var profession: String
     @State private var hobbies: String
+    @State private var funFactApproved: Bool = false
     @State private var showingExtraDetails = false
     @State private var selectedTagIDs: Set<UUID> = []
     @State private var didLoadInitialTags = false
@@ -32,6 +36,9 @@ struct GuestFormView: View {
     @State private var newConflictReason: String = ""
     @State private var newPairGuestID: UUID? = nil
     @State private var newPairReason: String = ""
+    @State private var contactPickerMatches: [ContactMatch] = []
+    @State private var showingContactPicker = false
+    @State private var contactErrorMessage: String?
 
     private var menuOptions: [String] {
         events.first?.menuOptions ?? ["Fleisch", "Vegetarisch", "Vegan"]
@@ -41,6 +48,8 @@ struct GuestFormView: View {
         self.guest = guest
         _firstName = State(initialValue: guest?.firstName ?? "")
         _lastName = State(initialValue: guest?.lastName ?? "")
+        _title = State(initialValue: guest?.title ?? "")
+        _gender = State(initialValue: guest?.gender ?? .unspecified)
         _partnerAssignment = State(initialValue: guest?.partnerAssignment ?? .both)
         _familyRole = State(initialValue: guest?.familyRole)
         _dietaryChoice = State(initialValue: guest?.dietaryChoice ?? "Fleisch")
@@ -48,7 +57,9 @@ struct GuestFormView: View {
         _ageCategory = State(initialValue: guest?.ageCategory ?? .adult)
         _rsvpStatus = State(initialValue: guest?.rsvpStatus ?? .confirmed)
         _funFact = State(initialValue: guest?.funFact ?? "")
+        _funFactApproved = State(initialValue: guest?.funFactApproved ?? false)
         _notes = State(initialValue: guest?.notes ?? "")
+        _phoneNumber = State(initialValue: guest?.phoneNumber ?? "")
         _employer = State(initialValue: guest?.employer ?? "")
         _profession = State(initialValue: guest?.profession ?? "")
         _hobbies = State(initialValue: guest?.hobbies.joined(separator: ", ") ?? "")
@@ -81,11 +92,23 @@ struct GuestFormView: View {
         NavigationStack {
             Form {
                 Section("Name") {
+                    LabeledContent("Titel") {
+                        TextField("optional, z.B. Dr., Pfarrer, Dekan", text: $title)
+                    }
                     LabeledContent("Vorname") {
                         TextField("Vorname", text: $firstName)
                     }
                     LabeledContent("Nachname") {
                         TextField("Nachname", text: $lastName)
+                    }
+                    LabeledContent("Geschlecht") {
+                        Picker("", selection: $gender) {
+                            ForEach(Gender.allCases) { g in
+                                Text(g.displayName).tag(g)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
                     }
                 }
 
@@ -156,9 +179,28 @@ struct GuestFormView: View {
                     LabeledContent("Fun Fact") {
                         TextField("z.B. spielt Klavier seit 20 Jahren", text: $funFact)
                     }
+                    Toggle("FunFact ist gut – darf erzaehlt werden", isOn: $funFactApproved)
+                        .toggleStyle(.checkbox)
+                        .disabled(funFact.trimmingCharacters(in: .whitespaces).isEmpty)
+                        .help("Bestaetige dass dieser FunFact konkret und persoenlich ist und beim Brauttisch erwaehnt werden kann.")
                     LabeledContent("Notizen") {
                         TextField("optionale Anmerkungen", text: $notes, axis: .vertical)
                             .lineLimit(3...6)
+                    }
+                    LabeledContent("Telefon") {
+                        HStack {
+                            TextField("z.B. +49 170 1234567", text: $phoneNumber)
+                            Button {
+                                if let g = guest {
+                                    Task { await importPhoneFromContacts(into: g) }
+                                }
+                            } label: {
+                                Image(systemName: "person.crop.circle.badge.plus")
+                            }
+                            .buttonStyle(.borderless)
+                            .help("Aus macOS-Kontakten holen")
+                            .disabled(guest == nil)
+                        }
                     }
                 }
 
@@ -176,6 +218,23 @@ struct GuestFormView: View {
             }
             .formStyle(.grouped)
             .navigationTitle(guest == nil ? "Gast hinzufügen" : "Gast bearbeiten")
+            .sheet(isPresented: $showingContactPicker) {
+                if let g = guest {
+                    ContactPickerSheet(guest: g, matches: contactPickerMatches) { phone in
+                        phoneNumber = phone
+                        g.phoneNumber = phone
+                        try? modelContext.save()
+                    }
+                }
+            }
+            .alert("Kontakte-Zugriff", isPresented: Binding(
+                get: { contactErrorMessage != nil },
+                set: { if !$0 { contactErrorMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(contactErrorMessage ?? "")
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Abbrechen") { dismiss() }
@@ -451,6 +510,33 @@ struct GuestFormView: View {
         .buttonStyle(.plain)
     }
 
+    @MainActor
+    private func importPhoneFromContacts(into target: Guest) async {
+        do {
+            guard try await ContactsService.requestAccess() else {
+                contactErrorMessage = ContactsServiceError.accessDenied.errorDescription
+                return
+            }
+            let matches = try ContactsService.search(firstName: firstName, lastName: lastName)
+            if matches.count == 1, let only = matches.first, only.phoneNumbers.count == 1 {
+                phoneNumber = only.phoneNumbers[0]
+                target.phoneNumber = only.phoneNumbers[0]
+                try? modelContext.save()
+                return
+            }
+            if matches.isEmpty {
+                contactErrorMessage = "Keine Treffer fuer \(firstName) \(lastName) in den Kontakten."
+                return
+            }
+            contactPickerMatches = matches
+            showingContactPicker = true
+        } catch let error as ContactsServiceError {
+            contactErrorMessage = error.errorDescription
+        } catch {
+            contactErrorMessage = error.localizedDescription
+        }
+    }
+
     private func save() {
         let parsedIntolerances = intolerances
             .split(separator: ",")
@@ -462,6 +548,8 @@ struct GuestFormView: View {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
 
+        let trimmedFunFact = funFact.trimmingCharacters(in: .whitespaces)
+
         let targetGuest: Guest
         if let guest {
             guest.firstName = firstName.trimmingCharacters(in: .whitespaces)
@@ -472,11 +560,15 @@ struct GuestFormView: View {
             guest.intolerances = parsedIntolerances
             guest.ageCategory = ageCategory
             guest.rsvpStatus = rsvpStatus
-            guest.funFact = funFact
+            guest.funFact = trimmedFunFact
+            guest.funFactApproved = trimmedFunFact.isEmpty ? false : funFactApproved
             guest.notes = notes
             guest.employer = employer
             guest.profession = profession
             guest.hobbies = parsedHobbies
+            guest.phoneNumber = phoneNumber.trimmingCharacters(in: .whitespaces)
+            guest.title = title.trimmingCharacters(in: .whitespaces)
+            guest.gender = gender
             targetGuest = guest
         } else {
             let newGuest = Guest(
@@ -487,13 +579,17 @@ struct GuestFormView: View {
                 familyRole: familyRole,
                 dietaryChoice: dietaryChoice,
                 intolerances: parsedIntolerances,
-                funFact: funFact,
+                funFact: trimmedFunFact,
                 notes: notes,
                 rsvpStatus: rsvpStatus
             )
+            newGuest.funFactApproved = trimmedFunFact.isEmpty ? false : funFactApproved
             newGuest.employer = employer
             newGuest.profession = profession
             newGuest.hobbies = parsedHobbies
+            newGuest.phoneNumber = phoneNumber.trimmingCharacters(in: .whitespaces)
+            newGuest.title = title.trimmingCharacters(in: .whitespaces)
+            newGuest.gender = gender
             modelContext.insert(newGuest)
             targetGuest = newGuest
         }

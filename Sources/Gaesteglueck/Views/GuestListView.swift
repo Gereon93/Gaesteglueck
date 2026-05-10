@@ -1,6 +1,10 @@
 #if canImport(SwiftUI) && canImport(SwiftData)
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
+#if canImport(AppKit)
+import AppKit
+#endif
 
 /// S3 — Gästeliste (siehe design_handoff_gaesteglueck → S3). Drei Spalten:
 /// links 200pt Filter-Rail (Seite + Tags + Status), Mitte tabellarische Liste,
@@ -33,11 +37,38 @@ struct GuestListView: View {
     @State private var statusFilter: StatusFilter? = nil
     @State private var ageFilter: AgeCategory? = nil
 
+    @State private var isCheckingFunFacts: Bool = false
+    @State private var funFactCheckResult: String? = nil
+
+    @State private var contactPickerGuest: Guest?
+    @State private var contactPickerMatches: [ContactMatch] = []
+    @State private var contactErrorMessage: String?
+    @AppStorage("lmStudioEndpoint") private var lmStudioEndpoint = "http://localhost:1234"
+
+    // Spalten-Breiten — per Drag-Handle im Header verstellbar, persistent.
+    @AppStorage("guestlist.col.name") private var colNameWidth: Double = 220
+    @AppStorage("guestlist.col.tags") private var colTagsWidth: Double = 220
+    @AppStorage("guestlist.col.seite") private var colSeiteWidth: Double = 80
+    @AppStorage("guestlist.col.tisch") private var colTischWidth: Double = 80
+    @AppStorage("guestlist.col.menu") private var colMenuWidth: Double = 120
+
+    // Spalten-Sichtbarkeit — per Toggle in den Settings konfigurierbar.
+    @AppStorage("guestlist.col.funfact.visible") private var showFunFactColumn: Bool = true
+    @AppStorage("guestlist.col.tags.visible") private var showTagsColumn: Bool = true
+    @AppStorage("guestlist.col.seite.visible") private var showSeiteColumn: Bool = true
+    @AppStorage("guestlist.col.tisch.visible") private var showTischColumn: Bool = true
+    @AppStorage("guestlist.col.menu.visible") private var showMenuColumn: Bool = true
+
     enum StatusFilter: String, CaseIterable, Hashable {
         case assigned = "Tisch zugewiesen"
         case unassigned = "Ohne Tisch"
         case pinned = "Gepinnt"
         case allergies = "Allergie"
+        case funfactGood = "FunFact ok"
+        case funfactPending = "FunFact unklar"
+        case funfactEmpty = "FunFact fehlt"
+        case phoneSet = "Telefon ok"
+        case phoneMissing = "Telefon fehlt"
     }
 
     private struct RegistrationSection: Identifiable {
@@ -55,9 +86,33 @@ struct GuestListView: View {
         sideFilter != nil || tagFilter != nil || statusFilter != nil || ageFilter != nil || !searchText.isEmpty
     }
 
+    /// Wenn ein FunFact-Filter aktiv ist, NICHT nach Anmeldegruppen
+    /// gruppieren — der User soll jeden einzelnen Gast durchgehen koennen.
+    private var isFunFactFilterActive: Bool {
+        switch statusFilter {
+        case .funfactGood, .funfactPending, .funfactEmpty: return true
+        default: return false
+        }
+    }
+
     private var registrationSections: [RegistrationSection] {
         let filtered = filteredGuests
         let filteredIDs = Set(filtered.map(\.id))
+
+        // Bei FunFact-Filter: flache alphabetische Liste, keine Gruppen
+        if isFunFactFilterActive {
+            let flat = filtered.sorted { lhs, rhs in
+                if lhs.firstName == rhs.firstName { return lhs.lastName < rhs.lastName }
+                return lhs.firstName < rhs.firstName
+            }
+            return flat.isEmpty ? [] : [RegistrationSection(
+                id: "funfact-flat",
+                label: "Alle (\(flat.count))",
+                isBridal: false,
+                guests: flat,
+                dimmedGuests: []
+            )]
+        }
 
         // Brautpaar identifizieren — entweder via Tag "Brautpaar" oder als
         // Mitglieder einer Constraint mit reason "Brautpaar".
@@ -175,6 +230,17 @@ struct GuestListView: View {
                 case .unassigned where guest.table != nil: return false
                 case .pinned where !guest.isPinned: return false
                 case .allergies where !guest.hasIntolerances: return false
+                case .funfactGood:
+                    if !guest.funFactApproved || guest.funFact.trimmingCharacters(in: .whitespaces).isEmpty { return false }
+                case .funfactPending:
+                    if guest.funFactApproved || guest.funFact.trimmingCharacters(in: .whitespaces).isEmpty { return false }
+                case .funfactEmpty:
+                    if !guest.funFact.trimmingCharacters(in: .whitespaces).isEmpty { return false }
+                case .phoneSet:
+                    if guest.phoneNumber.trimmingCharacters(in: .whitespaces).isEmpty { return false }
+                case .phoneMissing:
+                    if !guest.phoneNumber.trimmingCharacters(in: .whitespaces).isEmpty { return false }
+                    if registrationGroupHasPhone(for: guest) { return false }
                 default: break
                 }
             }
@@ -203,15 +269,15 @@ struct GuestListView: View {
 
             VStack(spacing: 0) {
                 toolbar
-                HStack(spacing: 0) {
+                HStack(alignment: .top, spacing: 0) {
                     filterRail
-                        .frame(width: 200)
+                        .frame(width: 200, alignment: .top)
                     Divider().background(Tokens.Colors.line)
                     guestTable
-                        .frame(maxWidth: .infinity)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     Divider().background(Tokens.Colors.line)
                     inspectorPane
-                        .frame(width: 300)
+                        .frame(width: 300, alignment: .top)
                 }
             }
         }
@@ -224,6 +290,20 @@ struct GuestListView: View {
         .sheet(isPresented: $showingEnrichment) {
             EnrichmentWizardView()
         }
+        .sheet(item: $contactPickerGuest) { guest in
+            ContactPickerSheet(guest: guest, matches: contactPickerMatches) { phone in
+                guest.phoneNumber = phone
+                try? modelContext.save()
+            }
+        }
+        .alert("Kontakte-Zugriff", isPresented: Binding(
+            get: { contactErrorMessage != nil },
+            set: { if !$0 { contactErrorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(contactErrorMessage ?? "")
+        }
         .alert("\(selectedGuestIDs.count) Gäste löschen?", isPresented: $showingDeleteAlert) {
             Button("Abbrechen", role: .cancel) {}
             Button("Löschen", role: .destructive) {
@@ -231,6 +311,14 @@ struct GuestListView: View {
             }
         } message: {
             Text("Diese Aktion lässt sich nicht rückgängig machen. Tische und Tags bleiben bestehen.")
+        }
+        .alert("FunFact-Check", isPresented: Binding(
+            get: { funFactCheckResult != nil },
+            set: { if !$0 { funFactCheckResult = nil } }
+        ), presenting: funFactCheckResult) { _ in
+            Button("OK") { funFactCheckResult = nil }
+        } message: { msg in
+            Text(msg)
         }
         .onKeyPress(.delete) {
             if !selectedGuestIDs.isEmpty {
@@ -246,6 +334,15 @@ struct GuestListView: View {
     private var toolbar: some View {
         ScreenToolbar(title: "Gästeliste", subtitle: toolbarSubtitle) {
             if selectedGuestIDs.count >= 2 {
+                Button {
+                    linkSelectedAsMustSitTogether()
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "link.badge.plus")
+                        Text("Müssen zusammen")
+                    }
+                }
+                .warmButton(.secondary)
                 Button {
                     showingDeleteAlert = true
                 } label: {
@@ -277,6 +374,33 @@ struct GuestListView: View {
                 }
                 .warmButton(.secondary)
             }
+            Button {
+                runFunFactCheck()
+            } label: {
+                HStack(spacing: 4) {
+                    if isCheckingFunFacts { ProgressView().controlSize(.small) }
+                    Image(systemName: "checkmark.seal")
+                    Text("FunFacts prüfen")
+                }
+            }
+            .warmButton(.secondary)
+            .disabled(isCheckingFunFacts || guests.isEmpty)
+            Menu {
+                Button("Als PDF exportieren") {
+                    exportFunFactWorklist(format: .pdf)
+                }
+                Button("Als CSV / Excel exportieren") {
+                    exportFunFactWorklist(format: .csv)
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "square.and.arrow.down")
+                    Text("FunFact-Liste")
+                }
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .disabled(funFactWorklistCount == 0)
             #if canImport(UniformTypeIdentifiers)
             ImportButton()
             #endif
@@ -473,6 +597,25 @@ struct GuestListView: View {
         case .unassigned: guests.filter { $0.table == nil }.count
         case .pinned: guests.filter { $0.isPinned }.count
         case .allergies: guests.filter { $0.hasIntolerances }.count
+        case .funfactGood: guests.filter { $0.funFactApproved && !$0.funFact.trimmingCharacters(in: .whitespaces).isEmpty }.count
+        case .funfactPending: guests.filter { !$0.funFactApproved && !$0.funFact.trimmingCharacters(in: .whitespaces).isEmpty }.count
+        case .funfactEmpty: guests.filter { $0.funFact.trimmingCharacters(in: .whitespaces).isEmpty }.count
+        case .phoneSet: guests.filter { !$0.phoneNumber.trimmingCharacters(in: .whitespaces).isEmpty }.count
+        case .phoneMissing: guests.filter { g in
+            g.phoneNumber.trimmingCharacters(in: .whitespaces).isEmpty
+                && !registrationGroupHasPhone(for: g)
+        }.count
+        }
+    }
+
+    /// True wenn jemand aus der gleichen Anmeldungs-Gruppe bereits eine
+    /// Telefonnummer hinterlegt hat — pro Anmeldung reicht eine Nummer.
+    private func registrationGroupHasPhone(for guest: Guest) -> Bool {
+        guard let group = guest.registrationGroup else { return false }
+        return guests.contains { peer in
+            peer.id != guest.id
+                && peer.registrationGroup == group
+                && !peer.phoneNumber.trimmingCharacters(in: .whitespaces).isEmpty
         }
     }
 
@@ -480,6 +623,32 @@ struct GuestListView: View {
 
     private var guestTable: some View {
         VStack(spacing: 0) {
+            // Suche-Feld am oberen Rand der Tabelle, statt .searchable()
+            // (das auf macOS ohne NavigationStack einen leeren Reservierungs-
+            // Bereich erzeugt der den Spalten-Header runterdrueckt).
+            HStack {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(Tokens.Colors.ink3)
+                    .font(.system(size: 12))
+                TextField("Gäste suchen", text: $searchText)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13, design: .rounded))
+                if !searchText.isEmpty {
+                    Button { searchText = "" } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(Tokens.Colors.ink3)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 3)
+            .frame(height: 26)
+            .background(Tokens.Colors.surface)
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(Tokens.Colors.line).frame(height: 1)
+            }
+
             if filteredGuests.isEmpty {
                 EmptyStateCard(
                     icon: "person.3.sequence",
@@ -513,7 +682,6 @@ struct GuestListView: View {
             }
         }
         .background(Tokens.Colors.bg)
-        .searchable(text: $searchText, prompt: "Gäste suchen")
     }
 
     @ViewBuilder
@@ -566,19 +734,58 @@ struct GuestListView: View {
 
     private var guestTableHeader: some View {
         HStack(spacing: 0) {
-            tableHeaderCell("Name", width: nil)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            tableHeaderCell("Tags", width: 220)
-            tableHeaderCell("Seite", width: 80)
-            tableHeaderCell("Tisch", width: 80)
-            tableHeaderCell("Menü", width: 120)
+            tableHeaderCell("Name", width: colNameWidth)
+            ColumnResizeHandle(width: $colNameWidth, minWidth: 100, maxWidth: 400)
+
+            if showFunFactColumn {
+                tableHeaderCell("FunFact", width: nil)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if showTagsColumn || showSeiteColumn || showTischColumn || showMenuColumn {
+                    columnSeparator
+                }
+            }
+
+            if showTagsColumn {
+                tableHeaderCell("Tags", width: colTagsWidth)
+                ColumnResizeHandle(width: $colTagsWidth, minWidth: 80, maxWidth: 400)
+            }
+
+            if showSeiteColumn {
+                tableHeaderCell("Seite", width: colSeiteWidth)
+                ColumnResizeHandle(width: $colSeiteWidth, minWidth: 50, maxWidth: 200)
+            }
+
+            if showTischColumn {
+                tableHeaderCell("Tisch", width: colTischWidth)
+                ColumnResizeHandle(width: $colTischWidth, minWidth: 50, maxWidth: 200)
+            }
+
+            if showMenuColumn {
+                tableHeaderCell("Menü", width: colMenuWidth)
+                ColumnResizeHandle(width: $colMenuWidth, minWidth: 60, maxWidth: 240)
+            }
+
+            // Wenn FunFact ausgeblendet: Spacer der den verbleibenden Platz frisst,
+            // damit der Header rechtsbuendig nicht zerlaeuft.
+            if !showFunFactColumn {
+                Spacer()
+            }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.vertical, 4)
+        .frame(height: 26)
         .background(Tokens.Colors.bg)
         .overlay(alignment: .bottom) {
             Rectangle().fill(Tokens.Colors.line).frame(height: 1)
         }
+    }
+
+    private var columnSeparator: some View {
+        Rectangle()
+            .fill(Tokens.Colors.line2)
+            .frame(width: 1)
+            .opacity(0.5)
+            .padding(.horizontal, 2)
     }
 
     private func tableHeaderCell(_ label: String, width: CGFloat?) -> some View {
@@ -587,6 +794,38 @@ struct GuestListView: View {
             .foregroundStyle(Tokens.Colors.ink3)
             .tracking(0.5)
             .frame(width: width, alignment: .leading)
+    }
+
+    /// Zelle mit FunFact + Status-Indikator. Zeigt den Text gekürzt auf
+    /// 2 Zeilen plus ein farbiger Punkt links: grün = OK, gelb = unklar,
+    /// orange = fehlt komplett.
+    @ViewBuilder
+    private func funFactCell(for guest: Guest) -> some View {
+        let trimmed = guest.funFact.trimmingCharacters(in: .whitespaces)
+        let dotColor: Color = {
+            if trimmed.isEmpty { return Color(hex: "#cc8a3a") } // fehlt
+            if !guest.funFactApproved { return Color(hex: "#b0b0b0") } // unklar
+            return Color(hex: "#5a8a4a") // ok
+        }()
+        HStack(alignment: .top, spacing: 8) {
+            Circle()
+                .fill(dotColor)
+                .frame(width: 6, height: 6)
+                .padding(.top, 5)
+            if trimmed.isEmpty {
+                Text("—")
+                    .font(.system(size: 12, design: .rounded))
+                    .foregroundStyle(Tokens.Colors.ink3)
+            } else {
+                Text(trimmed)
+                    .font(.system(size: 12, design: .rounded))
+                    .foregroundStyle(Tokens.Colors.ink2)
+                    .lineLimit(2)
+                    .truncationMode(.tail)
+                    .help(trimmed)
+            }
+        }
+        .padding(.trailing, 8)
     }
 
     private func guestRow(guest: Guest) -> some View {
@@ -601,35 +840,59 @@ struct GuestListView: View {
                     Text(guest.fullName)
                         .font(.system(size: 13, weight: .medium, design: .rounded))
                         .foregroundStyle(Tokens.Colors.ink)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(width: colNameWidth, alignment: .leading)
+            Spacer().frame(width: 6)  // matches resize-handle width
 
-            ChipFlowLayout(spacing: 4) {
-                let guestTags = tags.filter { $0.guestIDs.contains(guest.id) }
-                ForEach(guestTags, id: \.id) { tag in
-                    TagChip(label: tag.name, kind: chipKind(for: tag.category), size: .sm)
-                }
+            if showFunFactColumn {
+                funFactCell(for: guest)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(width: 220, alignment: .leading)
 
-            Text(guest.partnerAssignment.compactDisplayName(for: events.first))
-                .font(.system(size: 12.5, design: .rounded))
-                .foregroundStyle(Tokens.Colors.ink2)
-                .lineLimit(1)
-                .frame(width: 80, alignment: .leading)
+            if showTagsColumn {
+                ChipFlowLayout(spacing: 4) {
+                    let guestTags = tags.filter { $0.guestIDs.contains(guest.id) }
+                    ForEach(guestTags, id: \.id) { tag in
+                        TagChip(label: tag.name, kind: chipKind(for: tag.category), size: .sm)
+                    }
+                }
+                .frame(width: colTagsWidth, alignment: .leading)
+                Spacer().frame(width: 6)
+            }
 
-            Text(guest.table?.name ?? "—")
-                .font(.system(size: 12.5, design: .rounded))
-                .foregroundStyle(guest.table == nil ? Tokens.Colors.ink3 : Tokens.Colors.ink)
-                .frame(width: 80, alignment: .leading)
+            if showSeiteColumn {
+                Text(guest.partnerAssignment.compactDisplayName(for: events.first))
+                    .font(.system(size: 12.5, design: .rounded))
+                    .foregroundStyle(Tokens.Colors.ink2)
+                    .lineLimit(1)
+                    .frame(width: colSeiteWidth, alignment: .leading)
+                Spacer().frame(width: 6)
+            }
 
-            Text(menuLabel(for: guest))
-                .font(.system(size: 12.5, design: .rounded))
-                .foregroundStyle(Tokens.Colors.ink2)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(width: 120, alignment: .leading)
+            if showTischColumn {
+                Text(guest.table?.name ?? "—")
+                    .font(.system(size: 12.5, design: .rounded))
+                    .foregroundStyle(guest.table == nil ? Tokens.Colors.ink3 : Tokens.Colors.ink)
+                    .frame(width: colTischWidth, alignment: .leading)
+                Spacer().frame(width: 6)
+            }
+
+            if showMenuColumn {
+                Text(menuLabel(for: guest))
+                    .font(.system(size: 12.5, design: .rounded))
+                    .foregroundStyle(Tokens.Colors.ink2)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(width: colMenuWidth, alignment: .leading)
+                Spacer().frame(width: 6)
+            }
+
+            if !showFunFactColumn {
+                Spacer()
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -641,6 +904,15 @@ struct GuestListView: View {
         .contextMenu {
             Button("Bearbeiten") { editingGuest = guest }
             Button(guest.isPinned ? "Pin lösen" : "Anpinnen") { guest.isPinned.toggle() }
+            // FunFact-Status quick-toggle — nur sichtbar wenn ein FunFact da ist
+            if !guest.funFact.trimmingCharacters(in: .whitespaces).isEmpty {
+                Button(guest.funFactApproved ? "FunFact als unklar markieren" : "FunFact ist ok") {
+                    guest.funFactApproved.toggle()
+                }
+            }
+            Button(guest.phoneNumber.isEmpty ? "Telefonnummer aus Kontakten…" : "Telefonnummer ersetzen aus Kontakten…") {
+                Task { await importPhoneFromContacts(for: guest) }
+            }
             Divider()
             Button("Löschen", role: .destructive) {
                 if selectedGuestIDs.contains(guest.id) && selectedGuestIDs.count > 1 {
@@ -689,6 +961,26 @@ struct GuestListView: View {
         }
         selectedGuestIDs.removeAll()
         anchorGuestID = nil
+    }
+
+    @MainActor
+    private func importPhoneFromContacts(for guest: Guest) async {
+        do {
+            let granted = try await ContactsService.requestAccess()
+            guard granted else {
+                contactErrorMessage = ContactsServiceError.accessDenied.errorDescription
+                return
+            }
+            // Sheet immer oeffnen — auch bei 0 Treffern, damit der User
+            // selbst weitersuchen kann (Spitzname, Mädchenname etc.).
+            let matches = try ContactsService.search(firstName: guest.firstName, lastName: guest.lastName)
+            contactPickerMatches = matches
+            contactPickerGuest = guest
+        } catch let error as ContactsServiceError {
+            contactErrorMessage = error.errorDescription
+        } catch {
+            contactErrorMessage = error.localizedDescription
+        }
     }
 
     private func avatarKind(for guest: Guest) -> Avatar.TagKind {
@@ -935,6 +1227,25 @@ struct GuestListView: View {
         anchorGuestID = filteredGuests.first?.id
     }
 
+    /// Erzeugt einen mustSitTogether-Constraint für alle aktuell selektierten
+    /// Gäste. Wenn schon ein passender Constraint mit derselben Gäste-Menge
+    /// existiert, passiert nichts. Der Constraint wird vom Auto-Sitzplaner
+    /// und vom manuellen Drop (placeGuestWithCompanions) respektiert.
+    private func linkSelectedAsMustSitTogether() {
+        let ids = Array(selectedGuestIDs)
+        guard ids.count >= 2 else { return }
+        let descriptor = FetchDescriptor<Constraint>()
+        if let existing = try? modelContext.fetch(descriptor),
+           existing.contains(where: { $0.type == .mustSitTogether && Set($0.guestIDs) == Set(ids) }) {
+            return
+        }
+        let names = ids.compactMap { id in guests.first { $0.id == id }?.firstName }.sorted().joined(separator: " + ")
+        let reason = names.isEmpty ? "Manuell verknüpft" : "Müssen zusammen sitzen: \(names)"
+        let c = Constraint(type: .mustSitTogether, guestIDs: ids, reason: reason)
+        modelContext.insert(c)
+        try? modelContext.save()
+    }
+
     private func tagsOnAnyOfSelection() -> [Tag] {
         tags.filter { tag in
             tag.guestIDs.contains(where: { selectedGuestIDs.contains($0) })
@@ -1131,6 +1442,95 @@ struct GuestListView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
+
+    // MARK: - FunFact Check
+
+    /// Anzahl Gäste mit unklarem oder fehlendem FunFact — für den Export-
+    /// Button-Disable-Status.
+    private var funFactWorklistCount: Int {
+        guests.filter { g in
+            let trimmed = g.funFact.trimmingCharacters(in: .whitespaces)
+            return trimmed.isEmpty || !g.funFactApproved
+        }.count
+    }
+
+    private enum FunFactExportFormat { case pdf, csv }
+
+    /// Exportiert die Liste aller Gäste mit fehlendem oder unbestätigtem
+    /// FunFact — pro Gast Vor- und Nachname, derzeitiger FunFact, Status.
+    /// Alphabetisch sortiert. PDF mit Erklärung + Beispielen oder CSV
+    /// für Excel/Tabelle.
+    @MainActor
+    private func exportFunFactWorklist(format: FunFactExportFormat) {
+        let pending = guests.filter { g in
+            let trimmed = g.funFact.trimmingCharacters(in: .whitespaces)
+            return trimmed.isEmpty || !g.funFactApproved
+        }.sorted { lhs, rhs in
+            if lhs.firstName == rhs.firstName { return lhs.lastName < rhs.lastName }
+            return lhs.firstName < rhs.firstName
+        }
+        guard !pending.isEmpty else { return }
+
+        let title = "FunFact-Liste — \(events.first?.name ?? "Hochzeit")"
+        let data: Data
+        let suggestedName: String
+        let contentType: UTType
+        switch format {
+        case .pdf:
+            data = FunFactWorklistExporter.generatePDF(guests: pending, title: title)
+            suggestedName = "FunFact-Liste.pdf"
+            contentType = .pdf
+        case .csv:
+            data = FunFactWorklistCSVExporter.generateCSV(guests: pending)
+            suggestedName = "FunFact-Liste.csv"
+            contentType = .commaSeparatedText
+        }
+
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [contentType]
+        panel.nameFieldStringValue = suggestedName
+        panel.canCreateDirectories = true
+        if panel.runModal() == .OK, let url = panel.url {
+            try? data.write(to: url)
+        }
+    }
+
+    private func runFunFactCheck() {
+        Task { @MainActor in
+            isCheckingFunFacts = true
+            defer { isCheckingFunFacts = false }
+            let candidates = guests.filter {
+                !$0.funFact.trimmingCharacters(in: .whitespaces).isEmpty && !$0.funFactApproved
+            }
+            guard !candidates.isEmpty else {
+                funFactCheckResult = "Alle FunFacts sind bereits bestaetigt."
+                return
+            }
+            let client = LMStudioClient(endpoint: lmStudioEndpoint)
+            do {
+                let results = try await FunFactValidator.validateBatch(guests: candidates, client: client)
+                var goodCount = 0
+                var genericCount = 0
+                for r in results {
+                    guard let guest = guests.first(where: { $0.id == r.guestID }) else { continue }
+                    switch r.verdict {
+                    case .good:
+                        guest.funFactApproved = true
+                        goodCount += 1
+                    case .generic:
+                        guest.funFactApproved = false
+                        genericCount += 1
+                    case .empty:
+                        break
+                    }
+                }
+                try? modelContext.save()
+                funFactCheckResult = "\(goodCount) FunFacts bestaetigt, \(genericCount) als generisch markiert."
+            } catch {
+                funFactCheckResult = "Fehler: \(error.localizedDescription)"
+            }
+        }
+    }
 }
 
 // MARK: - Simple flow layout for tag chips
@@ -1172,6 +1572,47 @@ private struct ChipFlowLayout: Layout {
             x += s.width + spacing
             rowHeight = max(rowHeight, s.height)
         }
+    }
+}
+
+/// Drag-Handle zwischen Tabellen-Spalten. Liegt visuell unsichtbar (transparenter
+/// Hit-Bereich, dünne Linie als Indikator), zeigt resize-Cursor beim Hover und
+/// verstellt per Drag die gebundene Breite — clamped auf [minWidth, maxWidth].
+private struct ColumnResizeHandle: View {
+    @Binding var width: Double
+    let minWidth: Double
+    let maxWidth: Double
+    @State private var startWidth: Double? = nil
+
+    var body: some View {
+        Rectangle()
+            .fill(Color.clear)
+            .frame(width: 6)
+            .contentShape(Rectangle())
+            .overlay(
+                Rectangle()
+                    .fill(Tokens.Colors.line2)
+                    .frame(width: 1)
+                    .opacity(0.5)
+            )
+            #if os(macOS)
+            .onHover { inside in
+                if inside {
+                    NSCursor.resizeLeftRight.push()
+                } else {
+                    NSCursor.pop()
+                }
+            }
+            #endif
+            .gesture(
+                DragGesture()
+                    .onChanged { value in
+                        if startWidth == nil { startWidth = width }
+                        let proposed = (startWidth ?? width) + Double(value.translation.width)
+                        width = Swift.max(minWidth, Swift.min(maxWidth, proposed))
+                    }
+                    .onEnded { _ in startWidth = nil }
+            )
     }
 }
 #endif

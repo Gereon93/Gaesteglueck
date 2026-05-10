@@ -121,6 +121,10 @@ struct KIWizardView: View {
     /// JSON-Array im UserDefaults damit kein Schema-Change nötig ist.
     @AppStorage("kiAssistantChatHistory") private var chatHistoryJSON: String = ""
     @AppStorage("kiAssistantPhaseRaw") private var phaseRaw: Int = WizardPhase.clusters.rawValue
+    @AppStorage("bridalIncludeTrauzeugen") private var bridalIncludeTrauzeugen: Bool = true
+    @AppStorage("bridalIncludeEltern") private var bridalIncludeEltern: Bool = false
+    @AppStorage("bridalIncludeGeschwister") private var bridalIncludeGeschwister: Bool = false
+    @AppStorage("bridalManualMode") private var bridalManualMode: Bool = false
     @State private var didLoadHistory = false
 
     // Structured plan from LLMSeatingPlanner.
@@ -141,7 +145,14 @@ struct KIWizardView: View {
                 wizardView
             }
         }
-        .onAppear { loadHistoryIfNeeded() }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Tokens.Colors.bg)
+        .task {
+            // Async statt onAppear: Mutation von messages waehrend des
+            // Layout-Pass triggert sonst -[NSView layoutSubtreeIfNeeded]
+            // recursion-warnungen und kann zu leerem Render fuehren.
+            loadHistoryIfNeeded()
+        }
         .onChange(of: messages.count) { _, _ in saveHistory() }
         .onChange(of: currentPhase) { _, new in phaseRaw = new.rawValue }
     }
@@ -553,28 +564,81 @@ struct KIWizardView: View {
 
     // MARK: - Structured plan request
 
+    /// Baut aus den Brauttafel-Toggles eine konkrete Anweisung für den LLM.
+    /// Der User sagt z.B. "Trauzeugen + Eltern" — das wird zu einem Hard-Hint
+    /// im Prompt: "Brautpaar + Trauzeugen + Eltern müssen am Brauttisch sitzen,
+    /// nicht andere Gäste, solange Brauttisch nicht voll".
+    private func computeBridalRule() -> String? {
+        if bridalManualMode { return nil }
+        var groups: [String] = []
+        if bridalIncludeTrauzeugen { groups.append("Trauzeugen / Brautjungfern") }
+        if bridalIncludeEltern { groups.append("Eltern beider Brautpaar-Seiten") }
+        if bridalIncludeGeschwister { groups.append("Geschwister beider Brautpaar-Seiten") }
+        guard !groups.isEmpty else {
+            return "Nur das Brautpaar selbst sitzt am Brauttisch — keine weiteren Gäste."
+        }
+        let primary = groups.joined(separator: ", ")
+        var rule = "Am Brauttisch sitzen: das Brautpaar plus \(primary). Andere Gäste dort nur wenn Brauttisch noch frei und alle obigen Personen platziert sind."
+        // Soft-Fill-Hinweis für nicht-gewählte Kategorien
+        var fillCandidates: [String] = []
+        if !bridalIncludeEltern { fillCandidates.append("Eltern") }
+        if !bridalIncludeGeschwister { fillCandidates.append("Geschwister") }
+        if !fillCandidates.isEmpty {
+            rule += " Falls dort noch Plätze frei sind, fülle sie BEVORZUGT mit \(fillCandidates.joined(separator: ", ")) auf, nicht mit Freunden/Aktivitäts-Gruppen."
+        }
+        return rule
+    }
+
     private func requestStructuredPlan() {
         guard !guests.isEmpty, !tables.isEmpty else { return }
         isRequestingPlan = true
         errorMessage = nil
 
-        // Build the prompt here on the main actor so we only ship primitives (String + maps)
-        // across the actor boundary — avoids sending @Model instances.
+        let bridalRule = computeBridalRule()
+
+        // KI plant nur die noch UNPLATZIERTEN Gäste. Bereits gesetzte (manuell
+        // oder gepinnt) bleiben unangetastet. Restkapazität pro Tisch wird
+        // entsprechend reduziert übergeben.
+        let unplacedGuests = guests.filter { $0.table == nil && $0.needsSeat }
+        let placedCounts: [UUID: Int] = Dictionary(uniqueKeysWithValues: tables.map { table in
+            (table.id, table.guests.filter { $0.needsSeat }.count)
+        })
+        let remainingCapacity: [UUID: Int] = Dictionary(uniqueKeysWithValues: tables.map { table in
+            (table.id, max(0, table.effectiveCapacity - (placedCounts[table.id] ?? 0)))
+        })
+
+        guard !unplacedGuests.isEmpty else {
+            errorMessage = "Alle Gäste sind bereits platziert. Mit 'Zuweisungen löschen' leeren falls du neu planen willst."
+            isRequestingPlan = false
+            return
+        }
+
+        // Constraints, die einen bereits-platzierten Gast referenzieren, kann
+        // die KI nicht mehr beeinflussen — schicken wir gar nicht erst rein,
+        // sonst wuerden sie gegen Pinned/Placed-Gaeste verletzt ohne Warnung.
+        let unplacedIDs = Set(unplacedGuests.map(\.id))
+        let actionableConstraints = constraints.filter { c in
+            c.guestIDs.allSatisfy { unplacedIDs.contains($0) }
+        }
+
         let context = LLMSeatingPlanner.PlannerContext(
-            guests: Array(guests),
+            guests: unplacedGuests,
             tables: Array(tables),
             tags: Array(tags),
-            constraints: Array(constraints)
+            constraints: actionableConstraints,
+            bridalRule: bridalRule,
+            tableRemainingCapacity: remainingCapacity
         )
         let (userPrompt, guestMap, tableMap) = LLMSeatingPlanner.buildPrompt(from: context)
         let systemPrompt = LLMSeatingPlanner.systemPrompt
         let endpoint = lmStudioEndpoint
 
         // Snapshot guest/table IDs for post-response validation on the main actor.
-        let allGuestIDs = Set(guests.map(\.id))
-        let tableCapacities: [UUID: Int] = Dictionary(uniqueKeysWithValues: tables.map { ($0.id, $0.capacity) })
+        let allGuestIDs = Set(unplacedGuests.map(\.id))
+        let tableCapacities: [UUID: Int] = remainingCapacity
         let tableNames: [UUID: String] = Dictionary(uniqueKeysWithValues: tables.map { ($0.id, $0.name) })
-        let hardConstraints: [(type: ConstraintType, guestIDs: [UUID], reason: String)] = constraints.map {
+        let guestNames: [UUID: String] = Dictionary(uniqueKeysWithValues: guests.map { ($0.id, $0.fullName) })
+        let hardConstraints: [(type: ConstraintType, guestIDs: [UUID], reason: String)] = actionableConstraints.map {
             ($0.type, $0.guestIDs, $0.reason)
         }
 
@@ -589,6 +653,7 @@ struct KIWizardView: View {
                     allGuestIDs: allGuestIDs,
                     tableCapacities: tableCapacities,
                     tableNames: tableNames,
+                    guestNames: guestNames,
                     hardConstraints: hardConstraints
                 )
                 await MainActor.run {
@@ -606,13 +671,37 @@ struct KIWizardView: View {
     }
 
     private func applyProposedPlan(_ plan: LLMSeatingPlanner.ProposedAssignment) {
-        // Map UUID → real table and assign each guest.
+        // Map UUID → real table and assign each guest. Bereits platzierte
+        // Gäste (table != nil) und gepinnte Gäste werden NICHT angefasst —
+        // der KI-Plan ist nur für die zuvor-unplatzierten gedacht.
         let tablesByID = Dictionary(uniqueKeysWithValues: tables.map { ($0.id, $0) })
         let guestsByID = Dictionary(uniqueKeysWithValues: guests.map { ($0.id, $0) })
 
+        let rules = events.first?.seatingRules ?? .default
+        var nextSeatByTable: [UUID: Int] = [:]
+        for table in tables {
+            let used = Set(table.guests.compactMap(\.seatIndex))
+            let cap = table.capacity(rules: rules)
+            let disabled = table.disabledSeatIndices.filter { $0 < cap }
+            let firstFree = (0..<cap).first { !used.contains($0) && !disabled.contains($0) }
+            nextSeatByTable[table.id] = firstFree ?? 0
+        }
+
         for (guestID, tableID) in plan.assignments {
             guard let guest = guestsByID[guestID], let table = tablesByID[tableID] else { continue }
+            if guest.isPinned { continue }
+            if guest.table != nil { continue }
             guest.table = table
+
+            let cap = table.capacity(rules: rules)
+            let disabled = Set(table.disabledSeatIndices.filter { $0 < cap })
+            let used = Set(table.guests.compactMap(\.seatIndex))
+            var idx = nextSeatByTable[tableID] ?? 0
+            while idx < cap, used.contains(idx) || disabled.contains(idx) { idx += 1 }
+            if idx < cap {
+                guest.seatIndex = idx
+                nextSeatByTable[tableID] = idx + 1
+            }
         }
         do {
             try modelContext.save()

@@ -21,7 +21,7 @@ enum GroupAnalyzer {
     }
 
     static func computeClusterOverlaps(tags: [Tag], minShared: Int = 2) -> [TagOverlap] {
-        let nonEmptyTags = tags.filter { !$0.guestIDs.isEmpty }
+        let nonEmptyTags = tags.filter(\.isActive).filter { !$0.guestIDs.isEmpty }
         var overlaps: [TagOverlap] = []
         for i in 0..<nonEmptyTags.count {
             for j in (i + 1)..<nonEmptyTags.count {
@@ -37,7 +37,7 @@ enum GroupAnalyzer {
     }
 
     static func detectClusters(guests: [Guest], tags: [Tag]) -> [Cluster] {
-        tags.filter { !$0.guestIDs.isEmpty }
+        tags.filter(\.isActive).filter { !$0.guestIDs.isEmpty }
             .map { tag in
                 Cluster(tagName: tag.name, tagCategory: tag.category, guestIDs: tag.guestIDs, partnerAssignment: tag.partnerAssignment)
             }
@@ -46,7 +46,7 @@ enum GroupAnalyzer {
 
     static func findBridgePersons(guests: [Guest], tags: [Tag]) -> [BridgePerson] {
         var guestTagMap: [UUID: [String]] = [:]
-        for tag in tags {
+        for tag in tags.filter(\.isActive) {
             for guestID in tag.guestIDs {
                 guestTagMap[guestID, default: []].append(tag.name)
             }
@@ -71,6 +71,7 @@ enum GroupAnalyzer {
     }
 
     static func buildLLMContext(guests: [Guest], tags: [Tag], constraints: [Constraint], tables: [GuestTable], event: Event? = nil) -> String {
+        let tags = tags.filter(\.isActive)
         var ctx = "# Gästeliste\n\nGesamt: \(guests.count) Gäste\n"
         ctx += "Erwachsene: \(guests.filter { $0.ageCategory == .adult }.count)\n"
         ctx += "Kinder: \(guests.filter { $0.ageCategory != .adult }.count)\n\n"

@@ -20,6 +20,16 @@ final class Event {
     var roomLengthCM: Double?
     var roomPlanImageData: Data?
     var createdAt: Date
+    var seatingRulesData: Data?
+    #if canImport(SwiftData)
+    @Relationship(deleteRule: .cascade, inverse: \CanvasLabel.event)
+    #endif
+    var labels: [CanvasLabel] = []
+    #if canImport(SwiftData)
+    @Relationship(deleteRule: .cascade, inverse: \LayoutVersion.event)
+    #endif
+    var versions: [LayoutVersion] = []
+    var activeVersionID: UUID?
 
     init(
         name: String,
@@ -43,7 +53,23 @@ final class Event {
         self.roomWidthCM = nil
         self.roomLengthCM = nil
         self.roomPlanImageData = nil
+        self.seatingRulesData = nil
+        self.labels = []
+        self.versions = []
+        self.activeVersionID = nil
         self.createdAt = .now
+    }
+
+    var seatingRules: SeatingRules {
+        get {
+            guard let data = seatingRulesData,
+                  let decoded = try? JSONDecoder().decode(SeatingRules.self, from: data)
+            else { return .default }
+            return decoded
+        }
+        set {
+            seatingRulesData = try? JSONEncoder().encode(newValue)
+        }
     }
 
     var partnerDisplayName1: String {

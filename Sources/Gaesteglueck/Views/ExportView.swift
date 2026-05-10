@@ -1,5 +1,6 @@
 #if canImport(SwiftUI) && canImport(SwiftData) && canImport(AppKit)
 import SwiftUI
+import UniformTypeIdentifiers
 import SwiftData
 import AppKit
 
@@ -15,14 +16,20 @@ struct ExportView: View {
     @State private var includeCatererSummary = true
     @State private var includeTableCards = false
     @State private var includePoster = false
+    @State private var includeGameCards = false
+    @State private var includePhoneVCards = false
+    @State private var includeCanvasPNG = false
+    @AppStorage("tableCardsWithTitle") private var tableCardsWithTitle: Bool = false
+    @Query private var canvasLabels: [CanvasLabel]
+    @AppStorage("includeVisualPlan") private var includeVisualPlan: Bool = true
+    @AppStorage("visualPlanNameStyle") private var visualPlanNameStyleRaw: String = VisualSeatingPlanExporter.NameStyle.smartDeduped.rawValue
 
     @State private var highlightAllergies = true
-    @State private var withSeatNumbers = false
     @State private var withWavePattern = true
-    @State private var withFooter = true
     @State private var blackAndWhite = false
 
     @State private var format: ExportFormat = .pdf
+    @State private var previewTab: PreviewTab = .sitzplan
 
     enum ExportFormat: String, CaseIterable {
         case pdf = "PDF"
@@ -34,6 +41,16 @@ struct ExportView: View {
             case .a3: "Mehrere Tische pro Seite"
             }
         }
+    }
+
+    enum PreviewTab: String, CaseIterable, Identifiable {
+        case sitzplan = "Sitzplan"
+        case caterer = "Caterer"
+        case tischkarten = "Tischkarten"
+        case plakat = "Plakat"
+        case bildlich = "Bildlich"
+        case telefon = "Telefon"
+        var id: String { rawValue }
     }
 
     private var event: Event? { events.first }
@@ -76,15 +93,319 @@ struct ExportView: View {
     // MARK: - Preview pane
 
     private var previewPane: some View {
-        ScrollView {
-            VStack {
-                Spacer().frame(height: 32)
-                a4Preview
-                Spacer().frame(height: 32)
+        VStack(spacing: 0) {
+            previewTabBar
+            ScrollView {
+                VStack {
+                    Spacer().frame(height: 32)
+                    selectedPreview
+                    Spacer().frame(height: 32)
+                }
+                .frame(maxWidth: .infinity)
             }
-            .frame(maxWidth: .infinity)
         }
         .background(Tokens.Colors.bg2)
+    }
+
+    private var previewTabBar: some View {
+        HStack(spacing: 4) {
+            ForEach(PreviewTab.allCases) { tab in
+                Button {
+                    previewTab = tab
+                } label: {
+                    Text(tab.rawValue)
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundStyle(previewTab == tab ? Tokens.Colors.ink : Tokens.Colors.ink3)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(previewTab == tab ? Tokens.Colors.accentTint : Color.clear)
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(Tokens.Colors.line).frame(height: 1)
+        }
+    }
+
+    @ViewBuilder
+    private var selectedPreview: some View {
+        switch previewTab {
+        case .sitzplan: a4Preview
+        case .caterer: catererPreview
+        case .tischkarten: tischkartenPreview
+        case .plakat: plakatPreview
+        case .bildlich: bildlichPreview
+        case .telefon: telefonPreview
+        }
+    }
+
+    @ViewBuilder
+    private var telefonPreview: some View {
+        let stats = phoneCoverage(for: guests)
+
+        VStack(alignment: .leading, spacing: 24) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Telefonnummern")
+                        .font(.title2.bold())
+                    Text("**\(stats.coveredRegistrations) von \(stats.totalRegistrations) Anmeldungen** haben mindestens eine Nummer (\(stats.guestsWithPhone) von \(stats.totalGuests) Gaesten).")
+                        .foregroundStyle(.secondary)
+                    Text("Rechts unter 'Was exportieren' das Haekchen bei 'Telefonnummern (vCard)' setzen und dann auf 'Exportieren'. Die .vcf laesst sich von der Trauzeugin in die Kontakte importieren — daraus dann in einem Rutsch eine WhatsApp-Gruppe.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+
+                if !stats.openRegistrations.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Anmeldungen ohne Nummer (\(stats.openRegistrations.count))")
+                            .font(.headline)
+                        Text("Eine Nummer pro Anmeldung reicht — diese Gruppen brauchen noch jemanden.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        ForEach(stats.openRegistrations, id: \.self) { names in
+                            Text(names)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                if !stats.withPhone.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Mit Nummer (\(stats.withPhone.count))")
+                            .font(.headline)
+                        ForEach(stats.withPhone) { guest in
+                            HStack {
+                                Text(guest.fullName)
+                                Spacer()
+                                Text(guest.phoneNumber)
+                                    .monospaced()
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+        }
+        .padding(24)
+    }
+
+    private struct PhoneCoverage {
+        let totalGuests: Int
+        let guestsWithPhone: Int
+        let totalRegistrations: Int
+        let coveredRegistrations: Int
+        let openRegistrations: [String]
+        let withPhone: [Guest]
+    }
+
+    private func phoneCoverage(for guests: [Guest]) -> PhoneCoverage {
+        func hasPhone(_ g: Guest) -> Bool {
+            !g.phoneNumber.trimmingCharacters(in: .whitespaces).isEmpty
+        }
+
+        // Gruppen-Bucket: registrationGroup oder fallback auf eigene Gast-ID
+        // (Einzelpersonen ohne Anmeldungs-Gruppe zaehlen als eigene Anmeldung).
+        var buckets: [String: [Guest]] = [:]
+        for g in guests {
+            let key = g.registrationGroup?.uuidString ?? "single-\(g.id.uuidString)"
+            buckets[key, default: []].append(g)
+        }
+
+        let total = buckets.count
+        var covered = 0
+        var open: [String] = []
+        for (_, members) in buckets {
+            if members.contains(where: hasPhone) {
+                covered += 1
+            } else {
+                let label = members
+                    .sorted { $0.fullName.localizedCompare($1.fullName) == .orderedAscending }
+                    .map(\.fullName)
+                    .joined(separator: " & ")
+                open.append(label)
+            }
+        }
+
+        return PhoneCoverage(
+            totalGuests: guests.count,
+            guestsWithPhone: guests.filter(hasPhone).count,
+            totalRegistrations: total,
+            coveredRegistrations: covered,
+            openRegistrations: open.sorted(),
+            withPhone: guests.filter(hasPhone).sorted { $0.fullName.localizedCompare($1.fullName) == .orderedAscending }
+        )
+    }
+
+    @ViewBuilder
+    private var catererPreview: some View {
+        let allGuests = tables.flatMap(\.guests)
+        let counts = Dictionary(grouping: allGuests, by: \.dietaryChoice).mapValues(\.count)
+        let ageOrder: [AgeCategory] = [.adult, .teenager, .child, .toddler, .baby]
+        let ageCounts = Dictionary(grouping: allGuests, by: \.ageCategory).mapValues(\.count)
+        let allergic = allGuests.filter(\.hasIntolerances)
+
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Übersicht für den Caterer")
+                .font(Tokens.Typography.displayXS)
+                .foregroundStyle(Tokens.Colors.ink)
+                .padding(.bottom, 8)
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(counts.sorted(by: { $0.key < $1.key }), id: \.key) { choice, n in
+                    HStack {
+                        Text(choice).font(.system(size: 12, design: .rounded))
+                        Spacer()
+                        Text("\(n)").font(.system(size: 12, weight: .semibold, design: .rounded)).monospacedDigit()
+                    }
+                }
+                Divider().padding(.vertical, 2)
+                ForEach(ageOrder, id: \.self) { cat in
+                    let n = ageCounts[cat] ?? 0
+                    if n > 0 {
+                        HStack {
+                            Text(cat.rawValue).font(.system(size: 12, design: .rounded))
+                            Spacer()
+                            Text("\(n)").font(.system(size: 12, weight: .semibold, design: .rounded)).monospacedDigit()
+                        }
+                    }
+                }
+            }
+            if !allergic.isEmpty {
+                Divider().padding(.vertical, 4)
+                Text("Unverträglichkeiten")
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                ForEach(allergic.sorted(by: { $0.fullName < $1.fullName })) { g in
+                    HStack(alignment: .top) {
+                        Text(g.fullName).font(.system(size: 12, weight: .medium, design: .rounded))
+                        Spacer()
+                        Text(g.intolerances.joined(separator: ", "))
+                            .font(.system(size: 12, design: .rounded))
+                            .foregroundStyle(Color(hex: "#c44a4a"))
+                    }
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(36)
+        .frame(width: 480, height: 660, alignment: .topLeading)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 4))
+        .shadow(color: Color.black.opacity(0.16), radius: 32, x: 0, y: 8)
+    }
+
+    @ViewBuilder
+    private var tischkartenPreview: some View {
+        let sample = tables.flatMap(\.guests).first
+        VStack(spacing: 16) {
+            Text("Tischkarten · Vorschau für eine Karte")
+                .font(.system(size: 11, design: .rounded))
+                .foregroundStyle(Tokens.Colors.ink3)
+                .tracking(1)
+            if let g = sample {
+                VStack(spacing: 14) {
+                    Text(g.fullName)
+                        .font(.system(size: 22, weight: .semibold, design: .rounded))
+                    Rectangle().fill(Color(hex: "#c47a8c")).frame(width: 40, height: 1.2)
+                    if !g.funFact.isEmpty {
+                        Text(g.funFact)
+                            .font(.system(size: 11, weight: .regular, design: .rounded).italic())
+                            .foregroundStyle(Tokens.Colors.ink3)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 24)
+                    }
+                }
+                .frame(width: 240, height: 160)
+                .background(Color.white)
+                .clipShape(RoundedRectangle(cornerRadius: 4))
+                .shadow(color: Color.black.opacity(0.12), radius: 8, x: 0, y: 4)
+                Text("Im Druck: 8 Karten pro A4-Seite mit Schnitt-Eckmarken.")
+                    .font(.system(size: 11, design: .rounded))
+                    .foregroundStyle(Tokens.Colors.ink3)
+            } else {
+                Text("Noch keine Gäste platziert.")
+                    .font(.system(size: 12, design: .rounded))
+                    .foregroundStyle(Tokens.Colors.ink3)
+            }
+        }
+        .frame(width: 480, height: 660)
+        .background(Tokens.Colors.bg)
+        .clipShape(RoundedRectangle(cornerRadius: 4))
+    }
+
+    @ViewBuilder
+    private var plakatPreview: some View {
+        VStack(spacing: 12) {
+            Text("Plakat · A3-Querformat")
+                .font(.system(size: 11, design: .rounded))
+                .foregroundStyle(Tokens.Colors.ink3)
+                .tracking(1)
+            ZStack {
+                ForEach(tables) { t in
+                    Circle()
+                        .strokeBorder(Tokens.Colors.line2, lineWidth: 1)
+                        .background(Circle().fill(t.isBridalTable ? Tokens.Colors.accentTint : Color.white))
+                        .frame(width: 28, height: 28)
+                        .overlay(Text(String(t.name.prefix(2))).font(.system(size: 8, weight: .semibold, design: .rounded)))
+                        .position(
+                            x: t.positionX * 0.4 + 240,
+                            y: t.positionY * 0.4 + 200
+                        )
+                }
+            }
+            .frame(width: 480, height: 400)
+            .background(Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: 4))
+            .shadow(color: Color.black.opacity(0.12), radius: 8, x: 0, y: 4)
+            Text("Tische in Mini-Ansicht. Im Druck: A3 mit voller Größe.")
+                .font(.system(size: 11, design: .rounded))
+                .foregroundStyle(Tokens.Colors.ink3)
+        }
+        .frame(width: 480, height: 660)
+    }
+
+    @ViewBuilder
+    private var bildlichPreview: some View {
+        VStack(spacing: 12) {
+            Text("Bildlicher Sitzplan · A3-Querformat")
+                .font(.system(size: 11, design: .rounded))
+                .foregroundStyle(Tokens.Colors.ink3)
+                .tracking(1)
+            ZStack {
+                ForEach(tables) { t in
+                    Group {
+                        if t.shape == .round {
+                            Circle()
+                                .strokeBorder(Tokens.Colors.line2, lineWidth: 1)
+                                .background(Circle().fill(t.isBridalTable ? Tokens.Colors.accentTint : Color.white))
+                                .frame(width: max(t.diameter * 0.18, 22), height: max(t.diameter * 0.18, 22))
+                        } else {
+                            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                .strokeBorder(Tokens.Colors.line2, lineWidth: 1)
+                                .background(RoundedRectangle(cornerRadius: 3, style: .continuous).fill(t.isBridalTable ? Tokens.Colors.accentTint : Color.white))
+                                .frame(width: max(t.width * 0.18, 22), height: max(t.depth * 0.18, 14))
+                        }
+                    }
+                    .overlay(Text("\(t.guests.count)").font(.system(size: 8, weight: .semibold, design: .rounded)))
+                    .rotationEffect(.degrees(t.rotation))
+                    .position(
+                        x: t.positionX * 0.4 + 240,
+                        y: t.positionY * 0.4 + 200
+                    )
+                }
+            }
+            .frame(width: 480, height: 400)
+            .background(Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: 4))
+            .shadow(color: Color.black.opacity(0.12), radius: 8, x: 0, y: 4)
+            Text("Belegung pro Tisch. Im PDF: Vornamen direkt an den Sitzpositionen.")
+                .font(.system(size: 11, design: .rounded))
+                .foregroundStyle(Tokens.Colors.ink3)
+        }
+        .frame(width: 480, height: 660)
     }
 
     @ViewBuilder
@@ -132,10 +453,6 @@ struct ExportView: View {
                 }
 
                 Spacer(minLength: 0)
-
-                if withFooter, let event, let table = firstTable {
-                    footerLine(event: event, table: table)
-                }
             }
             .padding(.horizontal, 56)
             .padding(.vertical, 48)
@@ -199,9 +516,9 @@ struct ExportView: View {
                 Rectangle().fill(Color(white: 0.85)).frame(height: 1)
             }
 
-            ForEach(table.guests.prefix(8)) { guest in
+            ForEach(table.guests) { guest in
                 HStack {
-                    Text(seatPrefix(for: guest) + guest.fullName)
+                    Text(guest.fullName)
                         .font(.system(size: 12, weight: .medium, design: .rounded))
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Text(guest.dietaryChoice)
@@ -219,12 +536,6 @@ struct ExportView: View {
             }
         }
         .foregroundStyle(blackAndWhite ? Color.black : Tokens.Colors.ink)
-    }
-
-    private func seatPrefix(for guest: Guest) -> String {
-        guard withSeatNumbers else { return "" }
-        if let idx = guest.seatIndex { return "Sitz \(idx + 1) · " }
-        return "ohne Platz · "
     }
 
     private func footerLine(event: Event, table: GuestTable) -> some View {
@@ -259,15 +570,34 @@ struct ExportView: View {
                         CheckRow(label: "Caterer-Übersicht", hint: "Mengen pro Menü", isOn: $includeCatererSummary)
                         CheckRow(label: "Tischkarten", hint: "A4, mit Fun Fact", isOn: $includeTableCards)
                         CheckRow(label: "Gesamt-Plakat", hint: "A3, Sitzplan-Übersicht", isOn: $includePoster)
+                        CheckRow(label: "Bildlicher Sitzplan", hint: "A3, Namen an Sitzpositionen", isOn: $includeVisualPlan)
+                        CheckRow(label: "FunFact-Spielkarten", hint: "Anonyme Karten zum Verteilen + Lösungsblatt", isOn: $includeGameCards)
+                        CheckRow(label: "Telefonnummern (vCard)", hint: ".vcf — fuer WhatsApp-Gruppe der Trauzeugin", isOn: $includePhoneVCards)
+                        CheckRow(label: "Sitzplan als PNG", hint: "Volle Canvas inkl. Saalplan, frei skalierbar", isOn: $includeCanvasPNG)
                     }
                 }
                 InspectorSection("Optionen") {
                     VStack(alignment: .leading, spacing: 10) {
                         CheckRow(label: "Allergien hervorheben", hint: nil, isOn: $highlightAllergies)
-                        CheckRow(label: "Mit Sitzzuweisung", hint: "Sitz 1, Sitz 2…", isOn: $withSeatNumbers)
                         CheckRow(label: "Mit Wellen-Pattern", hint: "nur Vorschau", isOn: $withWavePattern)
-                        CheckRow(label: "Mit Fußzeile", hint: "Stand, Seitenzahl", isOn: $withFooter)
                         CheckRow(label: "Schwarz-weiß", hint: nil, isOn: $blackAndWhite)
+                        if includeVisualPlan {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Namen im Bildlichen Sitzplan")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Picker("", selection: $visualPlanNameStyleRaw) {
+                                    ForEach(VisualSeatingPlanExporter.NameStyle.allCases) { style in
+                                        Text(style.rawValue).tag(style.rawValue)
+                                    }
+                                }
+                                .labelsHidden()
+                                .pickerStyle(.menu)
+                            }
+                        }
+                        CheckRow(label: "Titel auf Tischkarten",
+                                 hint: "z.B. 'Dr.', 'Pfarrer' vor dem Namen — wirkt nur wenn Tischkarten aktiv",
+                                 isOn: $tableCardsWithTitle)
                     }
                 }
                 InspectorSection("Format") {
@@ -289,47 +619,128 @@ struct ExportView: View {
 
     // MARK: - Run export
 
+    private struct ExportItem {
+        let filename: String
+        let data: Data
+    }
+
     private func runExport() {
         guard let event else { return }
 
+        let safeName = sanitizeFilenameSegment(event.name)
+
+        var items: [ExportItem] = []
         if includeTableLists || includeCatererSummary {
             let opts = PDFExporter.Options(
                 includeTableLists: includeTableLists,
                 includeCatererSummary: includeCatererSummary,
                 highlightAllergies: highlightAllergies,
-                withSeatNumbers: withSeatNumbers,
-                withFooter: withFooter,
                 blackAndWhite: blackAndWhite
             )
-            let data = PDFExporter.generatePDF(
-                tables: tables,
-                eventName: event.name,
-                date: event.date,
-                options: opts
-            )
-            saveData(data, name: "Sitzplan-\(event.name).pdf")
+            items.append(ExportItem(filename: "Sitzplan-\(safeName).pdf",
+                                    data: PDFExporter.generatePDF(tables: tables, eventName: event.name,
+                                                                  date: event.date, options: opts)))
         }
         if includeTableCards {
-            let data = TableCardExporter.generatePDF(
-                guests: guests,
-                eventName: event.name
-            )
-            saveData(data, name: "Tischkarten-\(event.name).pdf")
+            items.append(ExportItem(filename: "Tischkarten-\(safeName).pdf",
+                                    data: TableCardExporter.generatePDF(guests: guests,
+                                                                        eventName: event.name,
+                                                                        withTitle: tableCardsWithTitle)))
         }
         if includePoster {
-            let data = PosterExporter.generatePDF(
+            items.append(ExportItem(filename: "Plakat-\(safeName).pdf",
+                                    data: PosterExporter.generatePDF(
+                                        tables: tables,
+                                        unassignedGuests: guests.filter { $0.table == nil },
+                                        eventName: event.name,
+                                        date: event.date)))
+        }
+        if includeVisualPlan {
+            let style = VisualSeatingPlanExporter.NameStyle(rawValue: visualPlanNameStyleRaw) ?? .smartDeduped
+            items.append(ExportItem(filename: "Bildlicher-Sitzplan-\(safeName).pdf",
+                                    data: VisualSeatingPlanExporter.generatePDF(
+                                        tables: tables, eventName: event.name,
+                                        date: event.date, nameStyle: style)))
+        }
+        if includeGameCards {
+            items.append(ExportItem(filename: "FunFact-Spielkarten-\(safeName).pdf",
+                                    data: FunFactGameCardsExporter.generatePDF(guests: guests, eventName: event.name)))
+        }
+        if includePhoneVCards {
+            items.append(ExportItem(filename: "Telefonnummern-\(safeName).vcf",
+                                    data: PhoneVCardExporter.generate(guests: guests, eventName: event.name)))
+        }
+        if includeCanvasPNG {
+            let style = VisualSeatingPlanExporter.NameStyle(rawValue: visualPlanNameStyleRaw) ?? .smartDeduped
+            let bg: NSImage? = event.roomPlanImageData.flatMap { NSImage(data: $0) }
+            let roomSize: CGSize? = {
+                guard let w = event.roomWidthCM, let h = event.roomLengthCM, w > 0, h > 0 else { return nil }
+                return CGSize(width: w, height: h)
+            }()
+            if let png = VisualSeatingPlanExporter.generatePNG(
                 tables: tables,
-                unassignedGuests: guests.filter { $0.table == nil },
-                eventName: event.name,
-                date: event.date
-            )
-            saveData(data, name: "Plakat-\(event.name).pdf")
+                labels: canvasLabels,
+                roomBackground: bg,
+                roomCMSize: roomSize,
+                nameStyle: style
+            ) {
+                items.append(ExportItem(filename: "Sitzplan-Canvas-\(safeName).png", data: png))
+            }
+        }
+
+        guard !items.isEmpty else { return }
+        saveBatch(items, eventName: safeName)
+    }
+
+    /// Entfernt Path-Separator und andere Zeichen die im Dateisystem
+    /// problematisch sind (`/`, `:` auf macOS, plus Backslash für Cross-OS).
+    private func sanitizeFilenameSegment(_ raw: String) -> String {
+        let invalid: [Character] = ["/", ":", "\\"]
+        let cleaned = String(raw.map { invalid.contains($0) ? "-" : $0 })
+        let trimmed = cleaned.trimmingCharacters(in: .whitespaces)
+        return trimmed.isEmpty ? "Export" : trimmed
+    }
+
+    private func saveBatch(_ items: [ExportItem], eventName: String) {
+        if items.count == 1, let only = items.first {
+            saveSingle(data: only.data, name: only.filename)
+            return
+        }
+
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = true
+        panel.title = "Zielordner waehlen"
+        panel.message = "Alle Exporte werden in einen neuen Unterordner geschrieben."
+        panel.prompt = "Exportieren"
+
+        panel.begin { response in
+            guard response == .OK, let parent = panel.url else { return }
+            let fmt = DateFormatter()
+            fmt.dateFormat = "yyyy-MM-dd-HHmm"
+            // eventName kommt bereits sanitized rein
+            let folderName = "Export-\(eventName)-\(fmt.string(from: .now))"
+            let target = parent.appendingPathComponent(folderName, isDirectory: true)
+            do {
+                try FileManager.default.createDirectory(at: target, withIntermediateDirectories: false)
+                for item in items {
+                    let fileURL = target.appendingPathComponent(item.filename)
+                    try item.data.write(to: fileURL)
+                }
+                NSWorkspace.shared.activateFileViewerSelecting([target])
+            } catch {
+                NSAlert(error: error).runModal()
+            }
         }
     }
 
-    private func saveData(_ data: Data, name: String) {
+    private func saveSingle(data: Data, name: String) {
         let panel = NSSavePanel()
-        panel.allowedContentTypes = [.pdf]
+        let suffix = (name as NSString).pathExtension.lowercased()
+        let type: UTType = suffix == "vcf" ? .vCard : (suffix == "png" ? .png : .pdf)
+        panel.allowedContentTypes = [type]
         panel.nameFieldStringValue = name
         panel.begin { response in
             if response == .OK, let url = panel.url {

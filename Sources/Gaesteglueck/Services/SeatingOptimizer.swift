@@ -14,7 +14,7 @@ enum SeatingOptimizer {
 
         let graph = SeatingGraph(guests: guests, tags: tags, constraints: constraints, tables: tables)
         let tableIDs = tables.map(\.id)
-        let tableCapacities = Dictionary(uniqueKeysWithValues: tables.map { ($0.id, $0.capacity) })
+        let tableCapacities = Dictionary(uniqueKeysWithValues: tables.map { ($0.id, $0.effectiveCapacity) })
         // Phase 1: Initialize — respect pinned guests, then greedy assign
         var assignment: [UUID: UUID] = [:]
         // CR#1: Track table counts in O(1) instead of filtering assignment.values.

@@ -20,6 +20,7 @@ struct SeatingGraph: Sendable {
         self.childTableIDs = Set(tables.filter(\.isChildTable).map(\.id))
         let hasChildTable = !childTableIDs.isEmpty
 
+        let activeTags = tags.filter(\.isActive)
         var edges: [Edge] = []
 
         for constraint in constraints {
@@ -32,7 +33,7 @@ struct SeatingGraph: Sendable {
             }
         }
 
-        for tag in tags {
+        for tag in activeTags {
             let ids = tag.guestIDs
             let weight: Double = tag.category == .family ? 70 : 40
             for i in ids.indices {
@@ -85,7 +86,7 @@ struct SeatingGraph: Sendable {
         // they participate in is worth slightly more (encourages SA to keep them
         // close to their strongest group rather than scattering them).
         var tagCountPerGuest: [UUID: Int] = [:]
-        for tag in tags {
+        for tag in activeTags {
             for gid in tag.guestIDs {
                 tagCountPerGuest[gid, default: 0] += 1
             }

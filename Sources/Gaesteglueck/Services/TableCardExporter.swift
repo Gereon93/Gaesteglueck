@@ -25,7 +25,7 @@ enum TableCardExporter {
         return CGSize(width: w, height: h)
     }
 
-    static func generatePDF(guests: [Guest], eventName: String) -> Data {
+    static func generatePDF(guests: [Guest], eventName: String, withTitle: Bool = false) -> Data {
         let pdfData = NSMutableData()
         guard let consumer = CGDataConsumer(data: pdfData as CFMutableData),
               let context = CGContext(consumer: consumer, mediaBox: nil, nil) else {
@@ -42,9 +42,10 @@ enum TableCardExporter {
                 beginPage(context: context)
                 let pageEnd = min(index + cardsPerPage, sortedGuests.count)
                 for i in index..<pageEnd {
-                    drawCard(context: context, guest: sortedGuests[i], slotIndex: i - index, eventName: eventName)
+                    drawCard(context: context, guest: sortedGuests[i], slotIndex: i - index,
+                             eventName: eventName, withTitle: withTitle)
                 }
-                context.endPage()
+                endPage(context: context)
                 index = pageEnd
             }
         }
@@ -58,16 +59,26 @@ enum TableCardExporter {
         context.beginPage(mediaBox: &box)
         context.translateBy(x: 0, y: pageRect.height)
         context.scaleBy(x: 1, y: -1)
+        // NSGraphicsContext mit flipped:true — sonst zeichnet NSString.draw
+        // ins Leere (System-Default ist nil-Graphics-Context).
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
+    }
+
+    private static func endPage(context: CGContext) {
+        NSGraphicsContext.restoreGraphicsState()
+        context.endPage()
     }
 
     private static func drawCoverPage(context: CGContext, eventName: String, message: String) {
         beginPage(context: context)
         drawText(eventName, at: CGPoint(x: marginX, y: 80), font: .boldSystemFont(ofSize: 24))
-        drawText(message, at: CGPoint(x: marginX, y: 120), font: .systemFont(ofSize: 14), color: .secondaryLabelColor)
-        context.endPage()
+        drawText(message, at: CGPoint(x: marginX, y: 120), font: .systemFont(ofSize: 14), color: PDFColors.secondary)
+        endPage(context: context)
     }
 
-    private static func drawCard(context: CGContext, guest: Guest, slotIndex: Int, eventName: String) {
+    private static func drawCard(context: CGContext, guest: Guest, slotIndex: Int,
+                                 eventName: String, withTitle: Bool) {
         let col = slotIndex % cols
         let row = slotIndex / cols
         let size = cardSize
@@ -76,7 +87,10 @@ enum TableCardExporter {
 
         drawCropMarks(context: context, origin: CGPoint(x: originX, y: originY), size: size)
 
-        let name = guest.fullName
+        let title = guest.title.trimmingCharacters(in: .whitespaces)
+        let name: String = (withTitle && !title.isEmpty)
+            ? "\(title) \(guest.fullName)"
+            : guest.fullName
         let nameFont = NSFont.systemFont(ofSize: 22, weight: .semibold)
         let nameSize = (name as NSString).size(withAttributes: [.font: nameFont])
         let nameX = originX + (size.width - nameSize.width) / 2
@@ -98,7 +112,7 @@ enum TableCardExporter {
             let factFont = NSFont(descriptor: NSFont.systemFont(ofSize: 11).fontDescriptor.withSymbolicTraits(.italic), size: 11) ?? NSFont.systemFont(ofSize: 11)
             let attrs: [NSAttributedString.Key: Any] = [
                 .font: factFont,
-                .foregroundColor: NSColor.secondaryLabelColor
+                .foregroundColor: PDFColors.secondary
             ]
             let factRect = CGRect(
                 x: originX + 16,
@@ -117,7 +131,7 @@ enum TableCardExporter {
         let footerFont = NSFont.systemFont(ofSize: 7)
         let footerAttrs: [NSAttributedString.Key: Any] = [
             .font: footerFont,
-            .foregroundColor: NSColor.tertiaryLabelColor
+            .foregroundColor: PDFColors.tertiary
         ]
         let footerSize = (eventName as NSString).size(withAttributes: footerAttrs)
         (eventName as NSString).draw(
@@ -129,7 +143,7 @@ enum TableCardExporter {
     private static func drawCropMarks(context: CGContext, origin: CGPoint, size: CGSize) {
         let length: CGFloat = 6
         context.saveGState()
-        context.setStrokeColor(NSColor.tertiaryLabelColor.cgColor)
+        context.setStrokeColor(PDFColors.tertiary.cgColor)
         context.setLineWidth(0.4)
         let corners = [
             origin,
@@ -149,7 +163,7 @@ enum TableCardExporter {
         context.restoreGState()
     }
 
-    private static func drawText(_ text: String, at point: CGPoint, font: NSFont, color: NSColor = .labelColor) {
+    private static func drawText(_ text: String, at point: CGPoint, font: NSFont, color: NSColor = PDFColors.primary) {
         let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
         (text as NSString).draw(at: point, withAttributes: attrs)
     }

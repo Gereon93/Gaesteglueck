@@ -30,6 +30,13 @@ enum PosterExporter {
         context.beginPage(mediaBox: &box)
         context.translateBy(x: 0, y: pageHeight)
         context.scaleBy(x: 1, y: -1)
+        // NSGraphicsContext mit flipped:true — sonst zeichnet NSString.draw
+        // ins Leere (System-Default-Graphics-Context ist nil).
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
+        defer {
+            NSGraphicsContext.restoreGraphicsState()
+        }
 
         drawHeader(context: context, eventName: eventName, date: date)
 
@@ -80,16 +87,16 @@ enum PosterExporter {
                 fmt.string(from: date),
                 at: CGPoint(x: canvasMargin, y: 64),
                 font: .systemFont(ofSize: 13),
-                color: .secondaryLabelColor
+                color: pdfSecondary
             )
         }
 
-        // Accent line
         context.saveGState()
         context.setStrokeColor(NSColor(calibratedRed: 0.78, green: 0.47, blue: 0.55, alpha: 1).cgColor)
         context.setLineWidth(2)
-        context.move(to: CGPoint(x: canvasMargin, y: titleAreaHeight - 8))
-        context.addLine(to: CGPoint(x: pageWidth - canvasMargin, y: titleAreaHeight - 8))
+        let lineY = titleAreaHeight + 4
+        context.move(to: CGPoint(x: canvasMargin, y: lineY))
+        context.addLine(to: CGPoint(x: pageWidth - canvasMargin, y: lineY))
         context.strokePath()
         context.restoreGState()
     }
@@ -124,7 +131,7 @@ enum PosterExporter {
 
     private static func drawTable(context: CGContext, table: GuestTable, center: CGPoint, size: CGFloat) {
         context.saveGState()
-        context.setStrokeColor(NSColor.labelColor.cgColor)
+        context.setStrokeColor(pdfPrimary.cgColor)
         context.setFillColor(NSColor(calibratedWhite: 0.97, alpha: 1).cgColor)
         context.setLineWidth(1)
 
@@ -147,33 +154,46 @@ enum PosterExporter {
             font: nameFont
         )
 
-        // Gästenamen darunter (max 8 Zeilen — Plakat braucht Platz)
-        let listFont = NSFont.systemFont(ofSize: 8)
+        // Gästenamen — alle in Sitz-Reihenfolge (von oben nach unten, wie sie
+        // am Tisch sitzen). Höhe wächst mit der Anzahl Gäste; Schrift wird
+        // kleiner wenn viele Namen rein müssen.
+        let count = table.guests.count
+        let listFontSize: CGFloat = count > 16 ? 6 : (count > 12 ? 7 : (count > 8 ? 7.5 : 8))
+        let listFont = NSFont.systemFont(ofSize: listFontSize)
         let para = NSMutableParagraphStyle()
         para.alignment = .center
         para.lineBreakMode = .byTruncatingTail
+        para.lineSpacing = 0
         let attrs: [NSAttributedString.Key: Any] = [
             .font: listFont,
-            .foregroundColor: NSColor.labelColor,
+            .foregroundColor: pdfPrimary,
             .paragraphStyle: para
         ]
-        let visibleGuests = table.guests.prefix(8)
-        let hidden = max(0, table.guests.count - visibleGuests.count)
-        var lines = visibleGuests.map(\.fullName)
-        if hidden > 0 { lines.append("… +\(hidden) weitere") }
+        let sortedGuests = table.guests.sorted { lhs, rhs in
+            switch (lhs.seatIndex, rhs.seatIndex) {
+            case let (l?, r?): return l < r
+            case (_?, nil): return true
+            case (nil, _?): return false
+            default: return lhs.fullName < rhs.fullName
+            }
+        }
+        let lines = sortedGuests.map(\.fullName)
         let listText = lines.joined(separator: "\n")
+        // Höhe basierend auf Anzahl Zeilen + Font-Höhe, statt fixer size.
+        let lineHeight = listFontSize + 2
+        let listHeight = max(size - 12, CGFloat(lines.count) * lineHeight + 8)
         let listRect = CGRect(
-            x: center.x - size / 2 - 20,
+            x: center.x - size / 2 - 30,
             y: center.y - size / 2 + 6,
-            width: size + 40,
-            height: size - 12
+            width: size + 60,
+            height: listHeight
         )
         (listText as NSString).draw(in: listRect, withAttributes: attrs)
     }
 
     private static func drawUnassignedList(context: CGContext, guests: [Guest], in rect: CGRect) {
         context.saveGState()
-        context.setStrokeColor(NSColor.tertiaryLabelColor.cgColor)
+        context.setStrokeColor(pdfTertiary.cgColor)
         context.setLineWidth(0.6)
         context.stroke(rect)
         context.restoreGState()
@@ -187,7 +207,7 @@ enum PosterExporter {
         let listFont = NSFont.systemFont(ofSize: 11)
         let attrs: [NSAttributedString.Key: Any] = [
             .font: listFont,
-            .foregroundColor: NSColor.labelColor
+            .foregroundColor: pdfPrimary
         ]
         let names = guests
             .sorted { $0.fullName.localizedCompare($1.fullName) == .orderedAscending }
@@ -202,8 +222,15 @@ enum PosterExporter {
         (names as NSString).draw(in: textRect, withAttributes: attrs)
     }
 
-    private static func drawText(_ text: String, at point: CGPoint, font: NSFont, color: NSColor = .labelColor) {
-        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
+    /// PDF-safe: NSColor.labelColor wird im PDF-Off-Screen-Context oft als
+    /// transparent gerendert. Wir nutzen explizite RGB-Werte als Default.
+    private static let pdfPrimary = NSColor(srgbRed: 0.10, green: 0.10, blue: 0.10, alpha: 1)
+    private static let pdfSecondary = NSColor(srgbRed: 0.40, green: 0.40, blue: 0.40, alpha: 1)
+    private static let pdfTertiary = NSColor(srgbRed: 0.60, green: 0.60, blue: 0.60, alpha: 1)
+
+    private static func drawText(_ text: String, at point: CGPoint, font: NSFont, color: NSColor? = nil) {
+        let resolved = color ?? pdfPrimary
+        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: resolved]
         (text as NSString).draw(at: point, withAttributes: attrs)
     }
 }

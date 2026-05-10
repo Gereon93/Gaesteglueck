@@ -10,6 +10,7 @@ enum BridalTablePolicy: String, CaseIterable, Identifiable, Sendable {
     case eltern
     case both
     case trauzeugenGeschwister
+    case allInner
     case manual
 
     var id: String { rawValue }
@@ -21,6 +22,7 @@ enum BridalTablePolicy: String, CaseIterable, Identifiable, Sendable {
         case .eltern: return "+ Eltern"
         case .both: return "+ Trauzeugen + Eltern"
         case .trauzeugenGeschwister: return "+ Trauzeugen + Geschwister"
+        case .allInner: return "+ Trauzeugen + Eltern + Geschwister"
         case .manual: return "Manuell"
         }
     }
@@ -32,6 +34,7 @@ enum BridalTablePolicy: String, CaseIterable, Identifiable, Sendable {
         case .eltern: return "Eltern beider Seiten sitzen am Brauttisch. Trauzeugen kriegen einen eigenen Tisch."
         case .both: return "Trauzeugen UND Eltern beider Seiten am Brauttisch (kann eng werden — Brauttafel sollte mind. 10 Plätze haben)."
         case .trauzeugenGeschwister: return "Trauzeugen + Geschwister beider Seiten am Brauttisch. Eltern bekommen einen eigenen Tisch."
+        case .allInner: return "Der komplette innere Kreis: Trauzeugen, Eltern und Geschwister beider Seiten an einem Tisch (Brauttafel sollte mind. 14 Plätze haben)."
         case .manual: return "Keine Auto-Regel — du pinnst selbst wer am Brauttisch sitzt."
         }
     }

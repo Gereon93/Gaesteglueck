@@ -14,12 +14,17 @@ struct SettingsView: View {
     @AppStorage("autoBackup") private var autoBackup = true
     @AppStorage("cacheResponses") private var cacheResponses = true
     @AppStorage("algorithmFallback") private var algorithmFallback = true
-    @AppStorage("bridalTablePolicy") private var bridalTablePolicyRaw: String = BridalTablePolicy.trauzeugen.rawValue
+    @AppStorage("bridalIncludeTrauzeugen") private var bridalIncludeTrauzeugen: Bool = true
+    @AppStorage("bridalIncludeEltern") private var bridalIncludeEltern: Bool = false
+    @AppStorage("bridalIncludeGeschwister") private var bridalIncludeGeschwister: Bool = false
+    @AppStorage("bridalManualMode") private var bridalManualMode: Bool = false
 
-    private var bridalTablePolicy: BridalTablePolicy {
-        get { BridalTablePolicy(rawValue: bridalTablePolicyRaw) ?? .trauzeugen }
-        nonmutating set { bridalTablePolicyRaw = newValue.rawValue }
-    }
+    // Spalten-Sichtbarkeit der Gästeliste
+    @AppStorage("guestlist.col.funfact.visible") private var funfactVisible: Bool = true
+    @AppStorage("guestlist.col.tags.visible") private var tagsVisible: Bool = true
+    @AppStorage("guestlist.col.seite.visible") private var seiteVisible: Bool = true
+    @AppStorage("guestlist.col.tisch.visible") private var tischVisible: Bool = true
+    @AppStorage("guestlist.col.menu.visible") private var menuVisible: Bool = true
 
     @Environment(\.modelContext) private var modelContext
     @Query private var events: [Event]
@@ -64,6 +69,7 @@ struct SettingsView: View {
                     accentCard
                     eventCard
                     seatingCard
+                    listColumnsCard
                     dataCard
                 }
                 .frame(maxWidth: 720)
@@ -280,20 +286,82 @@ struct SettingsView: View {
             subtitle: "Wer sitzt am Brautpaartisch? Wird vom Auto-Sitzplaner als harte Regel respektiert."
         ) {
             VStack(alignment: .leading, spacing: 10) {
-                Picker("Brautpaartisch-Regel", selection: Binding(
-                    get: { bridalTablePolicy },
-                    set: { bridalTablePolicy = $0 }
-                )) {
-                    ForEach(BridalTablePolicy.allCases) { policy in
-                        Text(policy.label).tag(policy)
-                    }
-                }
-                .pickerStyle(.segmented)
+                Toggle("Trauzeugen / Brautjungfern", isOn: Binding(
+                    get: { bridalIncludeTrauzeugen },
+                    set: { bridalIncludeTrauzeugen = $0 }
+                ))
+                .disabled(bridalManualMode)
 
-                Text(bridalTablePolicy.explanation)
+                Toggle("Eltern beider Seiten", isOn: Binding(
+                    get: { bridalIncludeEltern },
+                    set: { bridalIncludeEltern = $0 }
+                ))
+                .disabled(bridalManualMode)
+
+                Toggle("Geschwister beider Seiten", isOn: Binding(
+                    get: { bridalIncludeGeschwister },
+                    set: { bridalIncludeGeschwister = $0 }
+                ))
+                .disabled(bridalManualMode)
+
+                Divider()
+
+                Toggle("Manuell — keine Auto-Regel", isOn: Binding(
+                    get: { bridalManualMode },
+                    set: { bridalManualMode = $0 }
+                ))
+
+                Text(bridalPolicyExplanation)
                     .font(.system(size: 11.5, design: .rounded))
                     .foregroundStyle(Tokens.Colors.ink3)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var bridalPolicyExplanation: String {
+        if bridalManualMode {
+            return "Keine Auto-Regel — du pinnst selbst wer am Brauttisch sitzt."
+        }
+        var groups: [String] = []
+        if bridalIncludeTrauzeugen { groups.append("Trauzeugen / Brautjungfern") }
+        if bridalIncludeEltern { groups.append("Eltern") }
+        if bridalIncludeGeschwister { groups.append("Geschwister") }
+        if groups.isEmpty {
+            return "Nur das Brautpaar selbst sitzt am Brauttisch. Alle anderen verteilen sich frei."
+        }
+        let suffix = groups.count >= 2 ? " (Brauttafel sollte genug Plätze haben.)" : ""
+        return "\(groups.joined(separator: ", ")) sitzen mit am Brauttisch.\(suffix)"
+    }
+
+    // MARK: - List Columns Card
+
+    private var listColumnsCard: some View {
+        SettingsCard(
+            title: "Gästeliste-Spalten",
+            subtitle: "Welche Spalten sollen in der Gäste-Tabelle angezeigt werden?"
+        ) {
+            VStack(alignment: .leading, spacing: 8) {
+                Toggle("FunFact", isOn: Binding(
+                    get: { funfactVisible },
+                    set: { funfactVisible = $0 }
+                ))
+                Toggle("Tags", isOn: Binding(
+                    get: { tagsVisible },
+                    set: { tagsVisible = $0 }
+                ))
+                Toggle("Seite", isOn: Binding(
+                    get: { seiteVisible },
+                    set: { seiteVisible = $0 }
+                ))
+                Toggle("Tisch", isOn: Binding(
+                    get: { tischVisible },
+                    set: { tischVisible = $0 }
+                ))
+                Toggle("Menü", isOn: Binding(
+                    get: { menuVisible },
+                    set: { menuVisible = $0 }
+                ))
             }
         }
     }

@@ -69,6 +69,7 @@ struct TagListView: View {
                                     Circle()
                                         .fill(Color(hex: tag.color))
                                         .frame(width: 10, height: 10)
+                                        .saturation(tag.isActive ? 1.0 : 0.3)
                                     Text(tag.name)
                                         .foregroundStyle(.primary)
                                     if let pa = tag.partnerAssignment {
@@ -78,10 +79,21 @@ struct TagListView: View {
                                     Text("\(tag.guestCount)")
                                         .foregroundStyle(.secondary)
                                         .font(.caption)
+                                    Button {
+                                        tag.isActive.toggle()
+                                    } label: {
+                                        Image(systemName: tag.isActive ? "checkmark.circle.fill" : "circle.slash")
+                                            .foregroundStyle(tag.isActive ? Tokens.Colors.sage : Tokens.Colors.ink4)
+                                            .font(.system(size: 14))
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .help(tag.isActive ? "Tag deaktivieren" : "Tag aktivieren")
                                 }
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
+                            .opacity(tag.isActive ? 1.0 : 0.45)
+                            .saturation(tag.isActive ? 1.0 : 0.4)
                             .listRowBackground(selectedTag?.id == tag.id ? Color.accentColor.opacity(0.2) : nil)
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                 Button(role: .destructive) {

@@ -9,6 +9,23 @@ enum RSVPStatus: String, Codable, CaseIterable, Sendable {
     case declined = "Abgesagt"
 }
 
+enum Gender: String, Codable, CaseIterable, Sendable, Identifiable {
+    case unspecified = "—"
+    case male = "m"
+    case female = "w"
+    case diverse = "d"
+
+    var id: String { rawValue }
+    var displayName: String {
+        switch self {
+        case .unspecified: "Ohne Angabe"
+        case .male: "Männlich (m)"
+        case .female: "Weiblich (w)"
+        case .diverse: "Divers (d)"
+        }
+    }
+}
+
 #if canImport(SwiftData)
 @Model
 #endif
@@ -40,6 +57,18 @@ final class Guest {
     /// zu unzuverlässig (zwei Horst Maiers sind nicht dieselbe Person).
     var sourceID: String = ""
     var sourceEmail: String = ""
+    /// Vom User (oder per KI-Check) bestätigt dass der FunFact „gut" ist
+    /// — d.h. konkret, persönlich, zum Vorlesen am Brauttisch geeignet.
+    /// Default false: noch unbestätigt. Wird beim Filter „FunFact ok"
+    /// und beim Export „Liste unbestätigter FunFacts" ausgewertet.
+    var funFactApproved: Bool = false
+    var phoneNumber: String = ""
+    var title: String = ""
+    var genderRaw: String = ""
+    var gender: Gender {
+        get { Gender(rawValue: genderRaw) ?? .unspecified }
+        set { genderRaw = newValue == .unspecified ? "" : newValue.rawValue }
+    }
 
     init(
         firstName: String,
@@ -82,6 +111,7 @@ final class Guest {
         self.seatIndex = nil
         self.sourceID = sourceID
         self.sourceEmail = sourceEmail
+        self.funFactApproved = false
     }
 
     var fullName: String {

@@ -45,6 +45,17 @@ struct TagDetailView: View {
                 }
             }
 
+            Section {
+                Toggle("Tag aktiv", isOn: $tag.isActive)
+                if !tag.isActive {
+                    Text("Inaktive Tags fließen nicht in den Sitzplan-Algorithmus oder die KI ein.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } header: {
+                Text("Status")
+            }
+
             Section("Mitglieder (\(memberGuests.count))") {
                 if memberGuests.isEmpty {
                     Text("Noch keine Gäste in diesem Tag")

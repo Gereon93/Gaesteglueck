@@ -13,20 +13,20 @@ struct CoPilotResponse: Sendable {
 }
 
 struct SitzplanCoPilot {
-    let client: LMStudioClient
+    let client: LLMClient
 
     func ask(
         userMessage: String,
         history: [ChatMessage],
         saalContext: String
     ) async throws -> CoPilotResponse {
-        var messages: [LMStudioClient.Message] = [
-            LMStudioClient.Message(role: "system", content: Self.systemPrompt + "\n\n" + saalContext)
+        var messages: [LLMMessage] = [
+            LLMMessage(role: "system", content: Self.systemPrompt + "\n\n" + saalContext)
         ]
         for h in history {
-            messages.append(LMStudioClient.Message(role: h.role, content: h.content))
+            messages.append(LLMMessage(role: h.role, content: h.content))
         }
-        messages.append(LMStudioClient.Message(role: "user", content: userMessage))
+        messages.append(LLMMessage(role: "user", content: userMessage))
 
         let raw = try await client.chat(messages: messages, temperature: 0.2, maxTokens: 4000)
         return parseResponse(raw)

@@ -9,7 +9,6 @@ struct SitzplanCoPilotPanel: View {
     @Query private var tags: [Tag]
     @Query private var constraints: [Constraint]
     @Query private var events: [Event]
-    @AppStorage("lmStudioEndpoint") private var lmStudioEndpoint = "http://localhost:1234"
 
     @State private var messages: [ChatMessage] = []
     @State private var inputText: String = ""
@@ -172,7 +171,7 @@ struct SitzplanCoPilotPanel: View {
         let context = buildSaalContext()
         let history = Array(messages.dropLast())
 
-        let client = LMStudioClient(endpoint: lmStudioEndpoint)
+        let client = LLMClientFactory.makeFromSettings()
         let pilot = SitzplanCoPilot(client: client)
         do {
             let response = try await pilot.ask(userMessage: trimmed, history: history, saalContext: context)

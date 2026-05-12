@@ -2,10 +2,9 @@
 import Foundation
 import AppKit
 
-/// Erzeugt druckfertige Tischkarten als A4-PDF — 8 Karten pro Seite,
-/// 2 Spalten × 4 Reihen. Pro Karte: Vor- und Nachname groß, optional
-/// Fun Fact darunter in kleinerer kursiver Schrift. Eckmarken zum
-/// Schneiden mit Cuttermesser oder Papierschneider.
+/// Tent-Card-Tischkarten als A4-PDF: 4 pro Seite, untere Haelfte normal,
+/// obere Haelfte um 180° gedreht — nach Falten entlang der Mittellinie
+/// steht die Karte mit Namen auf beiden Seiten lesbar.
 enum TableCardExporter {
     static func sortedByFullName(_ guests: [Guest]) -> [Guest] {
         guests.sorted { $0.fullName.localizedCompare($1.fullName) == .orderedAscending }
@@ -13,11 +12,11 @@ enum TableCardExporter {
 
     private static let pageRect = CGRect(x: 0, y: 0, width: 595, height: 842)
     private static let cols: Int = 2
-    private static let rows: Int = 4
-    private static let cardsPerPage: Int = 8
+    private static let rows: Int = 2
+    private static let cardsPerPage: Int = 4
     private static let marginX: CGFloat = 30
     private static let marginY: CGFloat = 40
-    private static let gutter: CGFloat = 10
+    private static let gutter: CGFloat = 14
 
     private static var cardSize: CGSize {
         let w = (pageRect.width - 2 * marginX - CGFloat(cols - 1) * gutter) / CGFloat(cols)
@@ -91,53 +90,53 @@ enum TableCardExporter {
         let name: String = (withTitle && !title.isEmpty)
             ? "\(title) \(guest.fullName)"
             : guest.fullName
-        let nameFont = NSFont.systemFont(ofSize: 22, weight: .semibold)
+
+        let halfHeight = size.height / 2
+        let foldY = originY + halfHeight
+
+        let bottomHalf = CGRect(x: originX, y: foldY, width: size.width, height: halfHeight)
+        drawCardFace(context: context, name: name, in: bottomHalf)
+
+        let topHalf = CGRect(x: originX, y: originY, width: size.width, height: halfHeight)
+        context.saveGState()
+        context.translateBy(x: topHalf.midX, y: topHalf.midY)
+        context.rotate(by: .pi)
+        let rotatedFrame = CGRect(x: -topHalf.width / 2, y: -topHalf.height / 2,
+                                  width: topHalf.width, height: topHalf.height)
+        drawCardFace(context: context, name: name, in: rotatedFrame)
+        context.restoreGState()
+
+        drawFoldLine(context: context, from: CGPoint(x: originX + 8, y: foldY),
+                     to: CGPoint(x: originX + size.width - 8, y: foldY))
+    }
+
+    private static func drawCardFace(context: CGContext, name: String, in rect: CGRect) {
+        let nameFont = NSFont.systemFont(ofSize: 26, weight: .semibold)
         let nameSize = (name as NSString).size(withAttributes: [.font: nameFont])
-        let nameX = originX + (size.width - nameSize.width) / 2
-        let nameY = originY + size.height / 2 - nameSize.height
+        let nameX = rect.minX + (rect.width - nameSize.width) / 2
+        let nameY = rect.minY + (rect.height - nameSize.height) / 2 - 6
         drawText(name, at: CGPoint(x: nameX, y: nameY), font: nameFont)
 
+        let accentLength: CGFloat = 44
         let accentY = nameY + nameSize.height + 12
-        let accentLineLength: CGFloat = 40
         context.saveGState()
         context.setStrokeColor(NSColor(calibratedRed: 0.78, green: 0.47, blue: 0.55, alpha: 1).cgColor)
         context.setLineWidth(1.2)
-        context.move(to: CGPoint(x: originX + (size.width - accentLineLength) / 2, y: accentY))
-        context.addLine(to: CGPoint(x: originX + (size.width + accentLineLength) / 2, y: accentY))
+        context.move(to: CGPoint(x: rect.midX - accentLength / 2, y: accentY))
+        context.addLine(to: CGPoint(x: rect.midX + accentLength / 2, y: accentY))
         context.strokePath()
         context.restoreGState()
+    }
 
-        let funFact = guest.funFact
-        if !funFact.isEmpty {
-            let factFont = NSFont(descriptor: NSFont.systemFont(ofSize: 11).fontDescriptor.withSymbolicTraits(.italic), size: 11) ?? NSFont.systemFont(ofSize: 11)
-            let attrs: [NSAttributedString.Key: Any] = [
-                .font: factFont,
-                .foregroundColor: PDFColors.secondary
-            ]
-            let factRect = CGRect(
-                x: originX + 16,
-                y: accentY + 8,
-                width: size.width - 32,
-                height: size.height - (accentY - originY) - 24
-            )
-            let para = NSMutableParagraphStyle()
-            para.alignment = .center
-            para.lineBreakMode = .byTruncatingTail
-            var combined = attrs
-            combined[.paragraphStyle] = para
-            (funFact as NSString).draw(in: factRect, withAttributes: combined)
-        }
-
-        let footerFont = NSFont.systemFont(ofSize: 7)
-        let footerAttrs: [NSAttributedString.Key: Any] = [
-            .font: footerFont,
-            .foregroundColor: PDFColors.tertiary
-        ]
-        let footerSize = (eventName as NSString).size(withAttributes: footerAttrs)
-        (eventName as NSString).draw(
-            at: CGPoint(x: originX + (size.width - footerSize.width) / 2, y: originY + size.height - 14),
-            withAttributes: footerAttrs
-        )
+    private static func drawFoldLine(context: CGContext, from start: CGPoint, to end: CGPoint) {
+        context.saveGState()
+        context.setStrokeColor(PDFColors.tertiary.cgColor)
+        context.setLineWidth(0.4)
+        context.setLineDash(phase: 0, lengths: [3, 3])
+        context.move(to: start)
+        context.addLine(to: end)
+        context.strokePath()
+        context.restoreGState()
     }
 
     private static func drawCropMarks(context: CGContext, origin: CGPoint, size: CGSize) {

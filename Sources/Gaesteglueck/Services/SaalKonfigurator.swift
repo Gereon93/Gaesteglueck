@@ -67,7 +67,7 @@ struct SaalProposal: Sendable, Equatable {
 }
 
 struct SaalKonfigurator {
-    let client: LMStudioClient
+    let client: LLMClient
 
     func propose(
         inventory: SaalInventar,
@@ -83,8 +83,8 @@ struct SaalKonfigurator {
         )
         let raw = try await client.chat(
             messages: [
-                LMStudioClient.Message(role: "system", content: Self.systemPrompt),
-                LMStudioClient.Message(role: "user", content: userPrompt)
+                LLMMessage(role: "system", content: Self.systemPrompt),
+                LLMMessage(role: "user", content: userPrompt)
             ],
             temperature: 0.3,
             maxTokens: 8000

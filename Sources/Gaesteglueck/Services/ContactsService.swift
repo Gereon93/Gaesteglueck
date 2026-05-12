@@ -6,6 +6,7 @@ struct ContactMatch: Identifiable, Hashable, Sendable {
     let id: String
     let givenName: String
     let familyName: String
+    let nickname: String
     let organization: String
     let phoneNumbers: [String]
 
@@ -97,6 +98,7 @@ enum ContactsService {
                     id: c.identifier,
                     givenName: c.givenName,
                     familyName: c.familyName,
+                    nickname: c.nickname,
                     organization: c.organizationName,
                     phoneNumbers: c.phoneNumbers.map { $0.value.stringValue }
                 )
@@ -104,6 +106,83 @@ enum ContactsService {
         } catch {
             throw ContactsServiceError.underlying(error)
         }
+    }
+
+    /// Iteriert einmal alle Kontakte und liefert einen Index normalisierte
+    /// Nummer → ContactMatch. Effizient für Batch-Lookups (z.B. Verify-All
+    /// im Export); ein einzelner Lookup über `findByPhone(_:)` enumeriert
+    /// dagegen die komplette Kontakt-Datenbank pro Call.
+    static func indexByPhone() throws -> [String: ContactMatch] {
+        let store = CNContactStore()
+        let keys: [CNKeyDescriptor] = [
+            CNContactGivenNameKey,
+            CNContactMiddleNameKey,
+            CNContactFamilyNameKey,
+            CNContactNicknameKey,
+            CNContactOrganizationNameKey,
+            CNContactPhoneNumbersKey
+        ] as [CNKeyDescriptor]
+
+        let request = CNContactFetchRequest(keysToFetch: keys)
+        var index: [String: ContactMatch] = [:]
+        do {
+            try store.enumerateContacts(with: request) { contact, _ in
+                let match = ContactMatch(
+                    id: contact.identifier,
+                    givenName: contact.givenName,
+                    familyName: contact.familyName,
+                    nickname: contact.nickname,
+                    organization: contact.organizationName,
+                    phoneNumbers: contact.phoneNumbers.map { $0.value.stringValue }
+                )
+                for entry in contact.phoneNumbers {
+                    let key = PhoneFormatter.normalize(entry.value.stringValue)
+                    guard !key.isEmpty else { continue }
+                    if index[key] == nil { index[key] = match }
+                }
+            }
+        } catch {
+            throw ContactsServiceError.underlying(error)
+        }
+        return index
+    }
+
+    static func findByPhone(_ rawPhone: String) throws -> [ContactMatch] {
+        let needle = PhoneFormatter.normalize(rawPhone)
+        guard !needle.isEmpty else { return [] }
+
+        let store = CNContactStore()
+        let keys: [CNKeyDescriptor] = [
+            CNContactGivenNameKey,
+            CNContactMiddleNameKey,
+            CNContactFamilyNameKey,
+            CNContactNicknameKey,
+            CNContactOrganizationNameKey,
+            CNContactPhoneNumbersKey
+        ] as [CNKeyDescriptor]
+
+        let request = CNContactFetchRequest(keysToFetch: keys)
+        var matches: [ContactMatch] = []
+        do {
+            try store.enumerateContacts(with: request) { contact, _ in
+                let hit = contact.phoneNumbers.contains { entry in
+                    PhoneFormatter.normalize(entry.value.stringValue) == needle
+                }
+                if hit {
+                    matches.append(ContactMatch(
+                        id: contact.identifier,
+                        givenName: contact.givenName,
+                        familyName: contact.familyName,
+                        nickname: contact.nickname,
+                        organization: contact.organizationName,
+                        phoneNumbers: contact.phoneNumbers.map { $0.value.stringValue }
+                    ))
+                }
+            }
+        } catch {
+            throw ContactsServiceError.underlying(error)
+        }
+        return matches
     }
 
     private static func nameComponentMatches(_ c: CNContact, needle: String) -> Bool {

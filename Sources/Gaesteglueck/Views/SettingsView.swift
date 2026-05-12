@@ -10,6 +10,9 @@ import AppKit
 /// Event-Daten, Daten.
 struct SettingsView: View {
     @AppStorage("lmStudioEndpoint") private var lmStudioEndpoint = "http://localhost:1234"
+    @AppStorage("llmProvider") private var llmProviderRaw: String = LLMProvider.lmStudio.rawValue
+    @State private var openRouterAPIKey: String = KeychainStore.get(LLMClientFactory.openRouterAPIKeyAccount)
+    @AppStorage("openRouterModel") private var openRouterModel: String = ""
     @AppStorage("accentColorHex") private var accentColorHex = "#c8788c"
     @AppStorage("autoBackup") private var autoBackup = true
     @AppStorage("cacheResponses") private var cacheResponses = true
@@ -37,6 +40,9 @@ struct SettingsView: View {
     @State private var connectedModel: String = ""
     @State private var isTestingConnection = false
     @State private var showingEventSetup = false
+    @State private var openRouterModels: [OpenRouterModel] = []
+    @State private var isLoadingModels: Bool = false
+    @State private var openRouterError: String? = nil
     @State private var resetTarget: ResetTarget? = nil
     @State private var dataActionMessage: String? = nil
     @State private var dataActionMessageIsError: Bool = false
@@ -97,52 +103,32 @@ struct SettingsView: View {
 
     // MARK: - KI Card
 
+    private var llmProvider: LLMProvider {
+        LLMProvider(rawValue: llmProviderRaw) ?? .lmStudio
+    }
+
     private var aiCard: some View {
         SettingsCard(
-            title: "Lokale KI",
-            subtitle: "Deine Gästeliste verlässt nie den Mac. Wir sprechen nur mit LM Studio auf dieser Maschine."
+            title: "KI-Anbieter",
+            subtitle: aiCardSubtitle
         ) {
             VStack(spacing: 10) {
-                SettingsRow(label: "Status") {
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(connectionDotColor)
-                            .frame(width: 8, height: 8)
-                        Text(connectionLabel)
-                            .font(.system(size: 12.5, weight: .medium, design: .rounded))
-                            .foregroundStyle(connectionDotColor)
-                    }
-                }
-                SettingsRow(label: "Endpoint") {
-                    HStack(spacing: 8) {
-                        TextField("http://localhost:1234", text: $lmStudioEndpoint)
-                            .textFieldStyle(.plain)
-                            .font(Tokens.Typography.mono)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 5)
-                            .background(Tokens.Colors.surface)
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                    .strokeBorder(Tokens.Colors.line2, lineWidth: 1)
-                            }
-                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                            .frame(maxWidth: 240)
-                        Button {
-                            Task { await checkConnection() }
-                        } label: {
-                            Image(systemName: "arrow.clockwise")
-                                .font(.system(size: 11))
+                SettingsRow(label: "LLM-Provider") {
+                    Picker("", selection: $llmProviderRaw) {
+                        ForEach(LLMProvider.allCases) { p in
+                            Text(p.displayName).tag(p.rawValue)
                         }
-                        .warmButton(.ghost, size: .sm)
                     }
+                    .labelsHidden()
+                    .frame(maxWidth: 240, alignment: .leading)
                 }
-                if !connectedModel.isEmpty {
-                    SettingsRow(label: "Modell") {
-                        Text(connectedModel)
-                            .font(Tokens.Typography.mono)
-                            .foregroundStyle(Tokens.Colors.ink)
-                    }
+
+                if llmProvider == .lmStudio {
+                    lmStudioRows
+                } else {
+                    openRouterRows
                 }
+
                 SettingsRow(label: "Antworten zwischenspeichern") {
                     GGToggle(isOn: $cacheResponses)
                 }
@@ -150,6 +136,134 @@ struct SettingsView: View {
                     GGToggle(isOn: $algorithmFallback)
                 }
             }
+        }
+    }
+
+    private var aiCardSubtitle: String {
+        switch llmProvider {
+        case .lmStudio:
+            return "Deine Gästeliste verlässt nie den Mac. Wir sprechen nur mit LM Studio auf dieser Maschine."
+        case .openRouter:
+            return "OpenRouter ruft Modelle über die Cloud auf. Daten verlassen den Mac — nur nutzen, wenn das ok ist."
+        }
+    }
+
+    @ViewBuilder
+    private var lmStudioRows: some View {
+        SettingsRow(label: "Status") {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(connectionDotColor)
+                    .frame(width: 8, height: 8)
+                Text(connectionLabel)
+                    .font(.system(size: 12.5, weight: .medium, design: .rounded))
+                    .foregroundStyle(connectionDotColor)
+            }
+        }
+        SettingsRow(label: "Endpoint") {
+            HStack(spacing: 8) {
+                TextField("http://localhost:1234", text: $lmStudioEndpoint)
+                    .textFieldStyle(.plain)
+                    .font(Tokens.Typography.mono)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(Tokens.Colors.surface)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .strokeBorder(Tokens.Colors.line2, lineWidth: 1)
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .frame(maxWidth: 240)
+                Button {
+                    Task { await checkConnection() }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 11))
+                }
+                .warmButton(.ghost, size: .sm)
+            }
+        }
+        if !connectedModel.isEmpty {
+            SettingsRow(label: "Modell") {
+                Text(connectedModel)
+                    .font(Tokens.Typography.mono)
+                    .foregroundStyle(Tokens.Colors.ink)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var openRouterRows: some View {
+        SettingsRow(label: "API-Key") {
+            SecureField("sk-or-…", text: $openRouterAPIKey)
+                .textFieldStyle(.plain)
+                .font(Tokens.Typography.mono)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .background(Tokens.Colors.surface)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .strokeBorder(Tokens.Colors.line2, lineWidth: 1)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .onChange(of: openRouterAPIKey) { _, newValue in
+                    KeychainStore.set(newValue, for: LLMClientFactory.openRouterAPIKeyAccount)
+                }
+                .frame(maxWidth: 320)
+        }
+        SettingsRow(label: "Modell") {
+            HStack(spacing: 8) {
+                if openRouterModels.isEmpty {
+                    Text(openRouterModel.isEmpty ? "Noch keine Modelle geladen" : openRouterModel)
+                        .font(Tokens.Typography.mono)
+                        .foregroundStyle(openRouterModel.isEmpty ? Tokens.Colors.ink3 : Tokens.Colors.ink)
+                } else {
+                    Picker("", selection: $openRouterModel) {
+                        Text("— wählen —").tag("")
+                        ForEach(openRouterModels) { m in
+                            Text(m.name).tag(m.id)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(maxWidth: 320, alignment: .leading)
+                }
+                Button {
+                    Task { await loadOpenRouterModels() }
+                } label: {
+                    if isLoadingModels {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Text("Modelle laden")
+                    }
+                }
+                .warmButton(.secondary, size: .sm)
+                .disabled(openRouterAPIKey.isEmpty || isLoadingModels)
+            }
+        }
+        if let openRouterError {
+            SettingsRow(label: "") {
+                Text(openRouterError)
+                    .font(.system(size: 11.5, design: .rounded))
+                    .foregroundStyle(Tokens.Colors.warn)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    @MainActor
+    private func loadOpenRouterModels() async {
+        openRouterError = nil
+        isLoadingModels = true
+        defer { isLoadingModels = false }
+        do {
+            let models = try await OpenRouterModelsAPI.listModels(apiKey: openRouterAPIKey)
+            openRouterModels = models
+            // Aktuelle Auswahl beibehalten falls noch in der Liste, sonst leeren
+            if !openRouterModel.isEmpty, !models.contains(where: { $0.id == openRouterModel }) {
+                openRouterModel = ""
+            }
+        } catch {
+            openRouterError = error.localizedDescription
         }
     }
 

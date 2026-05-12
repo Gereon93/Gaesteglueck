@@ -3,6 +3,9 @@ import SwiftUI
 import SwiftData
 
 struct GoogleSheetsImportButton: View {
+    @Query private var events: [Event]
+    private var event: Event? { events.first }
+
     @State private var showingDialog = false
     @State private var sheetURL: String = ""
     @State private var isLoading = false
@@ -10,11 +13,42 @@ struct GoogleSheetsImportButton: View {
     @State private var parsedRows: [RegistrationRow]?
     @State private var importedCount: Int?
 
+    private var savedURL: String {
+        event?.googleSheetURL.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
     var body: some View {
-        Button {
-            showingDialog = true
-        } label: {
-            Label("Aus Google Sheets", systemImage: "link")
+        Group {
+            if savedURL.isEmpty {
+                Button {
+                    showingDialog = true
+                } label: {
+                    Label("Aus Google Sheets", systemImage: "link")
+                }
+            } else {
+                HStack(spacing: 4) {
+                    Button {
+                        Task { await refreshFromSavedURL() }
+                    } label: {
+                        Label("Aus Sheet aktualisieren", systemImage: "arrow.clockwise")
+                    }
+                    .disabled(isLoading)
+                    Menu {
+                        Button("Link anzeigen / ändern…") {
+                            sheetURL = savedURL
+                            showingDialog = true
+                        }
+                        Button("Gespeicherten Link entfernen", role: .destructive) {
+                            event?.googleSheetURL = ""
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                }
+            }
         }
         .sheet(isPresented: $showingDialog) {
             urlInputDialog
@@ -91,16 +125,31 @@ struct GoogleSheetsImportButton: View {
 
     @MainActor
     private func runImport() async {
+        await runImport(url: sheetURL)
+    }
+
+    @MainActor
+    private func refreshFromSavedURL() async {
+        await runImport(url: savedURL)
+    }
+
+    @MainActor
+    private func runImport(url: String) async {
+        let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
         errorMessage = nil
         isLoading = true
         defer { isLoading = false }
 
         let flow = GoogleSheetsImportFlow(importer: .live)
-        await flow.submit(url: sheetURL)
+        let skipped = Set(event?.skippedSourceIDs ?? [])
+        await flow.submit(url: trimmed, skippedSourceIDs: skipped)
         let state = await flow.state
 
         switch state {
         case .preview(let rows):
+            event?.googleSheetURL = trimmed
             showingDialog = false
             parsedRows = rows
             sheetURL = ""

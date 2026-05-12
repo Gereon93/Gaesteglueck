@@ -61,7 +61,7 @@ fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
 .gitnexus
-.claude/settings.local.json
+.claude/
 
 # Echte Hochzeits-Anmeldedaten (Privatsphäre — gehören nicht in den Repo)
 *.csv

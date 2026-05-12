@@ -10,7 +10,6 @@ struct SaalKonfiguratorView: View {
     @Query private var constraints: [Constraint]
     @Query private var existingTables: [GuestTable]
     @Query private var events: [Event]
-    @AppStorage("lmStudioEndpoint") private var lmStudioEndpoint = "http://localhost:1234"
 
     @State private var inventory = SaalInventar()
     @State private var proposal: SaalProposal?
@@ -463,12 +462,14 @@ struct SaalKonfiguratorView: View {
         isGenerating = true
         defer { isGenerating = false }
 
-        let client = LMStudioClient(endpoint: lmStudioEndpoint)
-        do {
-            _ = try await client.checkConnection()
-        } catch {
-            errorMessage = "LM Studio nicht erreichbar — bitte starten und Modell laden."
-            return
+        let client = LLMClientFactory.makeFromSettings()
+        if let lm = client as? LMStudioClient {
+            do {
+                _ = try await lm.checkConnection()
+            } catch {
+                errorMessage = "LM Studio nicht erreichbar — bitte starten und Modell laden."
+                return
+            }
         }
 
         let clusterContext = GroupAnalyzer.buildLLMContext(
@@ -512,7 +513,7 @@ struct SaalKonfiguratorView: View {
         defer { isAssigning = false }
 
         let plannerTables = mergedTables(existing: existingTables, created: createdTables)
-        let client = LMStudioClient(endpoint: lmStudioEndpoint)
+        let client = LLMClientFactory.makeFromSettings()
         let context = LLMSeatingPlanner.PlannerContext(
             guests: guests,
             tables: plannerTables,

@@ -13,22 +13,32 @@ actor GoogleSheetsImportFlow {
 
     private(set) var state: State = .idle
     private(set) var stateHistory: [State] = [.idle]
+    private(set) var lastBackupURL: URL?
 
     private let importer: GoogleSheetsImporter
+    private let saveBackup: @Sendable (String, String) -> URL?
 
-    init(importer: GoogleSheetsImporter) {
+    init(
+        importer: GoogleSheetsImporter,
+        saveBackup: @Sendable @escaping (String, String) -> URL? = SheetBackupStore.saveCSV
+    ) {
         self.importer = importer
+        self.saveBackup = saveBackup
     }
 
-    func submit(url input: String) async {
+    func submit(url input: String, skippedSourceIDs: Set<String> = []) async {
         setState(.loading)
         do {
             let csv = try await importer.fetchCSV(from: input)
-            let rows = try CSVParser.parseRegistrations(csv)
-            guard !rows.isEmpty else {
+            lastBackupURL = saveBackup(csv, input)
+            let parsed = try CSVParser.parseRegistrations(csv)
+            guard !parsed.isEmpty else {
                 setState(.error("Aus dieser Antwort konnten wir keine Anmeldungen lesen. Ist das Sheet öffentlich freigegeben (Jeder mit dem Link kann ansehen)?"))
                 return
             }
+            let rows = skippedSourceIDs.isEmpty
+                ? parsed
+                : parsed.filter { !skippedSourceIDs.contains($0.sourceID) }
             setState(.preview(rows))
         } catch let error as GoogleSheetsImportError {
             setState(.error(error.errorDescription ?? "Unbekannter Fehler."))

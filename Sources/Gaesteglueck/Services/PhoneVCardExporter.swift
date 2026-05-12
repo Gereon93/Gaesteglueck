@@ -22,7 +22,7 @@ enum PhoneVCardExporter {
         let last = escape(guest.lastName)
         let first = escape(guest.firstName)
         let fn = escape(guest.fullName)
-        let tel = guest.phoneNumber.trimmingCharacters(in: .whitespaces)
+        let tel = PhoneFormatter.display(guest.phoneNumber)
         let group = escape(groupName)
         let lines: [String] = [
             "BEGIN:VCARD",

@@ -12,7 +12,6 @@ struct TagGeneratorView: View {
     @Query(sort: \Guest.firstName) private var guests: [Guest]
     @Query private var existingTags: [Tag]
     @Query private var events: [Event]
-    @AppStorage("lmStudioEndpoint") private var lmStudioEndpoint = "http://localhost:1234"
 
     @State private var partner1Hint = ""
     @State private var partner2Hint = ""
@@ -433,14 +432,16 @@ struct TagGeneratorView: View {
 
         // Schritt 2 (optional): KI nutzt die Tags + Gästeliste um Mitglieder zuzuordnen
         if useAIForAssignment, !guests.isEmpty {
-            let client = LMStudioClient(endpoint: lmStudioEndpoint)
-            do {
-                _ = try await client.checkConnection()
-            } catch {
-                proposals = localResult
-                hasGenerated = true
-                errorMessage = "Tags lokal erstellt — KI-Zuordnung übersprungen (LM Studio nicht erreichbar)."
-                return
+            let client = LLMClientFactory.makeFromSettings()
+            if let lm = client as? LMStudioClient {
+                do {
+                    _ = try await lm.checkConnection()
+                } catch {
+                    proposals = localResult
+                    hasGenerated = true
+                    errorMessage = "Tags lokal erstellt — KI-Zuordnung übersprungen (LM Studio nicht erreichbar)."
+                    return
+                }
             }
             let service = TagSuggestionService(client: client)
             let snapshots = snapshotsForLocal

@@ -132,7 +132,7 @@ enum FunFactValidator {
     @MainActor
     static func validateBatch(
         guests: [Guest],
-        client: LMStudioClient
+        client: LLMClient
     ) async throws -> [Result] {
         var results: [Result] = []
 

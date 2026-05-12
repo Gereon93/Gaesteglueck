@@ -12,6 +12,7 @@ struct GaesteglueckApp: App {
     let container: ModelContainer
 
     init() {
+        LLMClientFactory.migrateAPIKeyToKeychainIfNeeded()
         do {
             self.container = try Self.makeContainer()
         } catch {

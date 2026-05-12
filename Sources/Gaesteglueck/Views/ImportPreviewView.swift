@@ -132,6 +132,7 @@ struct ImportPreviewView: View {
                                     },
                                     onSkip: {
                                         skippedIndices.insert(i)
+                                        persistSkip(rowIndex: i)
                                     }
                                 )
                             }
@@ -166,6 +167,9 @@ struct ImportPreviewView: View {
                 .warmButton(.ghost)
             Button("Alle überspringen") {
                 skippedIndices = Set(rows.indices)
+                for i in rows.indices {
+                    persistSkip(rowIndex: i)
+                }
                 finalize()
             }
             .warmButton(.secondary)
@@ -256,7 +260,13 @@ struct ImportPreviewView: View {
         }
 
         let endpoint = lmStudioEndpoint
-        let isOnline = await Self.checkLMStudioReachable(endpoint: endpoint)
+        let provider = LLMClientFactory.providerFromSettings()
+        let isOnline: Bool
+        if provider == .lmStudio {
+            isOnline = await Self.checkLMStudioReachable(endpoint: endpoint)
+        } else {
+            isOnline = true
+        }
         await MainActor.run {
             llmReachable = isOnline
         }
@@ -282,7 +292,7 @@ struct ImportPreviewView: View {
         var globalIndex = 0
         for chunk in chunks {
             let startIndex = globalIndex
-            let states = await Self.parseBatch(chunk: chunk, endpoint: endpoint, originalStartIndex: startIndex)
+            let states = await Self.parseBatch(chunk: chunk, originalStartIndex: startIndex)
             await MainActor.run {
                 for (offset, state) in states.enumerated() {
                     rowStates[startIndex + offset] = state
@@ -297,14 +307,14 @@ struct ImportPreviewView: View {
     /// Schickt einen Chunk aus 1-N Anmeldungen als ein einziges Batch-Prompt
     /// an die KI. Wenn das Parsen scheitert oder einzelne Zeilen fehlen, fällt
     /// jede betroffene Zeile auf Per-Row-Parsing bzw. den Regex-Fallback zurück.
-    private static func parseBatch(chunk: [RegistrationRow], endpoint: String, originalStartIndex: Int) async -> [RowState] {
+    private static func parseBatch(chunk: [RegistrationRow], originalStartIndex: Int) async -> [RowState] {
         guard !chunk.isEmpty else { return [] }
-        let client = LMStudioClient(endpoint: endpoint)
+        let client = LLMClientFactory.makeFromSettings()
         let userPrompt = LLMGuestParser.buildBatchPrompt(rows: chunk)
         do {
             let response = try await client.chat(messages: [
-                LMStudioClient.Message(role: "system", content: LLMGuestParser.batchSystemPrompt),
-                LMStudioClient.Message(role: "user", content: userPrompt),
+                LLMMessage(role: "system", content: LLMGuestParser.batchSystemPrompt),
+                LLMMessage(role: "user", content: userPrompt),
             ], temperature: 0.2, maxTokens: 4096)
 
             let parsed = try LLMGuestParser.parseBatchResponse(response, rows: chunk)
@@ -320,7 +330,7 @@ struct ImportPreviewView: View {
                     }
                 } else {
                     // Diese Zeile fehlt im Batch — Per-Row als Backup
-                    let single = await parseSingle(row: row, endpoint: endpoint)
+                    let single = await parseSingle(row: row)
                     result.append(single)
                 }
             }
@@ -329,7 +339,7 @@ struct ImportPreviewView: View {
             // Ganzer Batch hat versagt — pro Zeile Per-Row-Fallback
             var result: [RowState] = []
             for row in chunk {
-                let single = await parseSingle(row: row, endpoint: endpoint)
+                let single = await parseSingle(row: row)
                 result.append(single)
             }
             return result
@@ -352,13 +362,13 @@ struct ImportPreviewView: View {
         }
     }
 
-    private static func parseSingle(row: RegistrationRow, endpoint: String) async -> RowState {
-        let client = LMStudioClient(endpoint: endpoint)
+    private static func parseSingle(row: RegistrationRow) async -> RowState {
+        let client = LLMClientFactory.makeFromSettings()
         let userPrompt = LLMGuestParser.buildPrompt(for: row)
         do {
             let response = try await client.chat(messages: [
-                LMStudioClient.Message(role: "system", content: LLMGuestParser.systemPrompt),
-                LMStudioClient.Message(role: "user", content: userPrompt),
+                LLMMessage(role: "system", content: LLMGuestParser.systemPrompt),
+                LLMMessage(role: "user", content: userPrompt),
             ], temperature: 0.2, maxTokens: 2048)
             let parsed = try LLMGuestParser.parseResponse(response, expectedCount: row.guestCount)
             let padded = LLMGuestParser.ensureCount(parsed, expected: row.guestCount, familyName: row.familyName)
@@ -469,6 +479,16 @@ struct ImportPreviewView: View {
 
     @Query private var existingGuests: [Guest]
     @Query(sort: \Tag.name) private var existingTags: [Tag]
+    @Query private var allEvents: [Event]
+    private var currentEvent: Event? { allEvents.first }
+
+    private func persistSkip(rowIndex: Int) {
+        let sourceID = rows[rowIndex].sourceID
+        guard !sourceID.isEmpty, let event = currentEvent else { return }
+        if !event.skippedSourceIDs.contains(sourceID) {
+            event.skippedSourceIDs.append(sourceID)
+        }
+    }
 
     private func attachTag(named name: String, to guest: Guest) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -3,7 +3,7 @@ import Foundation
 import FoundationNetworking
 #endif
 
-actor LMStudioClient {
+actor LMStudioClient: LLMClient {
     let endpoint: String
     private var modelOverride: String?
 
@@ -12,10 +12,7 @@ actor LMStudioClient {
         self.modelOverride = model
     }
 
-    struct Message: Codable, Sendable {
-        let role: String
-        let content: String
-    }
+    typealias Message = LLMMessage
 
     struct ChatRequest: Codable, Sendable {
         let model: String

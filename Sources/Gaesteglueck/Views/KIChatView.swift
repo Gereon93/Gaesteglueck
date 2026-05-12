@@ -285,13 +285,12 @@ struct KIChatView: View {
 
         messages.append(ChatMessage(role: "user", content: trimmed))
 
-        let allMessages: [LMStudioClient.Message] = [
-            LMStudioClient.Message(role: "system", content: systemContext)
-        ] + messages.map { LMStudioClient.Message(role: $0.role, content: $0.content) }
+        let allMessages: [LLMMessage] = [
+            LLMMessage(role: "system", content: systemContext)
+        ] + messages.map { LLMMessage(role: $0.role, content: $0.content) }
 
-        let endpoint = lmStudioEndpoint
         currentTask = Task {
-            let client = LMStudioClient(endpoint: endpoint)
+            let client = LLMClientFactory.makeFromSettings()
             do {
                 let reply = try await client.chat(messages: allMessages)
                 if Task.isCancelled { return }

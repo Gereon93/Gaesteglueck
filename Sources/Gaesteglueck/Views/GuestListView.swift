@@ -43,7 +43,6 @@ struct GuestListView: View {
     @State private var contactPickerGuest: Guest?
     @State private var contactPickerMatches: [ContactMatch] = []
     @State private var contactErrorMessage: String?
-    @AppStorage("lmStudioEndpoint") private var lmStudioEndpoint = "http://localhost:1234"
 
     // Spalten-Breiten — per Drag-Handle im Header verstellbar, persistent.
     @AppStorage("guestlist.col.name") private var colNameWidth: Double = 220
@@ -391,6 +390,10 @@ struct GuestListView: View {
                 }
                 Button("Als CSV / Excel exportieren") {
                     exportFunFactWorklist(format: .csv)
+                }
+                Divider()
+                Button("Erinnerungstexte (CSV) — versandfertig") {
+                    exportFunFactWorklist(format: .reminderCSV)
                 }
             } label: {
                 HStack(spacing: 4) {
@@ -1454,7 +1457,7 @@ struct GuestListView: View {
         }.count
     }
 
-    private enum FunFactExportFormat { case pdf, csv }
+    private enum FunFactExportFormat { case pdf, csv, reminderCSV }
 
     /// Exportiert die Liste aller Gäste mit fehlendem oder unbestätigtem
     /// FunFact — pro Gast Vor- und Nachname, derzeitiger FunFact, Status.
@@ -1484,6 +1487,10 @@ struct GuestListView: View {
             data = FunFactWorklistCSVExporter.generateCSV(guests: pending)
             suggestedName = "FunFact-Liste.csv"
             contentType = .commaSeparatedText
+        case .reminderCSV:
+            data = FunFactReminderCSVExporter.generateCSV(guests: pending, event: events.first)
+            suggestedName = "FunFact-Erinnerungen.csv"
+            contentType = .commaSeparatedText
         }
 
         let panel = NSSavePanel()
@@ -1506,7 +1513,7 @@ struct GuestListView: View {
                 funFactCheckResult = "Alle FunFacts sind bereits bestaetigt."
                 return
             }
-            let client = LMStudioClient(endpoint: lmStudioEndpoint)
+            let client = LLMClientFactory.makeFromSettings()
             do {
                 let results = try await FunFactValidator.validateBatch(guests: candidates, client: client)
                 var goodCount = 0

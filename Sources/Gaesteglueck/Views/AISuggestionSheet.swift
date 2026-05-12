@@ -9,7 +9,6 @@ import SwiftData
 struct AISuggestionSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-    @AppStorage("lmStudioEndpoint") private var lmStudioEndpoint = "http://localhost:1234"
     @Query(sort: \Guest.firstName) private var guests: [Guest]
     @Query private var tables: [GuestTable]
     @Query private var tags: [Tag]
@@ -267,7 +266,7 @@ struct AISuggestionSheet: View {
             tags: tags,
             constraints: constraints
         )
-        let client = LMStudioClient(endpoint: lmStudioEndpoint)
+        let client = LLMClientFactory.makeFromSettings()
         do {
             let proposal = try await LLMSeatingPlanner.requestPlan(client: client, context: context)
             state = .ready(proposal)

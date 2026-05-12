@@ -13,11 +13,10 @@ enum VisualSeatingPlanExporter {
     private static let titleAreaHeight: CGFloat = 80
     private static let canvasMargin: CGFloat = 40
 
-    // Seat dot
-    private static let seatDotDiameter: CGFloat = 8
-    private static let dietDotDiameter: CGFloat = 5
-    private static let nameFontSize: CGFloat = 9
-    private static let nameOffset: CGFloat = 6   // gap from seat dot edge to name
+    private static let baseSeatDotDiameter: CGFloat = 8
+    private static let baseDietDotDiameter: CGFloat = 5
+    private static let baseNameFontSize: CGFloat = 9
+    private static let baseNameOffset: CGFloat = 6
 
     // Colors
     private static let veganColor   = NSColor(srgbRed: 0.35, green: 0.54, blue: 0.29, alpha: 1)
@@ -27,8 +26,18 @@ enum VisualSeatingPlanExporter {
     private static let tableFill    = NSColor(calibratedWhite: 0.97, alpha: 1)
     private static let accentLine   = NSColor(calibratedRed: 0.78, green: 0.47, blue: 0.55, alpha: 1)
 
-    /// Wird in generatePDF gesetzt und von drawSeat/drawGuestName gelesen.
     nonisolated(unsafe) private static var currentDisplayNames: [UUID: String] = [:]
+    nonisolated(unsafe) private static var currentRenderScale: CGFloat = 1.0
+    /// `currentDisplayNames`/`currentRenderScale` werden während eines Renders
+    /// von Helfern tief im Call-Stack gelesen. Damit parallele Aufrufe nicht
+    /// die Werte gegenseitig überschreiben (race → falsche Skalierung im PNG),
+    /// serialisieren wir die beiden Generate-Methoden über diesen Lock.
+    private static let renderLock = NSLock()
+
+    private static var seatDotDiameter: CGFloat { baseSeatDotDiameter * currentRenderScale }
+    private static var dietDotDiameter: CGFloat { baseDietDotDiameter * currentRenderScale }
+    private static var nameFontSize: CGFloat    { baseNameFontSize * currentRenderScale }
+    private static var nameOffset: CGFloat      { baseNameOffset * currentRenderScale }
 
     /// Erzeugt eine PNG des reinen Sitzplan-Canvas — ohne Header oder
     /// Legende, in hoher Aufloesung. Ideal wenn der User selbst auf
@@ -43,9 +52,15 @@ enum VisualSeatingPlanExporter {
         nameStyle: NameStyle = .smartDeduped,
         pixelsPerCM: CGFloat = 4
     ) -> Data? {
+        renderLock.lock()
+        defer { renderLock.unlock() }
         let allGuests = tables.flatMap(\.guests)
         currentDisplayNames = displayNames(for: allGuests, style: nameStyle)
-        defer { currentDisplayNames = [:] }
+        currentRenderScale = max(1.0, pixelsPerCM / 2)
+        defer {
+            currentDisplayNames = [:]
+            currentRenderScale = 1.0
+        }
 
         let canvasSize = canvasPixelSize(
             tables: tables,
@@ -238,6 +253,8 @@ enum VisualSeatingPlanExporter {
         date: Date?,
         nameStyle: NameStyle = .smartDeduped
     ) -> Data {
+        renderLock.lock()
+        defer { renderLock.unlock() }
         let pageRect = CGRect(x: 0, y: 0, width: pageWidth, height: pageHeight)
         let pdfData = NSMutableData()
         guard let consumer = CGDataConsumer(data: pdfData as CFMutableData),
@@ -483,6 +500,7 @@ enum VisualSeatingPlanExporter {
                 tableCenter: .zero,
                 guest: guest,
                 isDisabled: isDisabled,
+                shape: table.shape,
                 counterRotation: -table.rotation
             )
         }
@@ -553,7 +571,8 @@ enum VisualSeatingPlanExporter {
                 position: localSeatPos,
                 tableCenter: .zero,
                 guest: guest,
-                isDisabled: isDisabled
+                isDisabled: isDisabled,
+                shape: .rectangular
             )
         }
 
@@ -624,6 +643,7 @@ enum VisualSeatingPlanExporter {
         tableCenter: CGPoint,
         guest: Guest?,
         isDisabled: Bool,
+        shape: TableShape,
         displayName: String? = nil,
         counterRotation: Double = 0
     ) {
@@ -685,6 +705,7 @@ enum VisualSeatingPlanExporter {
             guest: guest,
             seatPosition: position,
             tableCenter: tableCenter,
+            shape: shape,
             displayName: displayName,
             counterRotation: counterRotation
         )
@@ -697,6 +718,7 @@ enum VisualSeatingPlanExporter {
         guest: Guest,
         seatPosition: CGPoint,
         tableCenter: CGPoint,
+        shape: TableShape,
         displayName: String? = nil,
         counterRotation: Double = 0
     ) {
@@ -708,34 +730,33 @@ enum VisualSeatingPlanExporter {
 
         let dx = seatPosition.x - tableCenter.x
         let dy = seatPosition.y - tableCenter.y
-        let threshold: CGFloat = 5
-
-        // Direction relativ zur ROTIERTEN Tisch-Form bestimmen — die seat-Positionen
-        // sind im rotierten Koordinatensystem, daher entscheidet der lokale dx/dy
-        // wo der Name hin soll (top/bottom/left/right RELATIV zum Tisch).
-        enum Direction { case top, bottom, left, right }
-        let dir: Direction
-        if abs(dy) > abs(dx) {
-            dir = dy < -threshold ? .top : .bottom
-        } else {
-            dir = dx < -threshold ? .left : .right
-        }
-
         let r = seatDotDiameter / 2
 
-        // Wir zeichnen den Namen in einem temporaer counter-rotierten Sub-Context
-        // — damit der Text immer aufrecht bleibt, egal ob der Tisch rotiert ist.
-        // Anker ist die Sitzposition; der Text wird relativ dazu platziert.
         let anchorOffset: CGPoint
-        switch dir {
-        case .top:
-            anchorOffset = CGPoint(x: -nameSize.width / 2, y: -r - nameOffset - nameSize.height)
-        case .bottom:
-            anchorOffset = CGPoint(x: -nameSize.width / 2, y: r + nameOffset)
-        case .left:
-            anchorOffset = CGPoint(x: -r - nameOffset - nameSize.width, y: -nameSize.height / 2)
-        case .right:
-            anchorOffset = CGPoint(x: r + nameOffset, y: -nameSize.height / 2)
+        if shape == .round {
+            anchorOffset = nameAnchorRadiallyOutward(
+                fromTableCenterDx: dx, dy: dy,
+                textSize: nameSize, seatRadius: r, gap: nameOffset
+            )
+        } else {
+            enum Direction { case top, bottom, left, right }
+            let threshold: CGFloat = 5
+            let dir: Direction
+            if abs(dy) > abs(dx) {
+                dir = dy < -threshold ? .top : .bottom
+            } else {
+                dir = dx < -threshold ? .left : .right
+            }
+            switch dir {
+            case .top:
+                anchorOffset = CGPoint(x: -nameSize.width / 2, y: -r - nameOffset - nameSize.height)
+            case .bottom:
+                anchorOffset = CGPoint(x: -nameSize.width / 2, y: r + nameOffset)
+            case .left:
+                anchorOffset = CGPoint(x: -r - nameOffset - nameSize.width, y: -nameSize.height / 2)
+            case .right:
+                anchorOffset = CGPoint(x: r + nameOffset, y: -nameSize.height / 2)
+            }
         }
 
         context.saveGState()
@@ -749,6 +770,28 @@ enum VisualSeatingPlanExporter {
             ("!" as NSString).draw(at: markerOrigin, withAttributes: markerAttr)
         }
         context.restoreGState()
+    }
+
+    /// Liefert den Text-Origin so, dass die zur Tischmitte zugewandte Kante
+    /// der Text-BBox am Sitz-Außenrand + `gap` sitzt — das Label "fließt"
+    /// vom Sitz radial nach außen.
+    private static func nameAnchorRadiallyOutward(
+        fromTableCenterDx dx: CGFloat,
+        dy: CGFloat,
+        textSize: CGSize,
+        seatRadius: CGFloat,
+        gap: CGFloat
+    ) -> CGPoint {
+        let angle = atan2(dy, dx)
+        let cosA = cos(angle)
+        let sinA = sin(angle)
+        let outerEdgeRadius = seatRadius + gap
+        let halfW = textSize.width / 2
+        let halfH = textSize.height / 2
+        return CGPoint(
+            x: cosA * (outerEdgeRadius + halfW) - halfW,
+            y: sinA * (outerEdgeRadius + halfH) - halfH
+        )
     }
 
     // MARK: - Helpers

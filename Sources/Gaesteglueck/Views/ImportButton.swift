@@ -4,6 +4,9 @@ import SwiftData
 import UniformTypeIdentifiers
 
 struct ImportButton: View {
+    @Query private var events: [Event]
+    private var event: Event? { events.first }
+
     @State private var showingFilePicker = false
     @State private var parsedRows: [RegistrationRow]?
     @State private var importError: String?
@@ -55,15 +58,16 @@ struct ImportButton: View {
                 guard url.startAccessingSecurityScopedResource() else { return }
                 defer { url.stopAccessingSecurityScopedResource() }
 
-                let rows: [RegistrationRow]
+                let parsed: [RegistrationRow]
                 if url.pathExtension.lowercased() == "xlsx" {
                     let data = try Data(contentsOf: url)
-                    rows = try ExcelParser.parseRegistrations(data)
+                    parsed = try ExcelParser.parseRegistrations(data)
                 } else {
                     let content = try String(contentsOf: url, encoding: .utf8)
-                    rows = try CSVParser.parseRegistrations(content)
+                    parsed = try CSVParser.parseRegistrations(content)
                 }
-                parsedRows = rows
+                let skipped = Set(event?.skippedSourceIDs ?? [])
+                parsedRows = skipped.isEmpty ? parsed : parsed.filter { !skipped.contains($0.sourceID) }
             } catch {
                 importError = error.localizedDescription
             }

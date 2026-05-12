@@ -332,7 +332,7 @@ enum LLMSeatingPlanner {
     /// Ask LM Studio for a seating plan and parse it.
     @MainActor
     static func requestPlan(
-        client: LMStudioClient,
+        client: LLMClient,
         context: PlannerContext
     ) async throws -> ProposedAssignment {
         let (userPrompt, guestMap, tableMap) = buildPrompt(from: context)

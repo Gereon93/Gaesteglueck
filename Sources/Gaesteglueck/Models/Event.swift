@@ -30,6 +30,12 @@ final class Event {
     #endif
     var versions: [LayoutVersion] = []
     var activeVersionID: UUID?
+    /// SourceIDs der Anmeldungen, die der User beim Import explizit übersprungen
+    /// hat. Werden bei jedem erneuten Import vor der Vorschau rausgefiltert,
+    /// damit die KI sie nicht nochmal anfasst und der User sie nicht erneut
+    /// wegklicken muss.
+    var skippedSourceIDs: [String] = []
+    var googleSheetURL: String = ""
 
     init(
         name: String,
@@ -57,6 +63,8 @@ final class Event {
         self.labels = []
         self.versions = []
         self.activeVersionID = nil
+        self.skippedSourceIDs = []
+        self.googleSheetURL = ""
         self.createdAt = .now
     }
 

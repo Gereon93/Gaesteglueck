@@ -266,7 +266,7 @@ struct AISuggestionSheet: View {
             tags: tags,
             constraints: constraints
         )
-        let client = LLMClientFactory.makeFromSettings()
+        let client = LLMClientFactory.makeClient(for: .seating)
         do {
             let proposal = try await LLMSeatingPlanner.requestPlan(client: client, context: context)
             state = .ready(proposal)

@@ -13,8 +13,10 @@ struct SettingsView: View {
     @AppStorage("llmProvider") private var llmProviderRaw: String = LLMProvider.lmStudio.rawValue
     @State private var openRouterAPIKey: String = KeychainStore.get(LLMClientFactory.openRouterAPIKeyAccount)
     @AppStorage("openRouterModel") private var openRouterModel: String = ""
+    @AppStorage("openRouterModelPricePerM") private var openRouterModelPricePerM: Double = 0
     @AppStorage("accentColorHex") private var accentColorHex = "#c8788c"
     @AppStorage("autoBackup") private var autoBackup = true
+    @AppStorage(LLMDebugLog.enabledKey) private var llmDebugLogEnabled = false
     @AppStorage("cacheResponses") private var cacheResponses = true
     @AppStorage("algorithmFallback") private var algorithmFallback = true
     @AppStorage("bridalIncludeTrauzeugen") private var bridalIncludeTrauzeugen: Bool = true
@@ -40,10 +42,20 @@ struct SettingsView: View {
     @State private var connectedModel: String = ""
     @State private var isTestingConnection = false
     @State private var showingEventSetup = false
+    @State private var featureProviderRaw: [String: String] = [:]
+    @State private var featureModelRaw: [String: String] = [:]
     @State private var openRouterModels: [OpenRouterModel] = []
     @State private var isLoadingModels: Bool = false
     @State private var openRouterError: String? = nil
     @State private var resetTarget: ResetTarget? = nil
+    @State private var restoreCandidate: BackupSet? = nil
+    @State private var restoreArmed: Bool = false
+
+    struct BackupSet: Identifiable, Equatable {
+        let prefix: String
+        let label: String
+        var id: String { prefix }
+    }
     @State private var dataActionMessage: String? = nil
     @State private var dataActionMessageIsError: Bool = false
 
@@ -72,6 +84,7 @@ struct SettingsView: View {
             ScrollView {
                 VStack(spacing: 16) {
                     aiCard
+                    featureRoutingCard
                     accentCard
                     eventCard
                     seatingCard
@@ -89,6 +102,35 @@ struct SettingsView: View {
         }
         .task {
             await checkConnection()
+        }
+        .onAppear { loadFeatureRouting() }
+        .alert(
+            "Aus Backup wiederherstellen?",
+            isPresented: Binding(
+                get: { restoreCandidate != nil },
+                set: { if !$0 { restoreCandidate = nil } }
+            ),
+            presenting: restoreCandidate
+        ) { set in
+            Button("Abbrechen", role: .cancel) { restoreCandidate = nil }
+            Button("Wiederherstellen & neu starten", role: .destructive) {
+                armRestore(set)
+            }
+        } message: { set in
+            Text("Überschreibt ALLE aktuellen Daten mit dem Stand vom \(set.label). "
+                 + "Der jetzige Stand wird vorher automatisch als Sicherheits-Backup "
+                 + "gespeichert. Die App muss dafür neu starten.")
+        }
+        .alert("Neustart nötig", isPresented: $restoreArmed) {
+            Button("Jetzt beenden") {
+                #if canImport(AppKit)
+                NSApplication.shared.terminate(nil)
+                #endif
+            }
+            Button("Später", role: .cancel) {}
+        } message: {
+            Text("Beim nächsten Start wird das Backup eingespielt. Beende die App "
+                 + "jetzt und starte sie neu.")
         }
     }
 
@@ -113,7 +155,7 @@ struct SettingsView: View {
             subtitle: aiCardSubtitle
         ) {
             VStack(spacing: 10) {
-                SettingsRow(label: "LLM-Provider") {
+                SettingsRow(label: "Standard-Provider") {
                     Picker("", selection: $llmProviderRaw) {
                         ForEach(LLMProvider.allCases) { p in
                             Text(p.displayName).tag(p.rawValue)
@@ -122,13 +164,27 @@ struct SettingsView: View {
                     .labelsHidden()
                     .frame(maxWidth: 240, alignment: .leading)
                 }
+                Text("Gilt für alle KI-Funktionen die unten auf „Auto“ stehen. Beide Anbieter können parallel konfiguriert sein.")
+                    .font(.system(size: 11.5, design: .rounded))
+                    .foregroundStyle(Tokens.Colors.ink3)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
-                if llmProvider == .lmStudio {
-                    lmStudioRows
-                } else {
-                    openRouterRows
-                }
+                Divider().padding(.vertical, 2)
+                Text("LM Studio (lokal)")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Tokens.Colors.ink2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                lmStudioRows
 
+                Divider().padding(.vertical, 2)
+                Text("OpenRouter (Cloud)")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Tokens.Colors.ink2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                openRouterRows
+
+                Divider().padding(.vertical, 2)
                 SettingsRow(label: "Antworten zwischenspeichern") {
                     GGToggle(isOn: $cacheResponses)
                 }
@@ -145,6 +201,87 @@ struct SettingsView: View {
             return "Deine Gästeliste verlässt nie den Mac. Wir sprechen nur mit LM Studio auf dieser Maschine."
         case .openRouter:
             return "OpenRouter ruft Modelle über die Cloud auf. Daten verlassen den Mac — nur nutzen, wenn das ok ist."
+        }
+    }
+
+    // MARK: - Pro-Feature-Routing
+
+    private let autoTag = LLMClientFactory.autoProvider
+
+    private func providerBinding(_ feature: AIFeature) -> Binding<String> {
+        Binding(
+            get: { featureProviderRaw[feature.rawValue] ?? autoTag },
+            set: { newValue in
+                featureProviderRaw[feature.rawValue] = newValue
+                UserDefaults.standard.set(newValue, forKey: feature.providerKey)
+            }
+        )
+    }
+
+    private func modelBinding(_ feature: AIFeature) -> Binding<String> {
+        Binding(
+            get: { featureModelRaw[feature.rawValue] ?? "" },
+            set: { newValue in
+                featureModelRaw[feature.rawValue] = newValue
+                UserDefaults.standard.set(newValue, forKey: feature.modelKey)
+                let price = openRouterModels.first { $0.id == newValue }?.blendedUSDPerMillion ?? 0
+                UserDefaults.standard.set(price, forKey: feature.modelPriceKey)
+            }
+        )
+    }
+
+    private func loadFeatureRouting() {
+        for f in AIFeature.allCases {
+            featureProviderRaw[f.rawValue] =
+                UserDefaults.standard.string(forKey: f.providerKey) ?? autoTag
+            featureModelRaw[f.rawValue] =
+                UserDefaults.standard.string(forKey: f.modelKey) ?? ""
+        }
+    }
+
+    private var featureRoutingCard: some View {
+        SettingsCard(
+            title: "KI pro Funktion",
+            subtitle: "Jede KI-Funktion kann einen eigenen Anbieter + Modell nutzen. „Auto“ = Standard-Provider von oben."
+        ) {
+            VStack(spacing: 14) {
+                ForEach(AIFeature.allCases) { feature in
+                    VStack(spacing: 6) {
+                        SettingsRow(label: feature.displayName) {
+                            Picker("", selection: providerBinding(feature)) {
+                                Text("Auto").tag(autoTag)
+                                Text("LM Studio").tag(LLMProvider.lmStudio.rawValue)
+                                Text("OpenRouter").tag(LLMProvider.openRouter.rawValue)
+                            }
+                            .labelsHidden()
+                            .frame(maxWidth: 200, alignment: .leading)
+                        }
+                        if providerBinding(feature).wrappedValue == LLMProvider.openRouter.rawValue {
+                            SettingsRow(label: "↳ Modell") {
+                                if openRouterModels.isEmpty {
+                                    Text(modelBinding(feature).wrappedValue.isEmpty
+                                         ? "Standard-Modell (oben)" : modelBinding(feature).wrappedValue)
+                                        .font(Tokens.Typography.mono)
+                                        .foregroundStyle(Tokens.Colors.ink3)
+                                } else {
+                                    Picker("", selection: modelBinding(feature)) {
+                                        Text("Standard-Modell (oben)").tag("")
+                                        ForEach(openRouterModels) { m in
+                                            Text("\(m.name) · \(m.priceLabel)").tag(m.id)
+                                        }
+                                    }
+                                    .labelsHidden()
+                                    .frame(maxWidth: 360, alignment: .leading)
+                                }
+                            }
+                        }
+                        Text(feature.hint)
+                            .font(.system(size: 11, design: .rounded))
+                            .foregroundStyle(Tokens.Colors.ink3)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
         }
     }
 
@@ -221,11 +358,15 @@ struct SettingsView: View {
                     Picker("", selection: $openRouterModel) {
                         Text("— wählen —").tag("")
                         ForEach(openRouterModels) { m in
-                            Text(m.name).tag(m.id)
+                            Text("\(m.name) · \(m.priceLabel)").tag(m.id)
                         }
                     }
                     .labelsHidden()
-                    .frame(maxWidth: 320, alignment: .leading)
+                    .frame(maxWidth: 360, alignment: .leading)
+                    .onChange(of: openRouterModel) { _, newID in
+                        openRouterModelPricePerM =
+                            openRouterModels.first { $0.id == newID }?.blendedUSDPerMillion ?? 0
+                    }
                 }
                 Button {
                     Task { await loadOpenRouterModels() }
@@ -498,11 +639,27 @@ struct SettingsView: View {
                 SettingsRow(label: "Auto-Backup täglich") {
                     GGToggle(isOn: $autoBackup)
                 }
+                SettingsRow(label: "KI-Debug-Log (enthält Gästedaten!)") {
+                    GGToggle(isOn: $llmDebugLogEnabled)
+                }
                 HStack(spacing: 8) {
                     Button("Im Finder anzeigen") { revealStoreInFinder() }
                         .warmButton(.secondary, size: .sm)
                     Button("Backup jetzt erstellen") { createBackupNow() }
                         .warmButton(.secondary, size: .sm)
+                    let sets = availableBackupSets()
+                    Menu("Aus Backup wiederherstellen") {
+                        if sets.isEmpty {
+                            Text("Keine Backups vorhanden")
+                        } else {
+                            ForEach(sets, id: \.prefix) { set in
+                                Button(set.label) { restoreCandidate = set }
+                            }
+                        }
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                    .disabled(sets.isEmpty)
                     Spacer()
                 }
                 .padding(.top, 4)
@@ -760,6 +917,36 @@ struct SettingsView: View {
             deletedSets += 1
         }
         return deletedSets
+    }
+
+    private func availableBackupSets() -> [BackupSet] {
+        guard let store = storeURL() else { return [] }
+        let backupDir = store.deletingLastPathComponent().appendingPathComponent("Backups")
+        let fm = FileManager.default
+        guard let entries = try? fm.contentsOfDirectory(at: backupDir, includingPropertiesForKeys: nil) else {
+            return []
+        }
+        var prefixes = Set<String>()
+        for url in entries {
+            let n = url.lastPathComponent
+            for suffix in [".store", ".store-shm", ".store-wal"] where n.hasSuffix(suffix) {
+                prefixes.insert(String(n.dropLast(suffix.count)))
+                break
+            }
+        }
+        return prefixes.sorted(by: >).map { p in
+            let stamp = String(p.prefix(19))
+                .replacingOccurrences(of: "_", with: " ")
+            let tail = p.count > 19 ? String(p.dropFirst(19)).replacingOccurrences(of: "-", with: " ").trimmingCharacters(in: .whitespaces) : ""
+            let label = tail.isEmpty ? stamp : "\(stamp) (\(tail))"
+            return BackupSet(prefix: p, label: label)
+        }
+    }
+
+    private func armRestore(_ set: BackupSet) {
+        UserDefaults.standard.set(set.prefix, forKey: GaesteglueckApp.pendingRestoreKey)
+        restoreCandidate = nil
+        restoreArmed = true
     }
 
     private func backupTimestamp() -> String {

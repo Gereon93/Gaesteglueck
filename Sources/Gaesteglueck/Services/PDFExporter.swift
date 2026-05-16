@@ -16,7 +16,14 @@ enum PDFExporter {
         static let `default` = Options()
     }
 
-    static func generatePDF(tables: [GuestTable], eventName: String, date: Date?, options: Options = .default) -> Data {
+    static func generatePDF(
+        tables: [GuestTable],
+        eventName: String,
+        date: Date?,
+        options: Options = .default,
+        partner1Name: String = "",
+        partner2Name: String = ""
+    ) -> Data {
         let pageRect = CGRect(x: 0, y: 0, width: 595, height: 842)
         let pdfData = NSMutableData()
         guard let consumer = CGDataConsumer(data: pdfData as CFMutableData),
@@ -107,7 +114,9 @@ enum PDFExporter {
                             default: return lhs.fullName < rhs.fullName
                             }
                         }
-                        : table.guests.sorted { $0.fullName < $1.fullName }
+                        : sortByCoupleOrder(guests: table.guests,
+                                            partner1Name: partner1Name,
+                                            partner2Name: partner2Name)
                     for guest in sortedGuests {
                         var line = "• "
                         if options.withSeatNumbers {
@@ -146,6 +155,9 @@ enum PDFExporter {
                 drawText("\(choice): \(count)", at: CGPoint(x: 40, y: y), font: .systemFont(ofSize: 12))
                 y += 20
             }
+            drawText("Gesamt Essen: \(counts.values.reduce(0, +))",
+                     at: CGPoint(x: 40, y: y), font: .boldSystemFont(ofSize: 12))
+            y += 20
             y += 6
             // Altersgruppen einzeln auflisten — Caterer braucht das fuer
             // Kindermenue, Hochstuhl-Anzahl etc.
@@ -157,6 +169,9 @@ enum PDFExporter {
                 drawText("\(category.rawValue): \(n)", at: CGPoint(x: 40, y: y), font: .systemFont(ofSize: 12))
                 y += 20
             }
+            drawText("Gesamt Personen: \(allGuests.count)",
+                     at: CGPoint(x: 40, y: y), font: .boldSystemFont(ofSize: 12))
+            y += 20
             y += 10
 
             let withIntolerances = allGuests.filter(\.hasIntolerances)
@@ -177,6 +192,46 @@ enum PDFExporter {
         endPage()
         context.closePDF()
         return pdfData as Data
+    }
+
+    /// Sortiert Gäste eines Tisches so, dass das Brautpaar zuerst kommt (falls am
+     /// Tisch sitzend), danach Paare/Familien gruppiert (gleicher registrationGroup),
+     /// danach Einzelpersonen — innerhalb jeder Gruppe alphabetisch stabil.
+    private static func sortByCoupleOrder(
+        guests: [Guest],
+        partner1Name: String,
+        partner2Name: String
+    ) -> [Guest] {
+        func isBridalCouple(_ g: Guest, _ name: String) -> Bool {
+            guard !name.isEmpty else { return false }
+            return g.firstName == name || g.fullName == name
+        }
+
+        // Gruppen-Anker = alphabetisch erster Name innerhalb derselben registrationGroup;
+        // ohne Gruppe = der eigene Name. Sorgt dafür dass Mitglieder einer Gruppe
+        // im sortierten Output direkt nacheinander stehen.
+        var groupAnchor: [UUID: String] = [:]
+        let byGroup = Dictionary(grouping: guests) { $0.registrationGroup }
+        for (gid, members) in byGroup {
+            guard gid != nil else { continue }
+            let anchor = members.map(\.fullName).min() ?? ""
+            for m in members { groupAnchor[m.id] = anchor }
+        }
+
+        return guests.sorted { lhs, rhs in
+            let lhsBride1 = isBridalCouple(lhs, partner1Name)
+            let lhsBride2 = isBridalCouple(lhs, partner2Name)
+            let rhsBride1 = isBridalCouple(rhs, partner1Name)
+            let rhsBride2 = isBridalCouple(rhs, partner2Name)
+            let lhsPrio = lhsBride1 ? 0 : (lhsBride2 ? 1 : 2)
+            let rhsPrio = rhsBride1 ? 0 : (rhsBride2 ? 1 : 2)
+            if lhsPrio != rhsPrio { return lhsPrio < rhsPrio }
+
+            let lhsAnchor = groupAnchor[lhs.id] ?? lhs.fullName
+            let rhsAnchor = groupAnchor[rhs.id] ?? rhs.fullName
+            if lhsAnchor != rhsAnchor { return lhsAnchor < rhsAnchor }
+            return lhs.fullName < rhs.fullName
+        }
     }
 
     private static func drawDocumentHeader(

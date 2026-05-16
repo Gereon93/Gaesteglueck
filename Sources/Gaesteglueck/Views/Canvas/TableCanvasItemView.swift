@@ -11,10 +11,12 @@ struct TableCanvasItemView: View {
     @Query private var allConstraints: [Constraint]
     @Query private var events: [Event]
     @Environment(\.canvasScale) private var canvasScale
+    @Environment(\.seatDisplayNames) private var seatDisplayNames
 
     @State private var dragOffset: CGSize = .zero
     @State private var showingCombineSheet = false
     @State private var showingEditSheet = false
+    @AppStorage("canvasShowSeatNames") private var showSeatNames = false
 
     /// Aktuelle Sitzregeln aus dem Event ziehen — nicht aus dem statischen
     /// `GuestTable.activeRules`. Das Static wird erst in onAppear synced,
@@ -195,7 +197,13 @@ struct TableCanvasItemView: View {
                         }
                         targetTable.disabledSeatIndices = s
                     },
-                    counterRotation: -table.rotation
+                    counterRotation: -table.rotation,
+                    showName: showSeatNames,
+                    resolvedNameSide: resolvedNameSide(
+                        localX: seat.position.x - table.positionX,
+                        localY: seat.position.y - table.positionY
+                    ),
+                    displayName: occ.flatMap { seatDisplayNames[$0.id] }
                 )
                 .offset(
                     x: seat.position.x - table.positionX,
@@ -227,10 +235,32 @@ struct TableCanvasItemView: View {
                         }
                         table.disabledSeatIndices = s
                     },
-                    counterRotation: -table.rotation
+                    counterRotation: -table.rotation,
+                    showName: showSeatNames,
+                    resolvedNameSide: resolvedNameSide(
+                        localX: positions[idx].x, localY: positions[idx].y
+                    ),
+                    displayName: occupant(at: idx).flatMap { seatDisplayNames[$0.id] }
                 )
                 .offset(x: positions[idx].x, y: positions[idx].y)
             }
+        }
+    }
+
+    /// Löst die Namens-Seite für einen Sitz auf. Override am Tisch gewinnt;
+    /// `.auto` leitet aus der nächstgelegenen Tischkante ab (normiert auf die
+    /// Tisch-Halbmaße, damit Eck-Sitze breiter Tische als Oben/Unten zählen,
+    /// nicht fälschlich als Links/Rechts).
+    private func resolvedNameSide(localX: CGFloat, localY: CGFloat) -> SeatNameSide {
+        if table.seatNameSide != .auto { return table.seatNameSide }
+        let halfW = (table.shape == .round ? scaledDiameter : scaledWidth) / 2
+        let halfD = (table.shape == .round ? scaledDiameter : scaledDepth) / 2
+        let nx = localX / max(halfW, 1)
+        let ny = localY / max(halfD, 1)
+        if abs(ny) >= abs(nx) {
+            return ny < 0 ? .top : .bottom
+        } else {
+            return nx < 0 ? .left : .right
         }
     }
 
@@ -383,6 +413,18 @@ struct TableCanvasItemView: View {
             rotateBy90()
         } label: {
             Label("Drehen 90°", systemImage: "rotate.right")
+        }
+        Menu {
+            ForEach(SeatNameSide.allCases) { side in
+                Button {
+                    table.seatNameSide = side
+                } label: {
+                    Label(side.rawValue, systemImage:
+                        table.seatNameSide == side ? "checkmark" : side.icon)
+                }
+            }
+        } label: {
+            Label("Namen-Position", systemImage: "textformat")
         }
         if !table.guests.filter({ !$0.isPinned }).isEmpty {
             Button(role: .destructive) {

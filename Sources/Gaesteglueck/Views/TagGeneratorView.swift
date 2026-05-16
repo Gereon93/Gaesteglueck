@@ -16,6 +16,7 @@ struct TagGeneratorView: View {
     @State private var partner1Hint = ""
     @State private var partner2Hint = ""
     @State private var isGenerating = false
+    @State private var generateTask: Task<Void, Never>? = nil
     @State private var proposals: [ProposedTag] = []
     @State private var errorMessage: String?
     @State private var hasGenerated = false
@@ -51,6 +52,14 @@ struct TagGeneratorView: View {
         }
         .frame(minWidth: 720, minHeight: 600)
         .background(Tokens.Colors.bg)
+        .sheet(isPresented: $isGenerating) {
+            AIRunIndicator(
+                title: useAIForAssignment ? "KI ordnet die Tags zu…" : "Tags werden berechnet…",
+                detail: "Das kann je nach Modell etwas dauern.",
+                onCancel: { generateTask?.cancel() }
+            )
+            .interactiveDismissDisabled(true)
+        }
     }
 
     // MARK: Header
@@ -137,7 +146,7 @@ struct TagGeneratorView: View {
                 .disabled(guests.isEmpty)
                 Spacer()
                 Button {
-                    Task { await generate() }
+                    generateTask = Task { await generate() }
                 } label: {
                     HStack(spacing: 6) {
                         if isGenerating {
@@ -432,8 +441,8 @@ struct TagGeneratorView: View {
 
         // Schritt 2 (optional): KI nutzt die Tags + Gästeliste um Mitglieder zuzuordnen
         if useAIForAssignment, !guests.isEmpty {
-            let client = LLMClientFactory.makeFromSettings()
-            if let lm = client as? LMStudioClient {
+            let client = LLMClientFactory.makeClient(for: .tags)
+            if let lm = client.lmStudioClient {
                 do {
                     _ = try await lm.checkConnection()
                 } catch {

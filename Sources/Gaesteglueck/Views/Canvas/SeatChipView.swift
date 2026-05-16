@@ -18,9 +18,44 @@ struct SeatChipView: View {
     /// Damit Initialen lesbar bleiben wenn der Tisch rotiert ist: wir
     /// drehen den Text gegen die Tisch-Rotation. Default 0 = nicht rotiert.
     var counterRotation: Double = 0
+    /// Wenn true, wird der volle Name permanent neben dem Sitz angezeigt
+    /// (statt nur bei Hover) — für Screenshot-taugliche Sitzpläne.
+    var showName: Bool = false
+    /// Bereits aufgelöste Seite (nie `.auto`) auf der der Name gezeichnet wird.
+    /// Achsen-aligned & fixe Distanz → alle Namen einer Tischkante stehen auf
+    /// gleicher Höhe/Spalte, kein radialer Stagger.
+    var resolvedNameSide: SeatNameSide = .top
+    /// Anzeige-Name gemäß gewähltem Namen-Stil. Nil → voller Name.
+    var displayName: String? = nil
 
     @State private var isDropTargeted: Bool = false
     @State private var isHovering: Bool = false
+
+    /// Distanz Sitz-Zentrum → Label-Zentrum entlang der gewählten Seite.
+    /// Horizontal (Links/Rechts) größer, weil dort die Label-Breite zählt
+    /// (Name wächst zur Seite, nicht nach oben).
+    private var nameDistance: CGFloat {
+        switch resolvedNameSide {
+        case .left, .right: 30
+        default: 24
+        }
+    }
+
+    @ViewBuilder
+    private func nameLabel(_ name: String) -> some View {
+        let v = resolvedNameSide.localUnitVector
+        Text(name)
+            // .semibold statt .medium: rotierter Text (gedrehte Tische)
+            // rastert in SwiftUI weicher; mehr Gewicht gleicht das aus damit
+            // alle Namen gleich satt wirken — egal ob Tisch gedreht ist.
+            .font(.system(size: 9, weight: .semibold, design: .rounded))
+            .foregroundStyle(Tokens.Colors.ink)
+            .lineLimit(1)
+            .fixedSize()
+            .rotationEffect(.degrees(counterRotation))
+            .offset(x: v.dx * nameDistance, y: v.dy * nameDistance)
+            .allowsHitTesting(false)
+    }
 
     private var initials: String {
         guard let g = occupant else { return "" }
@@ -93,6 +128,11 @@ struct SeatChipView: View {
         }
         .frame(width: 22, height: 22)
         .help(tooltip)
+        .overlay {
+            if showName, let g = occupant {
+                nameLabel(displayName ?? g.fullName)
+            }
+        }
         .overlay(alignment: .top) {
             if isHovering, let g = occupant {
                 Text(g.fullName)

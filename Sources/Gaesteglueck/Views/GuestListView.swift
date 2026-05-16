@@ -38,7 +38,15 @@ struct GuestListView: View {
     @State private var ageFilter: AgeCategory? = nil
 
     @State private var isCheckingFunFacts: Bool = false
+    @State private var funFactCheckTask: Task<Void, Never>? = nil
+    @State private var funFactCheckProgress: (done: Int, total: Int) = (0, 0)
     @State private var funFactCheckResult: String? = nil
+    @State private var isNormalizingFunFacts: Bool = false
+    @State private var funFactTask: Task<Void, Never>? = nil
+    @State private var funFactProgress: (done: Int, total: Int) = (0, 0)
+    @State private var funFactProposals: [FunFactNormalizer.Result] = []
+    @State private var funFactProposalSelection: Set<UUID> = []
+    @State private var showingFunFactReview: Bool = false
 
     @State private var contactPickerGuest: Guest?
     @State private var contactPickerMatches: [ContactMatch] = []
@@ -280,6 +288,29 @@ struct GuestListView: View {
                 }
             }
         }
+        .sheet(isPresented: $showingFunFactReview) {
+            FunFactReviewSheet(
+                proposals: funFactProposals,
+                selection: $funFactProposalSelection,
+                onApply: applyFunFactProposals
+            )
+        }
+        .sheet(isPresented: $isNormalizingFunFacts) {
+            AIRunIndicator(
+                title: "FunFacts werden vereinheitlicht…",
+                progress: funFactProgress.total > 0 ? funFactProgress : nil,
+                onCancel: { funFactTask?.cancel() }
+            )
+            .interactiveDismissDisabled(true)
+        }
+        .sheet(isPresented: $isCheckingFunFacts) {
+            AIRunIndicator(
+                title: "FunFacts werden geprüft…",
+                progress: funFactCheckProgress.total > 0 ? funFactCheckProgress : nil,
+                onCancel: { funFactCheckTask?.cancel() }
+            )
+            .interactiveDismissDisabled(true)
+        }
         .sheet(isPresented: $showingAddSheet) {
             GuestFormView()
         }
@@ -384,6 +415,18 @@ struct GuestListView: View {
             }
             .warmButton(.secondary)
             .disabled(isCheckingFunFacts || guests.isEmpty)
+            Button {
+                runFunFactNormalize()
+            } label: {
+                HStack(spacing: 4) {
+                    if isNormalizingFunFacts { ProgressView().controlSize(.small) }
+                    Image(systemName: "text.append")
+                    Text("Vereinheitlichen")
+                }
+            }
+            .warmButton(.secondary)
+            .disabled(isNormalizingFunFacts || guests.isEmpty)
+            .help("FunFacts per KI in einheitliche Ich-Form bringen — du bestätigst vor dem Übernehmen")
             Menu {
                 Button("Als PDF exportieren") {
                     exportFunFactWorklist(format: .pdf)
@@ -804,7 +847,7 @@ struct GuestListView: View {
     /// orange = fehlt komplett.
     @ViewBuilder
     private func funFactCell(for guest: Guest) -> some View {
-        let trimmed = guest.funFact.trimmingCharacters(in: .whitespaces)
+        let trimmed = guest.funFactDisplay.trimmingCharacters(in: .whitespaces)
         let dotColor: Color = {
             if trimmed.isEmpty { return Color(hex: "#cc8a3a") } // fehlt
             if !guest.funFactApproved { return Color(hex: "#b0b0b0") } // unklar
@@ -1100,8 +1143,8 @@ struct GuestListView: View {
                         VStack(alignment: .leading, spacing: 6) {
                             inspectorRow("Menüwahl", guest.dietaryChoice)
                             inspectorRow("Allergien", guest.hasIntolerances ? guest.intolerances.joined(separator: ", ") : "Keine")
-                            if !guest.funFact.isEmpty {
-                                inspectorRow("Fun Fact", guest.funFact)
+                            if !guest.funFactDisplay.isEmpty {
+                                inspectorRow("Fun Fact", guest.funFactDisplay)
                             }
                         }
                     }
@@ -1503,9 +1546,13 @@ struct GuestListView: View {
     }
 
     private func runFunFactCheck() {
-        Task { @MainActor in
+        funFactCheckProgress = (0, 0)
+        funFactCheckTask = Task { @MainActor in
             isCheckingFunFacts = true
-            defer { isCheckingFunFacts = false }
+            defer {
+                isCheckingFunFacts = false
+                funFactCheckTask = nil
+            }
             let candidates = guests.filter {
                 !$0.funFact.trimmingCharacters(in: .whitespaces).isEmpty && !$0.funFactApproved
             }
@@ -1513,9 +1560,13 @@ struct GuestListView: View {
                 funFactCheckResult = "Alle FunFacts sind bereits bestaetigt."
                 return
             }
-            let client = LLMClientFactory.makeFromSettings()
+            let client = LLMClientFactory.makeClient(for: .funfact)
             do {
-                let results = try await FunFactValidator.validateBatch(guests: candidates, client: client)
+                let results = try await FunFactValidator.validateBatch(
+                    guests: candidates,
+                    client: client,
+                    onProgress: { done, total in funFactCheckProgress = (done, total) }
+                )
                 var goodCount = 0
                 var genericCount = 0
                 for r in results {
@@ -1533,10 +1584,157 @@ struct GuestListView: View {
                 }
                 try? modelContext.save()
                 funFactCheckResult = "\(goodCount) FunFacts bestaetigt, \(genericCount) als generisch markiert."
+            } catch is CancellationError {
+                funFactCheckResult = "Abgebrochen — nichts geändert."
             } catch {
-                funFactCheckResult = "Fehler: \(error.localizedDescription)"
+                if Task.isCancelled {
+                    funFactCheckResult = "Abgebrochen — nichts geändert."
+                } else {
+                    funFactCheckResult = "Fehler: \(error.localizedDescription)"
+                }
             }
         }
+    }
+
+    private func runFunFactNormalize() {
+        funFactProgress = (0, 0)
+        funFactTask = Task { @MainActor in
+            isNormalizingFunFacts = true
+            defer {
+                isNormalizingFunFacts = false
+                funFactTask = nil
+            }
+            let client = LLMClientFactory.makeClient(for: .funfact)
+            do {
+                let proposals = try await FunFactNormalizer.proposeBatch(
+                    guests: Array(guests),
+                    client: client,
+                    onProgress: { done, total in funFactProgress = (done, total) }
+                )
+                guard !proposals.isEmpty else {
+                    funFactCheckResult = "Die KI hat keine Vorschläge geliefert (Antwort leer)."
+                    return
+                }
+                let changed = proposals.filter {
+                    $0.original.trimmingCharacters(in: .whitespacesAndNewlines)
+                        != $0.normalized.trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+                guard !changed.isEmpty else {
+                    funFactCheckResult = "KI lieferte \(proposals.count) Antworten, aber 0 Änderungen "
+                        + "— das Modell hat die Texte unverändert zurückgegeben (zu schwach für die Aufgabe)."
+                    return
+                }
+                funFactProposals = changed
+                funFactProposalSelection = Set(changed.map(\.guestID))
+                showingFunFactReview = true
+            } catch is CancellationError {
+                funFactCheckResult = "Abgebrochen — nichts geändert."
+            } catch {
+                if Task.isCancelled {
+                    funFactCheckResult = "Abgebrochen — nichts geändert."
+                } else {
+                    funFactCheckResult = "Fehler: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
+    private func applyFunFactProposals() {
+        for proposal in funFactProposals where funFactProposalSelection.contains(proposal.guestID) {
+            guard let guest = guests.first(where: { $0.id == proposal.guestID }) else { continue }
+            // Rohdaten (funFact) bleiben unangetastet — nur die
+            // vereinheitlichte Fassung wird gesetzt. Approval-Status bleibt:
+            // Normalisierung ändert die Aussage nicht, nur die Formulierung.
+            guest.funFactNormalized = proposal.normalized
+        }
+        try? modelContext.save()
+        showingFunFactReview = false
+        funFactProposals = []
+    }
+}
+
+// MARK: - FunFact-Review
+
+private struct FunFactReviewSheet: View {
+    let proposals: [FunFactNormalizer.Result]
+    @Binding var selection: Set<UUID>
+    let onApply: () -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    private var costLine: String {
+        let t = LLMCostEstimator.funfactBatchTokens(texts: proposals.map(\.original))
+        let pricePerM = LLMClientFactory.effectiveOpenRouterPricePerM(for: .funfact)
+        guard pricePerM > 0 else {
+            return "Lokal (LM Studio) — kostenlos · ~\(t.prompt + t.completion) Tokens"
+        }
+        let usd = LLMCostEstimator.usd(
+            promptTokens: t.prompt, completionTokens: t.completion,
+            blendedUSDPerMillion: pricePerM
+        )
+        return "Geschätzte Kosten dieses Laufs: \(LLMCostEstimator.format(usd: usd)) (OpenRouter)"
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("FunFacts vereinheitlichen")
+                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                Spacer()
+                Text("\(selection.count)/\(proposals.count) ausgewählt")
+                    .font(.system(size: 12, design: .rounded))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            Text(costLine)
+                .font(.system(size: 11, design: .rounded))
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 12)
+            Divider()
+            ScrollView {
+                VStack(spacing: 8) {
+                    ForEach(proposals) { p in
+                        Button {
+                            if selection.contains(p.guestID) { selection.remove(p.guestID) }
+                            else { selection.insert(p.guestID) }
+                        } label: {
+                            HStack(alignment: .top, spacing: 10) {
+                                Image(systemName: selection.contains(p.guestID)
+                                      ? "checkmark.square.fill" : "square")
+                                    .foregroundStyle(selection.contains(p.guestID) ? Color.accentColor : .secondary)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(p.original)
+                                        .font(.system(size: 12, design: .rounded))
+                                        .foregroundStyle(.secondary)
+                                        .strikethrough()
+                                    Text(p.normalized)
+                                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                                }
+                                Spacer(minLength: 0)
+                            }
+                            .padding(10)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.gray.opacity(0.06))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(16)
+            }
+            Divider()
+            HStack {
+                Button("Abbrechen") { dismiss() }
+                Spacer()
+                Button("Ausgewählte übernehmen") { onApply() }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(selection.isEmpty)
+            }
+            .padding(16)
+        }
+        .frame(width: 620, height: 560)
     }
 }
 

@@ -26,6 +26,49 @@ jobs:
       - name: Test
         run: swift test
 
+  prompt-eval:
+    # KI-Prompt-Gate: prüft beim Merge auf main ob die Produktions-Prompts
+    # noch wie erwartet greifen (deepeval + OpenRouter). Ohne gesetztes
+    # OPENROUTER_API_KEY-Secret wird sauber übersprungen statt rot.
+    needs: build-and-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Secret-Check
+        id: secretcheck
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          if [ -z "$OPENROUTER_API_KEY" ]; then
+            echo "has_key=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::OPENROUTER_API_KEY nicht gesetzt — Prompt-Eval übersprungen."
+          else
+            echo "has_key=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install deps
+        if: steps.secretcheck.outputs.has_key == 'true'
+        run: pip install -r eval/requirements.txt
+
+      - name: Extract prompts from Swift
+        if: steps.secretcheck.outputs.has_key == 'true'
+        run: python eval/extract_prompts.py
+
+      - name: Run prompt eval
+        if: steps.secretcheck.outputs.has_key == 'true'
+        working-directory: eval
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          EVAL_SUT_MODEL: ${{ vars.EVAL_SUT_MODEL || 'openai/gpt-4o-mini' }}
+          EVAL_JUDGE_MODEL: ${{ vars.EVAL_JUDGE_MODEL || 'openai/gpt-4o-mini' }}
+        run: python -m pytest -v --no-header
+
   bundle-app:
     needs: build-and-test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

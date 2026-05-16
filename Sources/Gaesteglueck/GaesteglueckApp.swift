@@ -33,6 +33,10 @@ struct GaesteglueckApp: App {
     private static func makeContainer() throws -> ModelContainer {
         let schema = Schema(SchemaV5.models)
         let storeURL = try resolveStoreURL()
+        // Restore muss VOR dem Öffnen des Containers laufen (offenes
+        // SQLite-Handle würde die zurückgespielten Daten beim Beenden wieder
+        // überschreiben).
+        applyPendingRestoreIfNeeded(storeURL: storeURL)
         try migrateLegacyDefaultStoreIfNeeded(to: storeURL)
         try snapshotPreMigrationBackupIfNeeded(storeURL: storeURL)
         let config = ModelConfiguration(schema: schema, url: storeURL)
@@ -96,6 +100,37 @@ struct GaesteglueckApp: App {
             }
         }
         pruneStartupBackups(in: backupDir, keep: 3)
+    }
+
+    static let pendingRestoreKey = "pendingRestorePrefix"
+
+    private static func applyPendingRestoreIfNeeded(storeURL: URL) {
+        let defaults = UserDefaults.standard
+        guard let prefix = defaults.string(forKey: pendingRestoreKey),
+              !prefix.isEmpty else { return }
+        defaults.removeObject(forKey: pendingRestoreKey)
+
+        let fm = FileManager.default
+        let backupDir = storeURL.deletingLastPathComponent().appendingPathComponent("Backups")
+        guard let entries = try? fm.contentsOfDirectory(at: backupDir, includingPropertiesForKeys: nil) else { return }
+        let setFiles = entries.filter { $0.lastPathComponent.hasPrefix(prefix) }
+        guard !setFiles.isEmpty else { return }
+
+        let safety = backupDir.appendingPathComponent("\(preMigrationTimestamp())-before-restore.store")
+        for ext in ["", "-shm", "-wal"] {
+            let src = URL(fileURLWithPath: storeURL.path + ext)
+            if fm.fileExists(atPath: src.path) {
+                try? fm.copyItem(at: src, to: URL(fileURLWithPath: safety.path + ext))
+            }
+        }
+
+        for ext in ["", "-shm", "-wal"] {
+            let suffix = ext.isEmpty ? ".store" : ".store\(ext)"
+            guard let match = setFiles.first(where: { $0.lastPathComponent.hasSuffix(suffix) }) else { continue }
+            let dst = URL(fileURLWithPath: storeURL.path + ext)
+            try? fm.removeItem(at: dst)
+            try? fm.copyItem(at: match, to: dst)
+        }
     }
 
     private static func preMigrationTimestamp() -> String {

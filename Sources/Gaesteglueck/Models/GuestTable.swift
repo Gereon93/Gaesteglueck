@@ -27,6 +27,14 @@ final class GuestTable {
     /// und das Brautpaar wird vom Auto-Place bevorzugt hier platziert.
     var isBridalTable: Bool = false
 
+    /// Steuert die Seite auf der Gast-Namen gezeichnet werden (bei aktivem
+    /// "Namen einblenden"). String-backed mit Default für SwiftData-Auto-Migration.
+    var seatNameSideRaw: String = SeatNameSide.auto.rawValue
+    var seatNameSide: SeatNameSide {
+        get { SeatNameSide(rawValue: seatNameSideRaw) ?? .auto }
+        set { seatNameSideRaw = newValue.rawValue }
+    }
+
     /// App-weiter Default für Sitzregeln. Wird von der UI gesetzt, wenn ein
     /// Event geladen ist (siehe `RoomCanvasView`). Tests setzen explizit.
     /// Lock-geschuetzt damit Hintergrund-Tasks (Optimizer, Exporter) nicht

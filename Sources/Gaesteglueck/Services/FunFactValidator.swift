@@ -132,7 +132,8 @@ enum FunFactValidator {
     @MainActor
     static func validateBatch(
         guests: [Guest],
-        client: LLMClient
+        client: LLMClient,
+        onProgress: @MainActor (_ done: Int, _ total: Int) -> Void = { _, _ in }
     ) async throws -> [Result] {
         var results: [Result] = []
 
@@ -154,19 +155,23 @@ enum FunFactValidator {
         let needsLLM = nonEmpty.filter { $0.ageCategory != .baby && $0.ageCategory != .toddler }
         guard !needsLLM.isEmpty else { return results }
 
-        var idMap: [String: UUID] = [:]
-        for (i, guest) in needsLLM.enumerated() {
-            idMap["G\(i + 1)"] = guest.id
-        }
+        onProgress(0, needsLLM.count)
+        let chunkSize = 20
+        var idx = 0
+        while idx < needsLLM.count {
+            try Task.checkCancellation()
+            let chunk = Array(needsLLM[idx ..< min(idx + chunkSize, needsLLM.count)])
+            idx += chunkSize
 
-        let userPrompt = buildUserPrompt(guests: needsLLM)
-        // Kein jsonMode: LM Studio akzeptiert "json_object" nicht als
-        // response_format-Type, nur "json_schema" oder "text". Der
-        // System-Prompt zwingt das Modell ohnehin zu reinem JSON-Output;
-        // extractJSONObject parst tolerant.
-        let raw = try await client.prompt(system: systemPrompt, user: userPrompt, temperature: 0.1, jsonMode: false)
-        let parsed = parseResponse(raw, idMap: idMap)
-        results.append(contentsOf: parsed)
+            var idMap: [String: UUID] = [:]
+            for (i, guest) in chunk.enumerated() {
+                idMap["G\(i + 1)"] = guest.id
+            }
+            let userPrompt = buildUserPrompt(guests: chunk)
+            let raw = try await client.prompt(system: systemPrompt, user: userPrompt, temperature: 0.1, jsonMode: false)
+            results.append(contentsOf: parseResponse(raw, idMap: idMap))
+            onProgress(min(idx, needsLLM.count), needsLLM.count)
+        }
         return results
     }
 
@@ -175,6 +180,9 @@ enum FunFactValidator {
     static func parseResponseForTesting(_ raw: String, idMap: [String: UUID]) -> [Result] {
         parseResponse(raw, idMap: idMap)
     }
+
+    /// Nur für Prompt-Invarianten-Tests.
+    static var systemPromptForTesting: String { systemPrompt }
 #endif
 }
 #endif

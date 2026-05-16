@@ -19,6 +19,19 @@ enum LLMClientFactory {
     static let lmStudioEndpointKey = "lmStudioEndpoint"
     static let openRouterAPIKeyAccount = "openRouterAPIKey"
     static let openRouterModelKey = "openRouterModel"
+    static let openRouterModelPriceKey = "openRouterModelPricePerM"
+
+    static func effectiveOpenRouterPricePerM(
+        for feature: AIFeature,
+        defaults: UserDefaults = .standard
+    ) -> Double {
+        guard provider(for: feature, defaults: defaults) == .openRouter else { return 0 }
+        let perFeatureModel = defaults.string(forKey: feature.modelKey) ?? ""
+        if !perFeatureModel.isEmpty {
+            return defaults.double(forKey: feature.modelPriceKey)
+        }
+        return defaults.double(forKey: openRouterModelPriceKey)
+    }
 
     /// Liest die Provider-Wahl aus UserDefaults und liefert den passenden
     /// Client. Fällt bei OpenRouter ohne API-Key/Modell auf LM Studio zurück
@@ -75,5 +88,75 @@ enum LLMClientFactory {
     private static func makeLMStudio(defaults: UserDefaults) -> LMStudioClient {
         let endpoint = defaults.string(forKey: lmStudioEndpointKey) ?? "http://localhost:1234"
         return LMStudioClient(endpoint: endpoint)
+    }
+
+    // MARK: - Pro-Feature-Routing
+
+    /// Sentinel für "diesem Feature keinen eigenen Provider geben — globalen
+    /// `llmProvider` nutzen". Default für alle Features bis der User in den
+    /// Einstellungen explizit umstellt.
+    static let autoProvider = "auto"
+
+    /// Effektiver Provider für ein Feature: Feature-Override → globaler
+    /// Provider → OpenRouter-Fallback auf LM Studio wenn Key/Modell fehlt.
+    static func provider(
+        for feature: AIFeature,
+        defaults: UserDefaults = .standard,
+        apiKey: String? = nil
+    ) -> LLMProvider {
+        let raw = defaults.string(forKey: feature.providerKey) ?? autoProvider
+        let resolved: LLMProvider
+        if raw == autoProvider {
+            let globalRaw = defaults.string(forKey: providerKey) ?? LLMProvider.lmStudio.rawValue
+            resolved = LLMProvider(rawValue: globalRaw) ?? .lmStudio
+        } else {
+            resolved = LLMProvider(rawValue: raw) ?? .lmStudio
+        }
+        if resolved == .openRouter {
+            let key = apiKey ?? KeychainStore.get(openRouterAPIKeyAccount)
+            let model = featureModel(for: feature, defaults: defaults)
+            if key.isEmpty || model.isEmpty { return .lmStudio }
+        }
+        return resolved
+    }
+
+    /// Modell für ein Feature: Feature-Override → globales OpenRouter-Modell.
+    static func featureModel(
+        for feature: AIFeature,
+        defaults: UserDefaults = .standard
+    ) -> String {
+        let perFeature = defaults.string(forKey: feature.modelKey) ?? ""
+        if !perFeature.isEmpty { return perFeature }
+        return defaults.string(forKey: openRouterModelKey) ?? ""
+    }
+
+    /// Liefert den Client für ein bestimmtes KI-Feature.
+    static func makeClient(
+        for feature: AIFeature,
+        defaults: UserDefaults = .standard,
+        apiKey: String? = nil
+    ) -> LLMClient {
+        switch provider(for: feature, defaults: defaults, apiKey: apiKey) {
+        case .openRouter:
+            let key = apiKey ?? KeychainStore.get(openRouterAPIKeyAccount)
+            let model = featureModel(for: feature, defaults: defaults)
+            if !key.isEmpty, !model.isEmpty {
+                return LoggingLLMClient(
+                    wrapped: OpenRouterClient(apiKey: key, model: model),
+                    feature: feature.rawValue, provider: "openRouter", model: model
+                )
+            }
+            let endpoint = defaults.string(forKey: lmStudioEndpointKey) ?? "http://localhost:1234"
+            return LoggingLLMClient(
+                wrapped: makeLMStudio(defaults: defaults),
+                feature: feature.rawValue, provider: "lmStudio (fallback)", model: endpoint
+            )
+        case .lmStudio:
+            let endpoint = defaults.string(forKey: lmStudioEndpointKey) ?? "http://localhost:1234"
+            return LoggingLLMClient(
+                wrapped: makeLMStudio(defaults: defaults),
+                feature: feature.rawValue, provider: "lmStudio", model: endpoint
+            )
+        }
     }
 }

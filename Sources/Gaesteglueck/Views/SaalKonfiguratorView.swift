@@ -14,6 +14,7 @@ struct SaalKonfiguratorView: View {
     @State private var inventory = SaalInventar()
     @State private var proposal: SaalProposal?
     @State private var isGenerating = false
+    @State private var generateTask: Task<Void, Never>? = nil
     @State private var isAssigning = false
     @State private var errorMessage: String?
     @State private var alsoAssignGuests = true
@@ -46,6 +47,14 @@ struct SaalKonfiguratorView: View {
         }
         .frame(minWidth: 760, minHeight: 640)
         .background(Tokens.Colors.bg)
+        .sheet(isPresented: $isGenerating) {
+            AIRunIndicator(
+                title: "KI plant den Saal…",
+                detail: "Das kann je nach Modell etwas dauern.",
+                onCancel: { generateTask?.cancel() }
+            )
+            .interactiveDismissDisabled(true)
+        }
     }
 
     private var header: some View {
@@ -190,7 +199,7 @@ struct SaalKonfiguratorView: View {
         HStack {
             Spacer()
             Button {
-                Task { await generate() }
+                generateTask = Task { await generate() }
             } label: {
                 HStack(spacing: 6) {
                     if isGenerating {
@@ -462,8 +471,8 @@ struct SaalKonfiguratorView: View {
         isGenerating = true
         defer { isGenerating = false }
 
-        let client = LLMClientFactory.makeFromSettings()
-        if let lm = client as? LMStudioClient {
+        let client = LLMClientFactory.makeClient(for: .seating)
+        if let lm = client.lmStudioClient {
             do {
                 _ = try await lm.checkConnection()
             } catch {
@@ -513,7 +522,7 @@ struct SaalKonfiguratorView: View {
         defer { isAssigning = false }
 
         let plannerTables = mergedTables(existing: existingTables, created: createdTables)
-        let client = LLMClientFactory.makeFromSettings()
+        let client = LLMClientFactory.makeClient(for: .seating)
         let context = LLMSeatingPlanner.PlannerContext(
             guests: guests,
             tables: plannerTables,

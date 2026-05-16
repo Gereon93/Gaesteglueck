@@ -23,6 +23,8 @@ struct ExportView: View {
     @Query private var canvasLabels: [CanvasLabel]
     @AppStorage("includeVisualPlan") private var includeVisualPlan: Bool = true
     @AppStorage("visualPlanNameStyle") private var visualPlanNameStyleRaw: String = VisualSeatingPlanExporter.NameStyle.smartDeduped.rawValue
+    @AppStorage("canvasSeatNameStyle") private var canvasSeatNameStyleRaw: String = VisualSeatingPlanExporter.NameStyle.full.rawValue
+    @AppStorage("lastCanvasScale") private var lastCanvasScale: Double = 1.0 / 3.0
 
     @State private var highlightAllergies = true
     @State private var withWavePattern = true
@@ -402,6 +404,13 @@ struct ExportView: View {
                         Text("\(n)").font(.system(size: 12, weight: .semibold, design: .rounded)).monospacedDigit()
                     }
                 }
+                HStack {
+                    Text("Gesamt Essen").font(.system(size: 12, weight: .semibold, design: .rounded))
+                    Spacer()
+                    Text("\(counts.values.reduce(0, +))")
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                }
                 Divider().padding(.vertical, 2)
                 ForEach(ageOrder, id: \.self) { cat in
                     let n = ageCounts[cat] ?? 0
@@ -412,6 +421,13 @@ struct ExportView: View {
                             Text("\(n)").font(.system(size: 12, weight: .semibold, design: .rounded)).monospacedDigit()
                         }
                     }
+                }
+                HStack {
+                    Text("Gesamt Personen").font(.system(size: 12, weight: .semibold, design: .rounded))
+                    Spacer()
+                    Text("\(allGuests.count)")
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .monospacedDigit()
                 }
             }
             if !allergic.isEmpty {
@@ -450,8 +466,8 @@ struct ExportView: View {
                     Text(g.fullName)
                         .font(.system(size: 22, weight: .semibold, design: .rounded))
                     Rectangle().fill(Color(hex: "#c47a8c")).frame(width: 40, height: 1.2)
-                    if !g.funFact.isEmpty {
-                        Text(g.funFact)
+                    if !g.funFactDisplay.isEmpty {
+                        Text(g.funFactDisplay)
                             .font(.system(size: 11, weight: .regular, design: .rounded).italic())
                             .foregroundStyle(Tokens.Colors.ink3)
                             .multilineTextAlignment(.center)
@@ -779,7 +795,9 @@ struct ExportView: View {
             )
             items.append(ExportItem(filename: "Sitzplan-\(safeName).pdf",
                                     data: PDFExporter.generatePDF(tables: tables, eventName: event.name,
-                                                                  date: event.date, options: opts)))
+                                                                  date: event.date, options: opts,
+                                                                  partner1Name: event.partner1Name,
+                                                                  partner2Name: event.partner2Name)))
         }
         if includeTableCards {
             items.append(ExportItem(filename: "Tischkarten-\(safeName).pdf",
@@ -811,18 +829,18 @@ struct ExportView: View {
                                     data: PhoneVCardExporter.generate(guests: guests, eventName: event.name)))
         }
         if includeCanvasPNG {
-            let style = VisualSeatingPlanExporter.NameStyle(rawValue: visualPlanNameStyleRaw) ?? .smartDeduped
-            let bg: NSImage? = event.roomPlanImageData.flatMap { NSImage(data: $0) }
-            let roomSize: CGSize? = {
-                guard let w = event.roomWidthCM, let h = event.roomLengthCM, w > 0, h > 0 else { return nil }
-                return CGSize(width: w, height: h)
-            }()
-            if let png = VisualSeatingPlanExporter.generatePNG(
+            let style = VisualSeatingPlanExporter.NameStyle(rawValue: canvasSeatNameStyleRaw) ?? .full
+            let names = VisualSeatingPlanExporter.displayNames(
+                for: tables.flatMap(\.guests), style: style
+            )
+            let bg = event.roomPlanImageData.flatMap { NSImage(data: $0) }
+            if let png = CanvasImageExporter.generatePNG(
                 tables: tables,
-                labels: canvasLabels,
-                roomBackground: bg,
-                roomCMSize: roomSize,
-                nameStyle: style
+                displayNames: names,
+                rules: event.seatingRules,
+                scale: CGFloat(lastCanvasScale),
+                labels: event.labels,
+                background: bg
             ) {
                 items.append(ExportItem(filename: "Sitzplan-Canvas-\(safeName).png", data: png))
             }

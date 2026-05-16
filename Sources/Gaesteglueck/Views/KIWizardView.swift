@@ -113,6 +113,7 @@ struct KIWizardView: View {
     @State private var currentPhase: WizardPhase = .clusters
     @State private var messages: [ChatMessage] = []
     @State private var isLoading = false
+    @State private var wizardTask: Task<Void, Never>? = nil
     @State private var errorMessage: String?
     @State private var showingChat = false
     @State private var customInput: String = ""
@@ -215,6 +216,10 @@ struct KIWizardView: View {
                                 Text("KI denkt nach…")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
+                                Button("Abbrechen") { wizardTask?.cancel() }
+                                    .buttonStyle(.plain)
+                                    .font(.caption.weight(.medium))
+                                    .foregroundStyle(Tokens.Colors.accent)
                             }
                             .padding(.horizontal)
                         }
@@ -501,8 +506,8 @@ struct KIWizardView: View {
             LLMMessage(role: "system", content: systemContext)
         ] + messages.map { LLMMessage(role: $0.role, content: $0.content) }
 
-        Task {
-            let client = LLMClientFactory.makeFromSettings()
+        wizardTask = Task {
+            let client = LLMClientFactory.makeClient(for: .seating)
             do {
                 let reply = try await client.chat(messages: allMessages)
                 await MainActor.run {
@@ -533,8 +538,8 @@ struct KIWizardView: View {
             LLMMessage(role: "system", content: systemContext)
         ] + messages.map { LLMMessage(role: $0.role, content: $0.content) }
 
-        Task {
-            let client = LLMClientFactory.makeFromSettings()
+        wizardTask = Task {
+            let client = LLMClientFactory.makeClient(for: .seating)
             do {
                 let reply = try await client.chat(messages: allMessages)
                 await MainActor.run {
@@ -639,7 +644,7 @@ struct KIWizardView: View {
         }
 
         Task { @Sendable in
-            let client = LLMClientFactory.makeFromSettings()
+            let client = LLMClientFactory.makeClient(for: .seating)
             do {
                 let raw = try await client.prompt(system: systemPrompt, user: userPrompt, temperature: 0.2)
                 let plan = try LLMSeatingPlanner.parseRawResponse(

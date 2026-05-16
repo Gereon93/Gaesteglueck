@@ -10,7 +10,7 @@ enum FunFactWorklistCSVExporter {
             .map(escape).joined(separator: ";"))
 
         for g in guests {
-            let trimmed = g.funFact.trimmingCharacters(in: .whitespaces)
+            let trimmed = g.funFactDisplay.trimmingCharacters(in: .whitespaces)
             let status: String
             if trimmed.isEmpty {
                 status = "FEHLT"

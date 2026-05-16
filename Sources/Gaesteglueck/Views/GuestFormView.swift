@@ -560,6 +560,12 @@ struct GuestFormView: View {
             guest.intolerances = parsedIntolerances
             guest.ageCategory = ageCategory
             guest.rsvpStatus = rsvpStatus
+            // Rohdaten geändert → alte vereinheitlichte Fassung passt nicht
+            // mehr, daher verwerfen (Fallback auf neuen Rohtext bis neu
+            // vereinheitlicht wird). Kein stilles Auseinanderlaufen.
+            if guest.funFact != trimmedFunFact {
+                guest.funFactNormalized = ""
+            }
             guest.funFact = trimmedFunFact
             guest.funFactApproved = trimmedFunFact.isEmpty ? false : funFactApproved
             guest.notes = notes

@@ -290,7 +290,7 @@ struct KIChatView: View {
         ] + messages.map { LLMMessage(role: $0.role, content: $0.content) }
 
         currentTask = Task {
-            let client = LLMClientFactory.makeFromSettings()
+            let client = LLMClientFactory.makeClient(for: .chat)
             do {
                 let reply = try await client.chat(messages: allMessages)
                 if Task.isCancelled { return }

@@ -127,7 +127,7 @@ enum FunFactWorklistExporter {
             drawText(guest.fullName, at: CGPoint(x: 40, y: y), font: nameFont)
 
             // Status-Tag rechts
-            let trimmed = guest.funFact.trimmingCharacters(in: .whitespaces)
+            let trimmed = guest.funFactDisplay.trimmingCharacters(in: .whitespaces)
             let statusText: String
             let statusColor: CGColor
             if trimmed.isEmpty {

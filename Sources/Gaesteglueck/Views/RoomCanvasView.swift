@@ -31,6 +31,10 @@ struct RoomCanvasView: View {
     #if canImport(AppKit)
     @State private var cachedRoomPlanImageRef: NSImage?
     @State private var cachedRoomPlanImageDigest: Int = 0
+    @AppStorage("canvasShowSeatNames") private var showSeatNames = false
+    @AppStorage("canvasSeatNameStyle") private var canvasSeatNameStyleRaw =
+        VisualSeatingPlanExporter.NameStyle.full.rawValue
+    @AppStorage("lastCanvasScale") private var lastCanvasScale: Double = 1.0 / 3.0
     #endif
 
     private var event: Event? { events.first }
@@ -113,6 +117,17 @@ struct RoomCanvasView: View {
         }
     }
 
+    /// Anzeige-Namen für alle sitzenden Gäste gemäß gewähltem Stil. Dedup
+    /// (smartDeduped) läuft global über alle Gäste, damit "Steffi F." vs
+    /// "Steffi S." auch tischübergreifend eindeutig bleibt.
+    private var canvasDisplayNames: [UUID: String] {
+        guard showSeatNames else { return [:] }
+        let style = VisualSeatingPlanExporter.NameStyle(rawValue: canvasSeatNameStyleRaw) ?? .full
+        return VisualSeatingPlanExporter.displayNames(
+            for: tables.flatMap(\.guests), style: style
+        )
+    }
+
     private func backfillSeatIndices() {
         for table in tables {
             var used = Set(table.guests.compactMap(\.seatIndex))
@@ -183,13 +198,35 @@ struct RoomCanvasView: View {
                 }
             }
             .warmButton(.secondary)
+            Button {
+                showSeatNames.toggle()
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: showSeatNames ? "textformat.size" : "textformat.size.smaller")
+                    Text(showSeatNames ? "Namen an" : "Namen aus")
+                }
+            }
+            .warmButton(showSeatNames ? .primary : .secondary)
+            .help("Volle Namen an allen Sitzen anzeigen — ideal für Screenshots")
+            if showSeatNames {
+                Picker("Namen-Stil", selection: $canvasSeatNameStyleRaw) {
+                    ForEach(VisualSeatingPlanExporter.NameStyle.allCases) { style in
+                        Text(style.rawValue).tag(style.rawValue)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .help("Wie Namen angezeigt werden — voller Name, Vorname, oder Initial bei Doppelten")
+            }
             AutoPlaceButton()
             if let event {
                 ExportButton(
                     tables: tables,
                     guests: guests,
                     eventName: event.name,
-                    date: event.date
+                    date: event.date,
+                    partner1Name: event.partner1Name,
+                    partner2Name: event.partner2Name
                 )
             }
             Button {
@@ -537,7 +574,11 @@ struct RoomCanvasView: View {
                 CanvasLabelsLayer(event: event)
             }
             .environment(\.canvasScale, scale)
+            .environment(\.seatDisplayNames, canvasDisplayNames)
             .background(Tokens.Colors.bg)
+            .onChange(of: scale, initial: true) { _, newScale in
+                lastCanvasScale = Double(newScale)
+            }
         }
         .overlay(alignment: .topLeading) {
             HStack {

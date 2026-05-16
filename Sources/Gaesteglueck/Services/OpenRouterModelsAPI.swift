@@ -6,6 +6,22 @@ import FoundationNetworking
 struct OpenRouterModel: Codable, Sendable, Identifiable, Hashable {
     let id: String
     let name: String
+    /// USD pro 1 Token (Prompt bzw. Completion). nil = unbekannt/kostenlos.
+    var promptUSDPerToken: Double? = nil
+    var completionUSDPerToken: Double? = nil
+
+    /// USD pro 1 Mio Tokens, gemittelt grob (Prompt+Completion)/2 für die
+    /// Anzeige. nil wenn keine Preisinfo vorhanden (z.B. ":free"-Modelle).
+    var blendedUSDPerMillion: Double? {
+        guard let p = promptUSDPerToken, let c = completionUSDPerToken else { return nil }
+        return (p + c) / 2 * 1_000_000
+    }
+
+    var priceLabel: String {
+        guard let perM = blendedUSDPerMillion else { return "kostenlos / unbekannt" }
+        if perM == 0 { return "kostenlos" }
+        return String(format: "$%.2f / 1M Token", perM)
+    }
 }
 
 enum OpenRouterModelsAPI {
@@ -29,9 +45,14 @@ enum OpenRouterModelsAPI {
     }
 
     private struct Envelope: Codable {
+        struct Pricing: Codable {
+            let prompt: String?
+            let completion: String?
+        }
         struct Entry: Codable {
             let id: String
             let name: String?
+            let pricing: Pricing?
         }
         let data: [Entry]
     }
@@ -63,7 +84,14 @@ enum OpenRouterModelsAPI {
         do {
             let env = try JSONDecoder().decode(Envelope.self, from: data)
             return env.data
-                .map { OpenRouterModel(id: $0.id, name: $0.name ?? $0.id) }
+                .map { entry in
+                    OpenRouterModel(
+                        id: entry.id,
+                        name: entry.name ?? entry.id,
+                        promptUSDPerToken: entry.pricing?.prompt.flatMap(Double.init),
+                        completionUSDPerToken: entry.pricing?.completion.flatMap(Double.init)
+                    )
+                }
                 .sorted { $0.name.lowercased() < $1.name.lowercased() }
         } catch {
             let snippet = String(data: data, encoding: .utf8)?.prefix(400).description ?? "<binary>"

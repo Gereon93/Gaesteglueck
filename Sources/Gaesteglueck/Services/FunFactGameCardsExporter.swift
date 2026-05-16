@@ -37,9 +37,9 @@ enum FunFactGameCardsExporter {
         }
 
         let withFunFact = guests
-            .filter { !$0.funFact.trimmingCharacters(in: .whitespaces).isEmpty }
+            .filter { !$0.funFactDisplay.trimmingCharacters(in: .whitespaces).isEmpty }
             .sorted { lhs, rhs in
-                lhs.funFact.localizedCompare(rhs.funFact) == .orderedAscending
+                lhs.funFactDisplay.localizedCompare(rhs.funFactDisplay) == .orderedAscending
             }
 
         if withFunFact.isEmpty {
@@ -133,7 +133,7 @@ enum FunFactGameCardsExporter {
             width: size.width - 32,
             height: size.height - 60
         )
-        (guest.funFact as NSString).draw(in: textRect, withAttributes: funFactAttrs)
+        (guest.funFactDisplay as NSString).draw(in: textRect, withAttributes: funFactAttrs)
     }
 
     private static func drawCropMarks(context: CGContext, origin: CGPoint, size: CGSize) {
@@ -175,7 +175,7 @@ enum FunFactGameCardsExporter {
                 y = 50
             }
             let funFactFont = NSFont.systemFont(ofSize: 11)
-            drawText("• \(guest.funFact)",
+            drawText("• \(guest.funFactDisplay)",
                      at: CGPoint(x: marginX, y: y),
                      font: funFactFont)
             y += 16

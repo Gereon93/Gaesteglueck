@@ -42,6 +42,10 @@ final class Guest {
     var dietaryChoice: String
     var intolerances: [String]
     var funFact: String
+    /// KI-vereinheitlichte Fassung des FunFacts (1. Person). Leer = noch
+    /// keine. `funFact` bleibt IMMER die unveränderte Rohdaten-Eingabe;
+    /// Anzeige/Export nutzen `funFactDisplay` (vereinheitlicht, Fallback roh).
+    var funFactNormalized: String = ""
     var notes: String
     var employer: String
     var profession: String
@@ -120,6 +124,13 @@ final class Guest {
 
     var hasIntolerances: Bool {
         !intolerances.isEmpty
+    }
+
+    /// Was angezeigt/exportiert wird: vereinheitlichte Fassung wenn vorhanden,
+    /// sonst Fallback auf die Rohdaten. Rohdaten gehen nie verloren.
+    var funFactDisplay: String {
+        let n = funFactNormalized.trimmingCharacters(in: .whitespacesAndNewlines)
+        return n.isEmpty ? funFact : funFactNormalized
     }
 
     var dietarySummary: String {

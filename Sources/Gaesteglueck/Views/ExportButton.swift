@@ -6,6 +6,8 @@ struct ExportButton: View {
     let guests: [Guest]
     let eventName: String
     let date: Date?
+    var partner1Name: String = ""
+    var partner2Name: String = ""
 
     var body: some View {
         Menu {
@@ -51,7 +53,9 @@ struct ExportButton: View {
         let data = PDFExporter.generatePDF(
             tables: tables,
             eventName: eventName,
-            date: date
+            date: date,
+            partner1Name: partner1Name,
+            partner2Name: partner2Name
         )
         savePDF(data: data, suggestedName: "Sitzplan-\(eventName).pdf")
     }

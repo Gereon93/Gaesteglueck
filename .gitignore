@@ -78,6 +78,14 @@ docs/notes/
 backup/
 Backups/
 
+# Prompt-Eval: aus Swift extrahierte Prompts sind generierte Artefakte —
+# nie committen, sonst verrottet das Duplikat. Werden in CI frisch erzeugt.
+eval/prompts/
+eval/.deepeval/
+eval/.venv/
+__pycache__/
+.pytest_cache/
+
 # macOS
 .DS_Store
 dist/

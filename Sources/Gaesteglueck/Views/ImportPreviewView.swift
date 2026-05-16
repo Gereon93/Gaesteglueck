@@ -23,6 +23,8 @@ struct ImportPreviewView: View {
     @State private var hasStartedParsing = false
     @State private var llmReachable: Bool? = nil
     @State private var isRetrying = false
+    @State private var parseTask: Task<Void, Never>? = nil
+    @State private var parseProgress: (done: Int, total: Int) = (0, 0)
 
     enum RowState {
         case parsing
@@ -107,6 +109,9 @@ struct ImportPreviewView: View {
                 toolbar
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
+                        if parseTask != nil {
+                            parseProgressBanner
+                        }
                         if llmReachable == false {
                             llmOfflineBanner
                         }
@@ -154,7 +159,35 @@ struct ImportPreviewView: View {
         .task {
             guard !hasStartedParsing else { return }
             hasStartedParsing = true
-            await parseAllRows()
+            let t = Task { await parseAllRows() }
+            parseTask = t
+            await t.value
+            parseTask = nil
+        }
+    }
+
+    private var parseProgressBanner: some View {
+        HStack(spacing: 12) {
+            ProgressView().controlSize(.small)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("KI liest die Anmeldungen…")
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                if parseProgress.total > 0 {
+                    Text("\(parseProgress.done) / \(parseProgress.total) Anmeldungen · \(max(0, parseProgress.total - parseProgress.done)) offen")
+                        .font(.system(size: 11.5, design: .rounded))
+                        .foregroundStyle(Tokens.Colors.ink3)
+                }
+            }
+            Spacer()
+            Button("Abbrechen", role: .cancel) { parseTask?.cancel() }
+                .warmButton(.secondary, size: .sm)
+        }
+        .padding(12)
+        .background(Tokens.Colors.bg2)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(Tokens.Colors.line, lineWidth: 1)
         }
     }
 
@@ -260,7 +293,7 @@ struct ImportPreviewView: View {
         }
 
         let endpoint = lmStudioEndpoint
-        let provider = LLMClientFactory.providerFromSettings()
+        let provider = LLMClientFactory.provider(for: .importParse)
         let isOnline: Bool
         if provider == .lmStudio {
             isOnline = await Self.checkLMStudioReachable(endpoint: endpoint)
@@ -289,16 +322,27 @@ struct ImportPreviewView: View {
         let chunks = stride(from: 0, to: rows.count, by: chunkSize).map { start in
             Array(rows[start..<min(start + chunkSize, rows.count)])
         }
+        await MainActor.run { parseProgress = (0, rows.count) }
         var globalIndex = 0
         for chunk in chunks {
+            if Task.isCancelled {
+                await MainActor.run {
+                    for i in rows.indices {
+                        guard case .parsing = rowStates[i] else { continue }
+                        let parsed = LLMGuestParser.fallbackParse(rows[i])
+                        rowStates[i] = .fallback(parsed, reason: "Abgebrochen — Fallback-Parser verwendet. Schau einmal drüber.")
+                    }
+                }
+                return
+            }
             let startIndex = globalIndex
             let states = await Self.parseBatch(chunk: chunk, originalStartIndex: startIndex)
             await MainActor.run {
                 for (offset, state) in states.enumerated() {
                     rowStates[startIndex + offset] = state
                 }
-                // Nach jedem Batch: schauen ob bereits in DB unverändert
                 detectUnchangedRows()
+                parseProgress = (min(startIndex + chunk.count, rows.count), rows.count)
             }
             globalIndex += chunk.count
         }
@@ -309,7 +353,7 @@ struct ImportPreviewView: View {
     /// jede betroffene Zeile auf Per-Row-Parsing bzw. den Regex-Fallback zurück.
     private static func parseBatch(chunk: [RegistrationRow], originalStartIndex: Int) async -> [RowState] {
         guard !chunk.isEmpty else { return [] }
-        let client = LLMClientFactory.makeFromSettings()
+        let client = LLMClientFactory.makeClient(for: .importParse)
         let userPrompt = LLMGuestParser.buildBatchPrompt(rows: chunk)
         do {
             let response = try await client.chat(messages: [
@@ -363,7 +407,7 @@ struct ImportPreviewView: View {
     }
 
     private static func parseSingle(row: RegistrationRow) async -> RowState {
-        let client = LLMClientFactory.makeFromSettings()
+        let client = LLMClientFactory.makeClient(for: .importParse)
         let userPrompt = LLMGuestParser.buildPrompt(for: row)
         do {
             let response = try await client.chat(messages: [

@@ -31,8 +31,8 @@ struct PosterExporterTests {
         #expect(data.count > 200)
     }
 
-    @Test("Unassigned guests are listed somewhere")
-    func unassignedGuests() {
+    @Test("Unassigned guests do not appear on the spatial poster")
+    func unassignedGuestsIgnored() {
         let unassigned = (0..<3).map { i in
             Guest(firstName: "Fremd\(i)", partnerAssignment: .partner1)
         }
@@ -48,7 +48,7 @@ struct PosterExporterTests {
             eventName: "Hochzeit",
             date: nil
         )
-        #expect(withUnassigned.count > empty.count)
+        #expect(withUnassigned.count == empty.count)
     }
 
     @Test("Many tables produce larger poster than few")

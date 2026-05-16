@@ -13,6 +13,7 @@ struct SitzplanCoPilotPanel: View {
     @State private var messages: [ChatMessage] = []
     @State private var inputText: String = ""
     @State private var isThinking = false
+    @State private var sendTask: Task<Void, Never>? = nil
     @State private var errorMessage: String?
 
     var body: some View {
@@ -72,6 +73,10 @@ struct SitzplanCoPilotPanel: View {
                             Text("KI denkt nach…")
                                 .font(.system(size: 11.5, design: .rounded))
                                 .foregroundStyle(Tokens.Colors.ink3)
+                            Button("Abbrechen") { sendTask?.cancel() }
+                                .buttonStyle(.plain)
+                                .font(.system(size: 11.5, weight: .medium, design: .rounded))
+                                .foregroundStyle(Tokens.Colors.accent)
                         }
                         .padding(.horizontal, 12)
                     }
@@ -142,9 +147,9 @@ struct SitzplanCoPilotPanel: View {
                 .textFieldStyle(.roundedBorder)
                 .lineLimit(1...3)
                 .font(.system(size: 12, design: .rounded))
-                .onSubmit { Task { await send() } }
+                .onSubmit { sendTask = Task { await send() } }
             Button {
-                Task { await send() }
+                sendTask = Task { await send() }
             } label: {
                 Image(systemName: "paperplane.fill")
                     .frame(width: 22, height: 22)
@@ -171,7 +176,7 @@ struct SitzplanCoPilotPanel: View {
         let context = buildSaalContext()
         let history = Array(messages.dropLast())
 
-        let client = LLMClientFactory.makeFromSettings()
+        let client = LLMClientFactory.makeClient(for: .seating)
         let pilot = SitzplanCoPilot(client: client)
         do {
             let response = try await pilot.ask(userMessage: trimmed, history: history, saalContext: context)

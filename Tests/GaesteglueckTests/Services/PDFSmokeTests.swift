@@ -162,6 +162,50 @@ struct PDFSmokeTests {
         print("\n✅ Smoke-PDFs unter:", outDir.path)
     }
 
+    /// Rendert die Canvas-PNG (ImageRenderer-Pfad) mit allen Anzeige-Optionen,
+    /// damit die Namen-Positionierung & neuen Indikatoren manuell prüfbar sind.
+    @Test("Canvas-PNG rendert mit Diät/Alter/Allergie + Legende")
+    @MainActor
+    func canvasPNGSmoke() throws {
+        let outDir = URL(fileURLWithPath: "/tmp/gpdf-smoke", isDirectory: true)
+        try? FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
+
+        let t = GuestTable(name: "T1", shape: .rectangular, width: 80, depth: 320, rotation: 90)
+        t.positionX = 400; t.positionY = 400
+        let guests = [
+            guest("Regina", "Albers", side: .partner1, diet: "Vegetarisch"),
+            guest("Lilli", "Gold", side: .partner1, diet: "Vegan"),
+            guest("Karen", "Fuchs", side: .partner2, intolerances: ["Gluten", "Weizen"]),
+            guest("Henriette", "Klein", side: .partner2, age: .child),
+            guest("Max", "Becker", side: .partner1, age: .baby),
+            guest("Sebastian", "Schmidt", side: .partner2)
+        ]
+        for (i, g) in guests.enumerated() { g.table = t; g.seatIndex = i }
+
+        let names = VisualSeatingPlanExporter.displayNames(for: guests, style: .full)
+        let legend = SeatingLegend(guests: guests)
+        if let png = CanvasImageExporter.generatePNG(
+            tables: [t], displayNames: names, rules: .default, scale: 1.0,
+            showSeatNames: true, infoDisplay: .all, showAgeMarkers: true,
+            chipContent: .initials, showTableWarnings: true,
+            showRoomLabels: true, showLegend: true, legend: legend
+        ) {
+            try png.write(to: outDir.appendingPathComponent("09-canvas-render.png"))
+            #expect(png.count > 5000)
+        }
+        // Variante: Allergen-Nummer direkt im Kreis
+        if let png2 = CanvasImageExporter.generatePNG(
+            tables: [t], displayNames: names, rules: .default, scale: 1.0,
+            showSeatNames: true, infoDisplay: .all, showAgeMarkers: true,
+            chipContent: .intolerance, showTableWarnings: true,
+            showRoomLabels: true, showLegend: true, legend: legend
+        ) {
+            try png2.write(to: outDir.appendingPathComponent("09b-canvas-content-intol.png"))
+            #expect(png2.count > 5000)
+        }
+        print("\n✅ Canvas-Render-PNGs unter:", outDir.path)
+    }
+
     // MARK: - Builders
 
     private func guest(_ first: String, _ last: String,

@@ -9,8 +9,8 @@ struct Avatar: View {
 
         var color: Color {
             switch self {
-            case .veg: Tokens.Colors.sage
-            case .vegan: Color(hex: "#5a8a4a")
+            case .veg: Tokens.Colors.dietVegetarian
+            case .vegan: Tokens.Colors.dietVegan
             case .allergie: Tokens.Colors.warn
             }
         }

@@ -12,11 +12,40 @@ struct TableCanvasItemView: View {
     @Query private var events: [Event]
     @Environment(\.canvasScale) private var canvasScale
     @Environment(\.seatDisplayNames) private var seatDisplayNames
+    @Environment(\.seatingLegend) private var seatingLegend
 
     @State private var dragOffset: CGSize = .zero
     @State private var showingCombineSheet = false
     @State private var showingEditSheet = false
     @AppStorage("canvasShowSeatNames") private var showSeatNames = false
+    @AppStorage("canvasSeatInfoMode") private var seatInfoModeRaw: String =
+        SeatInfoDisplay.none.rawValue
+    @AppStorage("canvasShowAgeMarkers") private var showAgeMarkers = false
+    @AppStorage("canvasShowTableWarnings") private var showTableWarnings = true
+    @AppStorage("canvasSeatChipContent") private var seatChipContentRaw = SeatChipContent.initials.rawValue
+    @AppStorage("canvasSeatNameSize") private var seatNameSize: Double = 9
+    @AppStorage("canvasShowCoupleMarker") private var showCoupleMarker = false
+
+    private var seatChipContent: SeatChipContent {
+        SeatChipContent(rawValue: seatChipContentRaw) ?? .initials
+    }
+
+    /// Brautpaar = Gast, dessen Name dem Event-Partner-Namen entspricht.
+    private func isCouple(_ g: Guest?) -> Bool {
+        guard let g, let e = event else { return false }
+        return Self.matchesPartner(g, e.partner1Name) || Self.matchesPartner(g, e.partner2Name)
+    }
+
+    static func matchesPartner(_ g: Guest, _ name: String) -> Bool {
+        let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !n.isEmpty else { return false }
+        return g.fullName.localizedCaseInsensitiveCompare(n) == .orderedSame
+            || g.firstName.localizedCaseInsensitiveCompare(n) == .orderedSame
+    }
+
+    private var seatInfoMode: SeatInfoDisplay {
+        SeatInfoDisplay(rawValue: seatInfoModeRaw) ?? .none
+    }
 
     /// Aktuelle Sitzregeln aus dem Event ziehen — nicht aus dem statischen
     /// `GuestTable.activeRules`. Das Static wird erst in onAppear synced,
@@ -203,7 +232,14 @@ struct TableCanvasItemView: View {
                         localX: seat.position.x - table.positionX,
                         localY: seat.position.y - table.positionY
                     ),
-                    displayName: occ.flatMap { seatDisplayNames[$0.id] }
+                    displayName: occ.flatMap { seatDisplayNames[$0.id] },
+                    infoDisplay: seatInfoMode,
+                    intoleranceNumbers: occ.map { seatingLegend.numbers(for: $0) } ?? [],
+                    showAgeMarker: showAgeMarkers,
+                    chipContent: seatChipContent,
+                    nameFontSize: CGFloat(seatNameSize),
+                    isCouple: isCouple(occ),
+                    showCoupleMarker: showCoupleMarker
                 )
                 .offset(
                     x: seat.position.x - table.positionX,
@@ -240,7 +276,14 @@ struct TableCanvasItemView: View {
                     resolvedNameSide: resolvedNameSide(
                         localX: positions[idx].x, localY: positions[idx].y
                     ),
-                    displayName: occupant(at: idx).flatMap { seatDisplayNames[$0.id] }
+                    displayName: occupant(at: idx).flatMap { seatDisplayNames[$0.id] },
+                    infoDisplay: seatInfoMode,
+                    intoleranceNumbers: occupant(at: idx).map { seatingLegend.numbers(for: $0) } ?? [],
+                    showAgeMarker: showAgeMarkers,
+                    chipContent: seatChipContent,
+                    nameFontSize: CGFloat(seatNameSize),
+                    isCouple: isCouple(occupant(at: idx)),
+                    showCoupleMarker: showCoupleMarker
                 )
                 .offset(x: positions[idx].x, y: positions[idx].y)
             }
@@ -547,7 +590,7 @@ struct TableCanvasItemView: View {
 
     @ViewBuilder
     private var allergyBadge: some View {
-        if allergyCount > 0 {
+        if showTableWarnings, allergyCount > 0 {
             HStack(spacing: 2) {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .font(.system(size: 8, weight: .bold))

@@ -54,7 +54,10 @@ swift test
 
 ## Lizenz
 
-MIT — siehe LICENSE.
+GNU General Public License v3.0 — siehe [LICENSE](LICENSE). Bei Weitergabe
+bzw. Distribution muss der (korrespondierende) Quellcode den Empfängern unter
+der GPL bereitgestellt werden; ein privater Fork ohne Weitergabe löst das
+nicht aus.
 
 ## Status
 

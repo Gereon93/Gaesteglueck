@@ -25,6 +25,16 @@ struct ExportView: View {
     @AppStorage("visualPlanNameStyle") private var visualPlanNameStyleRaw: String = VisualSeatingPlanExporter.NameStyle.smartDeduped.rawValue
     @AppStorage("canvasSeatNameStyle") private var canvasSeatNameStyleRaw: String = VisualSeatingPlanExporter.NameStyle.full.rawValue
     @AppStorage("lastCanvasScale") private var lastCanvasScale: Double = 1.0 / 3.0
+    // Live-Canvas-Anzeige-Toggles — werden in die Canvas-PNG übernommen.
+    @AppStorage("canvasShowSeatNames") private var canvasShowSeatNames = false
+    @AppStorage("canvasSeatInfoMode") private var canvasSeatInfoModeRaw = SeatInfoDisplay.none.rawValue
+    @AppStorage("canvasShowAgeMarkers") private var canvasShowAgeMarkers = false
+    @AppStorage("canvasSeatChipContent") private var canvasSeatChipContentRaw = SeatChipContent.initials.rawValue
+    @AppStorage("canvasShowTableWarnings") private var canvasShowTableWarnings = true
+    @AppStorage("canvasShowRoomLabels") private var canvasShowRoomLabels = true
+    @AppStorage("canvasShowLegend") private var canvasShowLegend = true
+    @AppStorage("canvasSeatNameSize") private var canvasSeatNameSize: Double = 9
+    @AppStorage("canvasShowCoupleMarker") private var canvasShowCoupleMarker = false
 
     @State private var highlightAllergies = true
     @State private var withWavePattern = true
@@ -830,17 +840,31 @@ struct ExportView: View {
         }
         if includeCanvasPNG {
             let style = VisualSeatingPlanExporter.NameStyle(rawValue: canvasSeatNameStyleRaw) ?? .full
-            let names = VisualSeatingPlanExporter.displayNames(
-                for: tables.flatMap(\.guests), style: style
-            )
+            let names = canvasShowSeatNames
+                ? VisualSeatingPlanExporter.displayNames(for: tables.flatMap(\.guests), style: style)
+                : [:]
             let bg = event.roomPlanImageData.flatMap { NSImage(data: $0) }
+            let infoMode = SeatInfoDisplay(rawValue: canvasSeatInfoModeRaw) ?? .none
+            let chipContent = SeatChipContent(rawValue: canvasSeatChipContentRaw) ?? .initials
+            let legend = SeatingLegend(guests: tables.flatMap(\.guests).filter { $0.table != nil })
             if let png = CanvasImageExporter.generatePNG(
                 tables: tables,
                 displayNames: names,
                 rules: event.seatingRules,
                 scale: CGFloat(lastCanvasScale),
                 labels: event.labels,
-                background: bg
+                background: bg,
+                showSeatNames: canvasShowSeatNames,
+                infoDisplay: infoMode,
+                showAgeMarkers: canvasShowAgeMarkers,
+                chipContent: chipContent,
+                showTableWarnings: canvasShowTableWarnings,
+                showRoomLabels: canvasShowRoomLabels,
+                showLegend: canvasShowLegend,
+                legend: legend,
+                nameFontSize: CGFloat(canvasSeatNameSize),
+                showCoupleMarker: canvasShowCoupleMarker,
+                coupleNames: [event.partner1Name, event.partner2Name]
             ) {
                 items.append(ExportItem(filename: "Sitzplan-Canvas-\(safeName).png", data: png))
             }

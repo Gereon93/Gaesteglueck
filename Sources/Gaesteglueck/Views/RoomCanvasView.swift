@@ -34,7 +34,22 @@ struct RoomCanvasView: View {
     @AppStorage("canvasShowSeatNames") private var showSeatNames = false
     @AppStorage("canvasSeatNameStyle") private var canvasSeatNameStyleRaw =
         VisualSeatingPlanExporter.NameStyle.full.rawValue
+    @AppStorage("canvasSeatInfoMode") private var canvasSeatInfoModeRaw =
+        SeatInfoDisplay.none.rawValue
+    @AppStorage("canvasShowAgeMarkers") private var canvasShowAgeMarkers = false
+    @AppStorage("canvasShowGrid") private var canvasShowGrid = true
+    @AppStorage("canvasShowRoomLabels") private var canvasShowRoomLabels = true
+    @AppStorage("canvasShowLegend") private var canvasShowLegend = true
+    @AppStorage("canvasShowTableWarnings") private var canvasShowTableWarnings = true
+    @AppStorage("canvasSeatChipContent") private var canvasSeatChipContentRaw = SeatChipContent.initials.rawValue
+    @AppStorage("canvasSeatNameSize") private var canvasSeatNameSize: Double = 9
+    @AppStorage("canvasShowCoupleMarker") private var canvasShowCoupleMarker = false
+    @AppStorage("canvasLegendOffsetX") private var legendOffsetX: Double = 0
+    @AppStorage("canvasLegendOffsetY") private var legendOffsetY: Double = 0
     @AppStorage("lastCanvasScale") private var lastCanvasScale: Double = 1.0 / 3.0
+    @State private var legendDrag: CGSize = .zero
+    @State private var canvasSize: CGSize = .zero
+    @State private var legendCursorPushed = false
     #endif
 
     private var event: Event? { events.first }
@@ -120,6 +135,38 @@ struct RoomCanvasView: View {
     /// Anzeige-Namen für alle sitzenden Gäste gemäß gewähltem Stil. Dedup
     /// (smartDeduped) läuft global über alle Gäste, damit "Steffi F." vs
     /// "Steffi S." auch tischübergreifend eindeutig bleibt.
+    /// Globale Nummerierung aller Unverträglichkeiten in der Hochzeit.
+    /// Nur sitzende Gäste — wer in der Inbox liegt, taucht in der Legende
+    /// noch nicht auf (sonst springen Nummern beim Auto-Place).
+    private var canvasSeatingLegend: SeatingLegend {
+        SeatingLegend(guests: guests.filter { $0.table != nil })
+    }
+
+    private var canvasInfoMode: SeatInfoDisplay {
+        SeatInfoDisplay(rawValue: canvasSeatInfoModeRaw) ?? .none
+    }
+
+    /// Persistierter Legenden-Offset + laufender Drag, geklemmt.
+    private var clampedLegendOffset: CGSize {
+        clampLegend(CGSize(
+            width: legendOffsetX + legendDrag.width,
+            height: legendOffsetY + legendDrag.height
+        ))
+    }
+
+    /// Hält die Legende auf dem Canvas — mind. ~160pt bleiben sichtbar, damit
+    /// sie nie ganz vom Rand verschwindet und unauffindbar wird. Anker ist
+    /// bottomLeading: x≥0 nach rechts, y≤0 nach oben.
+    private func clampLegend(_ offset: CGSize) -> CGSize {
+        guard canvasSize.width > 0, canvasSize.height > 0 else { return offset }
+        let maxX = max(0, canvasSize.width - 160)
+        let minY = -(max(0, canvasSize.height - 160))
+        return CGSize(
+            width: min(max(offset.width, 0), maxX),
+            height: min(max(offset.height, minY), 0)
+        )
+    }
+
     private var canvasDisplayNames: [UUID: String] {
         guard showSeatNames else { return [:] }
         let style = VisualSeatingPlanExporter.NameStyle(rawValue: canvasSeatNameStyleRaw) ?? .full
@@ -198,26 +245,50 @@ struct RoomCanvasView: View {
                 }
             }
             .warmButton(.secondary)
-            Button {
-                showSeatNames.toggle()
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: showSeatNames ? "textformat.size" : "textformat.size.smaller")
-                    Text(showSeatNames ? "Namen an" : "Namen aus")
-                }
-            }
-            .warmButton(showSeatNames ? .primary : .secondary)
-            .help("Volle Namen an allen Sitzen anzeigen — ideal für Screenshots")
-            if showSeatNames {
-                Picker("Namen-Stil", selection: $canvasSeatNameStyleRaw) {
-                    ForEach(VisualSeatingPlanExporter.NameStyle.allCases) { style in
-                        Text(style.rawValue).tag(style.rawValue)
+            Menu {
+                Section("Sitze") {
+                    Toggle("Namen anzeigen", isOn: $showSeatNames)
+                    if showSeatNames {
+                        Picker("Namen-Stil", selection: $canvasSeatNameStyleRaw) {
+                            ForEach(VisualSeatingPlanExporter.NameStyle.allCases) { style in
+                                Text(style.rawValue).tag(style.rawValue)
+                            }
+                        }
+                        Picker("Namen-Größe", selection: $canvasSeatNameSize) {
+                            Text("Klein").tag(9.0)
+                            Text("Mittel").tag(11.0)
+                            Text("Groß").tag(13.0)
+                            Text("Sehr groß").tag(15.0)
+                        }
+                    }
+                    Picker("Diät & Allergien", selection: $canvasSeatInfoModeRaw) {
+                        ForEach(SeatInfoDisplay.allCases) { mode in
+                            Label(mode.label, systemImage: mode.icon).tag(mode.rawValue)
+                        }
+                    }
+                    Toggle("Alters-Marker (Kind, Baby …)", isOn: $canvasShowAgeMarkers)
+                    Toggle("Brautpaar hervorheben (👰/🤵)", isOn: $canvasShowCoupleMarker)
+                    Picker("Kreis-Inhalt", selection: $canvasSeatChipContentRaw) {
+                        ForEach(SeatChipContent.allCases) { c in
+                            Label(c.label, systemImage: c.icon).tag(c.rawValue)
+                        }
                     }
                 }
-                .labelsHidden()
-                .pickerStyle(.menu)
-                .help("Wie Namen angezeigt werden — voller Name, Vorname, oder Initial bei Doppelten")
+                Section("Raum") {
+                    Toggle("Hintergrund-Gitter", isOn: $canvasShowGrid)
+                    Toggle("Raum-Labels (Maße, WC, Treppe …)", isOn: $canvasShowRoomLabels)
+                    Toggle("Tisch-Warnungen", isOn: $canvasShowTableWarnings)
+                    Toggle("Legende", isOn: $canvasShowLegend)
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "eye")
+                    Text("Anzeige")
+                }
             }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help("Was im Sitzplan angezeigt wird — alles ein-/ausblendbar")
             AutoPlaceButton()
             if let event {
                 ExportButton(
@@ -532,7 +603,9 @@ struct RoomCanvasView: View {
 
             ZStack {
                 roomPlanBackgroundIfAvailable
-                CanvasGridBackground()
+                if canvasShowGrid {
+                    CanvasGridBackground()
+                }
 
                 Group {
                     if let w = floorWidth, let h = floorHeight {
@@ -553,7 +626,7 @@ struct RoomCanvasView: View {
                 }
                 .frame(width: geo.size.width, height: geo.size.height)
 
-                if let w = floorWidth, let h = floorHeight,
+                if canvasShowRoomLabels, let w = floorWidth, let h = floorHeight,
                    let widthCM = roomWidthInCM, let depthCM = roomDepthInCM {
                     let widthM = widthCM / 100, depthM = depthCM / 100
                     Text("\(formatMeters(widthM)) × \(formatMeters(depthM)) m")
@@ -571,13 +644,19 @@ struct RoomCanvasView: View {
                     )
                 }
 
-                CanvasLabelsLayer(event: event)
+                if canvasShowRoomLabels {
+                    CanvasLabelsLayer(event: event)
+                }
             }
             .environment(\.canvasScale, scale)
             .environment(\.seatDisplayNames, canvasDisplayNames)
+            .environment(\.seatingLegend, canvasSeatingLegend)
             .background(Tokens.Colors.bg)
             .onChange(of: scale, initial: true) { _, newScale in
                 lastCanvasScale = Double(newScale)
+            }
+            .onChange(of: geo.size, initial: true) { _, newSize in
+                canvasSize = newSize
             }
         }
         .overlay(alignment: .topLeading) {
@@ -606,6 +685,62 @@ struct RoomCanvasView: View {
             }
             .padding(.horizontal, 16)
             .padding(.top, 12)
+        }
+        .overlay(alignment: .bottomLeading) {
+            if canvasShowLegend {
+            SeatingLegendView(
+                legend: canvasSeatingLegend,
+                infoDisplay: canvasInfoMode,
+                showAge: canvasShowAgeMarkers,
+                hasBridalTable: tables.contains(where: \.isBridalTable),
+                showTableWarnings: canvasShowTableWarnings,
+                showCoupleMarker: canvasShowCoupleMarker,
+                chipContent: SeatChipContent(rawValue: canvasSeatChipContentRaw) ?? .initials
+            )
+            .padding(.horizontal, 16)
+            .padding(.bottom, 16)
+            .offset(clampedLegendOffset)
+            .gesture(
+                DragGesture()
+                    .onChanged { legendDrag = $0.translation }
+                    .onEnded { value in
+                        let combined = CGSize(
+                            width: legendOffsetX + value.translation.width,
+                            height: legendOffsetY + value.translation.height
+                        )
+                        let clamped = clampLegend(combined)
+                        legendOffsetX = clamped.width
+                        legendOffsetY = clamped.height
+                        legendDrag = .zero
+                    }
+            )
+            .onHover { inside in
+                #if canImport(AppKit)
+                // State-Flag verhindert unbalancierten Cursor-Stack (push nur
+                // einmal pro Hover; onDisappear räumt auf wenn die View
+                // verschwindet während der Cursor noch gepusht ist).
+                if inside, !legendCursorPushed {
+                    NSCursor.openHand.push(); legendCursorPushed = true
+                } else if !inside, legendCursorPushed {
+                    NSCursor.pop(); legendCursorPushed = false
+                }
+                #endif
+            }
+            .onDisappear {
+                #if canImport(AppKit)
+                if legendCursorPushed { NSCursor.pop(); legendCursorPushed = false }
+                #endif
+            }
+            .contextMenu {
+                Button {
+                    legendOffsetX = 0
+                    legendOffsetY = 0
+                    legendDrag = .zero
+                } label: {
+                    Label("Legende zurücksetzen", systemImage: "arrow.uturn.backward")
+                }
+            }
+            }
         }
         .alert("Alle Sitzzuweisungen löschen?", isPresented: $showingResetAssignmentsAlert) {
             Button("Abbrechen", role: .cancel) {}

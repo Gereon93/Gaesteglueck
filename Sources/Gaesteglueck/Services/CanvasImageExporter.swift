@@ -14,6 +14,17 @@ enum CanvasImageExporter {
         scale: CGFloat,
         labels: [CanvasLabel] = [],
         background: NSImage? = nil,
+        showSeatNames: Bool = true,
+        infoDisplay: SeatInfoDisplay = .none,
+        showAgeMarkers: Bool = false,
+        chipContent: SeatChipContent = .initials,
+        showTableWarnings: Bool = true,
+        showRoomLabels: Bool = true,
+        showLegend: Bool = true,
+        legend: SeatingLegend = SeatingLegend(guests: []),
+        nameFontSize: CGFloat = 9,
+        showCoupleMarker: Bool = false,
+        coupleNames: [String] = [],
         renderScale: CGFloat = 3
     ) -> Data? {
         let view = SeatingPlanRenderView(
@@ -22,7 +33,18 @@ enum CanvasImageExporter {
             rules: rules,
             scale: scale,
             labels: labels,
-            background: background
+            background: background,
+            showSeatNames: showSeatNames,
+            infoDisplay: infoDisplay,
+            showAgeMarkers: showAgeMarkers,
+            chipContent: chipContent,
+            showTableWarnings: showTableWarnings,
+            showRoomLabels: showRoomLabels,
+            showLegend: showLegend,
+            legend: legend,
+            nameFontSize: nameFontSize,
+            showCoupleMarker: showCoupleMarker,
+            coupleNames: coupleNames
         )
         let renderer = ImageRenderer(content: view)
         renderer.scale = renderScale

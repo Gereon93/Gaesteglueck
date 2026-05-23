@@ -34,6 +34,12 @@ enum Tokens {
         static let sageSoft = Color(hex: "#e3e8db")
         static let sageTint = Color(hex: "#f3f5ef")
 
+        // Diät (kanonisch — überall referenzieren, damit Vegan/Vegetarisch
+        // konsistent & klar unterscheidbar bleiben). Vegan = Gold, Vegetarisch
+        // = Grün; bewusst NICHT Orange (= warn) oder Rot (= error/Allergie).
+        static let dietVegan = Color(hex: "#c9a227")
+        static let dietVegetarian = Color(hex: "#3f7a30")
+
         // States
         static let warn = Color(hex: "#d68a3a")
         static let warnSoft = Color(hex: "#fbe9d3")

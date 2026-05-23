@@ -90,3 +90,6 @@ __pycache__/
 .DS_Store
 dist/
 *.pdf
+
+# Tool-generierter Code-Index (GitNexus/Codegraph)
+.codegraph/

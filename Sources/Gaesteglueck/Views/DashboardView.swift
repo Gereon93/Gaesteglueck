@@ -472,8 +472,8 @@ struct DashboardView: View {
             let count = grouped[choice] ?? 0
             let color: Color = switch choice {
             case "Fleisch": Color(hex: "#b88a5c")
-            case "Vegetarisch": Tokens.Colors.sage
-            case "Vegan": Color(hex: "#5a8a4a")
+            case "Vegetarisch": Tokens.Colors.dietVegetarian
+            case "Vegan": Tokens.Colors.dietVegan
             default: Tokens.Colors.ink4
             }
             result.append(.init(label: choice, count: count, color: color))

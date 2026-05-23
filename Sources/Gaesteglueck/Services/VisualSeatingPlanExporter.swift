@@ -19,15 +19,23 @@ enum VisualSeatingPlanExporter {
     private static let baseNameOffset: CGFloat = 6
 
     // Colors
-    private static let veganColor   = NSColor(srgbRed: 0.35, green: 0.54, blue: 0.29, alpha: 1)
-    private static let vegColor     = NSColor(srgbRed: 0.48, green: 0.54, blue: 0.42, alpha: 1)
+    // Vegan = Gold (#c9a227), Vegetarisch = Grün (#3f7a30) — kanonisch wie
+    // Tokens.Colors.dietVegan/dietVegetarian, hier als NSColor gespiegelt.
+    private static let veganColor   = NSColor(srgbRed: 0.788, green: 0.635, blue: 0.153, alpha: 1)
+    private static let vegColor     = NSColor(srgbRed: 0.247, green: 0.478, blue: 0.188, alpha: 1)
     private static let allergyColor = NSColor(srgbRed: 0.77, green: 0.29, blue: 0.29, alpha: 1)
+    // Alter (#6e8aab = Tokens.Colors.tagActivity) — Blau, klar abgesetzt von
+    // Diät (Gold/Grün) und Allergie (Rot).
+    private static let ageColor     = NSColor(srgbRed: 0.431, green: 0.541, blue: 0.671, alpha: 1)
+    // Fleisch/„isst alles" = Standard-Chip-Rosa (#c8788c = Tokens.Colors.accent).
+    private static let mealColor    = NSColor(srgbRed: 0.784, green: 0.471, blue: 0.549, alpha: 1)
     private static let bridalFill   = NSColor(srgbRed: 0.99, green: 0.93, blue: 0.94, alpha: 1)
     private static let tableFill    = NSColor(calibratedWhite: 0.97, alpha: 1)
     private static let accentLine   = NSColor(calibratedRed: 0.78, green: 0.47, blue: 0.55, alpha: 1)
 
     nonisolated(unsafe) private static var currentDisplayNames: [UUID: String] = [:]
     nonisolated(unsafe) private static var currentRenderScale: CGFloat = 1.0
+    nonisolated(unsafe) private static var currentLegend: SeatingLegend = SeatingLegend(guests: [])
     /// `currentDisplayNames`/`currentRenderScale` werden während eines Renders
     /// von Helfern tief im Call-Stack gelesen. Damit parallele Aufrufe nicht
     /// die Werte gegenseitig überschreiben (race → falsche Skalierung im PNG),
@@ -57,9 +65,11 @@ enum VisualSeatingPlanExporter {
         let allGuests = tables.flatMap(\.guests)
         currentDisplayNames = displayNames(for: allGuests, style: nameStyle)
         currentRenderScale = max(1.0, pixelsPerCM / 2)
+        currentLegend = SeatingLegend(guests: allGuests)
         defer {
             currentDisplayNames = [:]
             currentRenderScale = 1.0
+            currentLegend = SeatingLegend(guests: [])
         }
 
         let canvasSize = canvasPixelSize(
@@ -67,8 +77,15 @@ enum VisualSeatingPlanExporter {
             roomCMSize: roomCMSize,
             pixelsPerCM: pixelsPerCM
         )
+        // Legenden-Streifen unten anhängen — Skalierung mit pixelsPerCM, damit
+        // die Schrift mitwächst und bei high-res PNGs nicht winzig wirkt.
+        let legendScale: CGFloat = max(1.0, pixelsPerCM / 2)
+        // availableWidth = legendRect-Innenbreite (pixelW - 32) — derselbe
+        // Bereich, in den drawLegend rendert, sodass Reserve & Render synchron sind.
+        let pngLegendHeight = legendBlockHeight(scale: legendScale,
+                                                availableWidth: canvasSize.width - 32) + 24
         let pixelW = Int(canvasSize.width)
-        let pixelH = Int(canvasSize.height)
+        let pixelH = Int(canvasSize.height + pngLegendHeight)
         let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
         guard let context = CGContext(
             data: nil,
@@ -92,10 +109,12 @@ enum VisualSeatingPlanExporter {
         NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
         defer { NSGraphicsContext.restoreGraphicsState() }
 
-        let canvasRect = CGRect(x: 0, y: 0, width: CGFloat(pixelW), height: CGFloat(pixelH))
+        // Tisch-Canvas füllt nur den oberen Bereich; der untere Streifen ist
+        // für die Legende reserviert (außerhalb der Saalplan-Skala).
+        let canvasRect = CGRect(x: 0, y: 0, width: CGFloat(pixelW), height: CGFloat(canvasSize.height))
 
-        // Saalplan-Bild als Hintergrund (gestreckt auf full canvas — Saalplan-
-        // Maße bestimmen ohnehin die Canvas-Aufloesung, also passt das).
+        // Saalplan-Bild als Hintergrund (nur im oberen Bereich — der Legenden-
+        // Streifen bleibt weiß und außerhalb der Saalplan-Skala).
         if let bg = roomBackground, let cgImage = bg.cgImage(forProposedRect: nil, context: nil, hints: nil) {
             context.saveGState()
             context.draw(cgImage, in: canvasRect)
@@ -109,6 +128,15 @@ enum VisualSeatingPlanExporter {
         for label in labels {
             drawLabel(context: context, label: label, in: canvasRect, tables: tables, roomCMSize: roomCMSize)
         }
+
+        // Legenden-Streifen unten.
+        let legendRect = CGRect(
+            x: 16,
+            y: canvasRect.maxY + 12,
+            width: CGFloat(pixelW) - 32,
+            height: pngLegendHeight - 12
+        )
+        drawLegend(context: context, in: legendRect)
 
         guard let cgImage = context.makeImage() else { return nil }
         let bitmap = NSBitmapImageRep(cgImage: cgImage)
@@ -265,6 +293,7 @@ enum VisualSeatingPlanExporter {
         // Display-Names einmal pro Generate berechnen
         let allGuests = tables.flatMap(\.guests)
         currentDisplayNames = displayNames(for: allGuests, style: nameStyle)
+        currentLegend = SeatingLegend(guests: allGuests)
 
         var box = pageRect
         context.beginPage(mediaBox: &box)
@@ -276,11 +305,15 @@ enum VisualSeatingPlanExporter {
 
         drawHeader(context: context, eventName: eventName, date: date)
 
+        let reservedLegendHeight = legendBlockHeight(
+            availableWidth: pageWidth - 2 * canvasMargin
+        )
+        let fullCanvasHeight = pageHeight - titleAreaHeight - 2 * canvasMargin
         let canvasArea = CGRect(
             x: canvasMargin,
             y: titleAreaHeight + canvasMargin,
             width: pageWidth - 2 * canvasMargin,
-            height: pageHeight - titleAreaHeight - 2 * canvasMargin
+            height: fullCanvasHeight - reservedLegendHeight - 12
         )
 
         if tables.isEmpty {
@@ -294,7 +327,13 @@ enum VisualSeatingPlanExporter {
             drawCanvas(context: context, tables: tables, in: canvasArea)
         }
 
-        drawLegend(context: context, in: canvasArea)
+        let legendArea = CGRect(
+            x: canvasMargin,
+            y: canvasArea.maxY + 12,
+            width: pageWidth - 2 * canvasMargin,
+            height: reservedLegendHeight
+        )
+        drawLegend(context: context, in: legendArea)
 
         // WICHTIG: closePDF MUSS vor `return pdfData as Data` laufen.
         // Wenn closePDF in einem `defer` steht, passiert der NSData→Data
@@ -304,6 +343,7 @@ enum VisualSeatingPlanExporter {
         context.endPage()
         context.closePDF()
         currentDisplayNames = [:]
+        currentLegend = SeatingLegend(guests: [])
 
         return pdfData as Data
     }
@@ -339,34 +379,147 @@ enum VisualSeatingPlanExporter {
 
     // MARK: - Legend
 
+    /// Höhe des Legenden-Blocks abhängig von der Anzahl Allergen-Einträge.
+    /// Wird oben in den Generatoren verwendet, um Platz unten zu reservieren.
+    private static func legendBlockHeight(
+        scale: CGFloat = 1.0,
+        availableWidth: CGFloat = 0
+    ) -> CGFloat {
+        var h: CGFloat = 26 // Header + Diät-Zeile
+        let legend = currentLegend
+        // Spalten-Logik IDENTISCH zu drawLegend, damit die Reserve nicht
+        // pauschal zu hoch ist (z.B. auf A3 mehr Spalten möglich = weniger Zeilen).
+        let entryWidth: CGFloat = 130 * scale
+        let cols = max(3, availableWidth > 0 ? Int(availableWidth / entryWidth) : 3)
+        if !legend.isEmpty {
+            let rows = (legend.entries.count + cols - 1) / cols
+            h += CGFloat(rows) * 14 + 16
+        }
+        if legend.hasAgeMarkers {
+            let rows = (legend.ageCategories.count + cols - 1) / cols
+            h += CGFloat(rows) * 14 + 16
+        }
+        return h * scale
+    }
+
+    /// Voll-formatierter Legenden-Block: Diät-Farben + nummerierte
+    /// Allergen-Liste. `area` ist der gesamte zur Verfügung stehende Bereich
+    /// (z.B. der untere Streifen unter dem Tisch-Canvas). Alle Größen
+    /// skalieren mit `currentRenderScale`, damit die Legende auf high-res
+    /// PNGs proportional zur Tisch-Beschriftung mitwächst.
     private static func drawLegend(context: CGContext, in area: CGRect) {
-        let font = NSFont.systemFont(ofSize: 9)
-        let y = area.maxY - 12
+        let s = currentRenderScale
+        let headerFont = NSFont.boldSystemFont(ofSize: 9 * s)
+        let font = NSFont.systemFont(ofSize: 9 * s)
+        let numberFont = NSFont.boldSystemFont(ofSize: 9 * s)
 
-        var x = area.maxX - 280
-
-        // Vegan dot
+        // Trenner-Linie oben über dem Legenden-Bereich.
         context.saveGState()
-        context.setFillColor(veganColor.cgColor)
-        context.fillEllipse(in: CGRect(x: x, y: y - 4, width: 7, height: 7))
+        context.setStrokeColor(NSColor(calibratedWhite: 0.85, alpha: 1).cgColor)
+        context.setLineWidth(0.5 * s)
+        context.move(to: CGPoint(x: area.minX, y: area.minY))
+        context.addLine(to: CGPoint(x: area.maxX, y: area.minY))
+        context.strokePath()
         context.restoreGState()
-        x += 10
-        drawText("Vegan", at: CGPoint(x: x, y: y - 5), font: font, color: PDFColors.secondary)
-        x += 42
 
-        // Vegetarian dot
-        context.saveGState()
-        context.setFillColor(vegColor.cgColor)
-        context.fillEllipse(in: CGRect(x: x, y: y - 4, width: 7, height: 7))
-        context.restoreGState()
-        x += 10
-        drawText("Vegetarisch", at: CGPoint(x: x, y: y - 5), font: font, color: PDFColors.secondary)
-        x += 66
+        var y = area.minY + 12 * s
+        drawText("LEGENDE", at: CGPoint(x: area.minX, y: y - 5 * s),
+                 font: headerFont, color: PDFColors.secondary)
+        y += 12 * s
 
-        // Allergy marker
-        drawText("!", at: CGPoint(x: x, y: y - 5), font: .boldSystemFont(ofSize: 10), color: allergyColor)
-        x += 10
-        drawText("Allergie / Unverträglichkeit", at: CGPoint(x: x, y: y - 5), font: font, color: PDFColors.secondary)
+        // Diät-Swatches in einer Zeile (Kreise mit farbigem Rand wie die Chips).
+        let swatch: CGFloat = 8 * s
+        func dietSwatch(_ x: CGFloat, fill: NSColor, label: String) {
+            let rect = CGRect(x: x, y: y - 5 * s, width: swatch, height: swatch)
+            context.saveGState()
+            context.setFillColor(fill.withAlphaComponent(0.20).cgColor)
+            context.fillEllipse(in: rect)
+            context.setStrokeColor(fill.cgColor)
+            context.setLineWidth(1.2 * s)
+            context.strokeEllipse(in: rect.insetBy(dx: 0.6 * s, dy: 0.6 * s))
+            context.restoreGState()
+            drawText(label, at: CGPoint(x: x + swatch + 4 * s, y: y - 5 * s),
+                     font: font, color: PDFColors.primary)
+        }
+        dietSwatch(area.minX, fill: mealColor, label: "Fleisch")
+        dietSwatch(area.minX + 64 * s, fill: veganColor, label: "Vegan")
+        dietSwatch(area.minX + 128 * s, fill: vegColor, label: "Vegetarisch")
+
+        // Spalten verteilen über die volle Breite. Mindestens 3 Spalten;
+        // bei vielen Einträgen mehr, sodass nichts überläuft.
+        let legend = currentLegend
+        let entryWidth: CGFloat = 130 * s
+        let columns = max(3, Int(area.width / entryWidth))
+        let columnWidth = area.width / CGFloat(columns)
+
+        // Unverträglichkeiten-Sektion — nur wenn Einträge vorhanden.
+        if !legend.entries.isEmpty {
+            y += 16 * s
+            drawText("UNVERTRÄGLICHKEITEN", at: CGPoint(x: area.minX, y: y - 5 * s),
+                     font: headerFont, color: PDFColors.secondary)
+            y += 12 * s
+
+            for (idx, entry) in legend.entries.enumerated() {
+                let col = idx % columns
+                let row = idx / columns
+                let cx = area.minX + CGFloat(col) * columnWidth
+                let cy = y + CGFloat(row) * 14 * s
+
+                // Nummer als rote Kapsel.
+                let numStr = "\(entry.number)"
+                let numAttr: [NSAttributedString.Key: Any] = [
+                    .font: numberFont, .foregroundColor: NSColor.white
+                ]
+                let numSize = (numStr as NSString).size(withAttributes: numAttr)
+                let pillWidth = max(14 * s, numSize.width + 8 * s)
+                let pillHeight = 11 * s
+                let pillRect = CGRect(x: cx, y: cy - 7 * s, width: pillWidth, height: pillHeight)
+                context.saveGState()
+                context.setFillColor(allergyColor.cgColor)
+                let pillPath = CGPath(roundedRect: pillRect,
+                                      cornerWidth: pillHeight / 2, cornerHeight: pillHeight / 2,
+                                      transform: nil)
+                context.addPath(pillPath)
+                context.fillPath()
+                context.restoreGState()
+                let numX = cx + (pillWidth - numSize.width) / 2
+                (numStr as NSString).draw(at: CGPoint(x: numX, y: cy - 7 * s),
+                                          withAttributes: numAttr)
+
+                // Allergen-Name daneben.
+                drawText(entry.name,
+                         at: CGPoint(x: cx + pillWidth + 5 * s, y: cy - 5 * s),
+                         font: font, color: PDFColors.primary)
+            }
+            let rows = (legend.entries.count + columns - 1) / columns
+            y += CGFloat(rows) * 14 * s
+        }
+
+        // Alters-Sektion — unabhängig von Unverträglichkeiten.
+        guard legend.hasAgeMarkers else { return }
+        y += 4 * s
+        drawText("ALTER", at: CGPoint(x: area.minX, y: y - 5 * s),
+                 font: headerFont, color: PDFColors.secondary)
+        y += 12 * s
+
+        for (idx, age) in legend.ageCategories.enumerated() {
+            let col = idx % columns
+            let row = idx / columns
+            let cx = area.minX + CGFloat(col) * columnWidth
+            let cy = y + CGFloat(row) * 14 * s
+
+            let badge = 11 * s
+            let badgeRect = CGRect(x: cx, y: cy - 7 * s, width: badge, height: badge)
+            context.setFillColor(ageColor.cgColor)
+            context.fillEllipse(in: badgeRect)
+            drawSymbol(age.iconName,
+                       in: badgeRect.insetBy(dx: badge * 0.22, dy: badge * 0.22),
+                       color: .white)
+
+            drawText(age.rawValue,
+                     at: CGPoint(x: cx + badge + 5 * s, y: cy - 5 * s),
+                     font: font, color: PDFColors.primary)
+        }
     }
 
     // MARK: - Canvas layout
@@ -695,6 +848,21 @@ enum VisualSeatingPlanExporter {
             context.fillEllipse(in: dietRect)
         }
 
+        // Age badge bottom-left (Kind/Baby/…) — Symbol auf blauem Punkt.
+        if guest.ageCategory.isMarkedAge {
+            let d = dietDotDiameter * 1.25
+            let badge = CGRect(
+                x: position.x - r - d * 0.2,
+                y: position.y + r - d * 0.8,
+                width: d, height: d
+            )
+            context.setFillColor(ageColor.cgColor)
+            context.fillEllipse(in: badge)
+            drawSymbol(guest.ageCategory.iconName,
+                       in: badge.insetBy(dx: d * 0.22, dy: d * 0.22),
+                       color: .white)
+        }
+
         context.restoreGState()
 
         // Guest name — positioned radially outward from table center,
@@ -765,11 +933,48 @@ enum VisualSeatingPlanExporter {
         (name as NSString).draw(at: anchorOffset, withAttributes: nameAttr)
 
         if guest.hasIntolerances {
+            let marker = intoleranceMarkerText(for: guest)
             let markerAttr: [NSAttributedString.Key: Any] = [.font: allergyFont, .foregroundColor: allergyColor]
-            let markerOrigin = CGPoint(x: anchorOffset.x + nameSize.width + 2, y: anchorOffset.y)
-            ("!" as NSString).draw(at: markerOrigin, withAttributes: markerAttr)
+            let markerOrigin = CGPoint(x: anchorOffset.x + nameSize.width + 3, y: anchorOffset.y)
+            (marker as NSString).draw(at: markerOrigin, withAttributes: markerAttr)
         }
         context.restoreGState()
+    }
+
+    /// Zeichnet ein (template-getöntes) SF-Symbol in `rect`. Funktioniert im
+    /// geflippten Export-Context, weil `NSImage.draw` die Flipped-ness des
+    /// aktuellen `NSGraphicsContext` respektiert.
+    private static func drawSymbol(_ name: String, in rect: CGRect, color: NSColor) {
+        let config = NSImage.SymbolConfiguration(pointSize: rect.height, weight: .bold)
+        guard let base = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
+            .withSymbolConfiguration(config) else { return }
+        let tinted = NSImage(size: rect.size)
+        tinted.lockFocus()
+        color.set()
+        let r = NSRect(origin: .zero, size: rect.size)
+        // Symbol zentriert ins Quadrat einpassen (Aspect-Fit).
+        let aspect = base.size.width / max(base.size.height, 1)
+        var drawRect = r
+        if aspect > 1 {
+            let h = rect.width / aspect
+            drawRect = NSRect(x: 0, y: (rect.height - h) / 2, width: rect.width, height: h)
+        } else {
+            let w = rect.height * aspect
+            drawRect = NSRect(x: (rect.width - w) / 2, y: 0, width: w, height: rect.height)
+        }
+        base.draw(in: drawRect)
+        r.fill(using: .sourceAtop)
+        tinted.unlockFocus()
+        tinted.draw(in: rect)
+    }
+
+    /// Komma-getrennte Nummern aus der aktuellen Render-Legende. Fallback "!"
+    /// wenn ein Gast irgendwie keine aufgelösten Nummern hat (defensive — sollte
+    /// nicht passieren, da die Legende aus *allen* Gästen gebaut wird).
+    private static func intoleranceMarkerText(for guest: Guest) -> String {
+        let numbers = currentLegend.numbers(for: guest)
+        guard !numbers.isEmpty else { return "!" }
+        return numbers.map(String.init).joined(separator: ",")
     }
 
     /// Liefert den Text-Origin so, dass die zur Tischmitte zugewandte Kante

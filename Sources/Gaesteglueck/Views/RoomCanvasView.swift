@@ -55,7 +55,7 @@ struct RoomCanvasView: View {
     private var event: Event? { events.first }
 
     private var unassignedGuests: [Guest] {
-        guests.filter { $0.table == nil && $0.needsSeat }
+        guests.filter(\.awaitsSeating)
     }
 
     private var totalCapacity: Int {
@@ -179,7 +179,7 @@ struct RoomCanvasView: View {
         for table in tables {
             var used = Set(table.guests.compactMap(\.seatIndex))
             let disabled = table.disabledSeatIndices
-            for guest in table.guests where guest.seatIndex == nil {
+            for guest in table.guests where guest.seatIndex == nil && guest.countsForSeating {
                 for idx in 0..<table.capacity where !used.contains(idx) && !disabled.contains(idx) {
                     guest.seatIndex = idx
                     used.insert(idx)
@@ -189,9 +189,34 @@ struct RoomCanvasView: View {
         }
     }
 
+    private var lateCancellations: [Guest] { guests.filter(\.isLateCancellation) }
+
+    @ViewBuilder
+    private var lateCancellationBanner: some View {
+        let ghosts = lateCancellations
+        if !ghosts.isEmpty {
+            HStack(spacing: 8) {
+                Image(systemName: "person.fill.xmark")
+                    .font(.system(size: 12, weight: .semibold))
+                Text(ghosts.count == 1 ? "1 späte Absage"
+                                       : "\(ghosts.count) späte Absagen")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                Text("– Plätze sind frei und neu vergebbar; Catering & Service sehen den Wegfall im Caterer-Export")
+                    .font(.system(size: 11, design: .rounded))
+                    .foregroundStyle(Tokens.Colors.ink3)
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(Tokens.Colors.warn)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
+            .background(Tokens.Colors.warn.opacity(0.10))
+        }
+    }
+
     private var canvasLayout: some View {
         VStack(spacing: 0) {
             toolbar
+            lateCancellationBanner
             HStack(spacing: 0) {
                 guestInbox
                     .frame(width: 240)
@@ -494,7 +519,7 @@ struct RoomCanvasView: View {
         let allCandidates = [guest] + group.filter { !$0.isPinned && $0.table != table }
         let unpinned = allCandidates.filter { !$0.isPinned }
         let needsSeats = unpinned.count
-        let availableSeats = table.capacity - table.guests.count + table.guests.filter { unpinned.contains($0) }.count
+        let availableSeats = table.capacity - table.attendingGuests.count + table.guests.filter { unpinned.contains($0) }.count
         guard needsSeats <= availableSeats else { return false }
         for peer in unpinned {
             if peer.table?.id != table.id {
@@ -780,7 +805,7 @@ struct RoomCanvasView: View {
                         Text(table.name)
                             .font(Tokens.Typography.displayS)
                             .foregroundStyle(Tokens.Colors.ink)
-                        Text("\(table.shape.rawValue) · \(table.capacity) Plätze · \(table.guests.count) belegt")
+                        Text("\(table.shape.rawValue) · \(table.capacity) Plätze · \(table.attendingGuests.count) belegt")
                             .font(.system(size: 12, design: .rounded))
                             .foregroundStyle(Tokens.Colors.ink2)
                     }

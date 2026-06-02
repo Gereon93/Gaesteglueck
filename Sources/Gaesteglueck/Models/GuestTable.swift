@@ -87,8 +87,12 @@ final class GuestTable {
 
     var capacity: Int { capacity(rules: GuestTable.activeRules) }
 
-    var remainingSeats: Int { capacity - guests.count }
-    var isFull: Bool { guests.count >= effectiveCapacity }
+    var attendingGuests: [Guest] { guests.filter(\.countsForSeating) }
+
+    var ghostGuests: [Guest] { guests.filter(\.isLateCancellation) }
+
+    var remainingSeats: Int { capacity - attendingGuests.count }
+    var isFull: Bool { attendingGuests.count >= effectiveCapacity }
 
     init(
         name: String,

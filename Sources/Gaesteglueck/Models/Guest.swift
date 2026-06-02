@@ -147,4 +147,33 @@ final class Guest {
     var needsSeat: Bool {
         ageCategory.needsSeat
     }
+
+    var countsForSeating: Bool { rsvpStatus == .confirmed }
+
+    var isLateCancellation: Bool { rsvpStatus == .declined && table != nil }
+
+    func applyRSVP(_ newStatus: RSVPStatus) {
+        let wasConfirmed = rsvpStatus == .confirmed
+        let wasLateCancellation = isLateCancellation
+        switch newStatus {
+        case .confirmed:
+            if rsvpStatus == .declined {
+                table = nil
+                seatIndex = nil
+            }
+        case .pending:
+            table = nil
+            seatIndex = nil
+        case .declined:
+            seatIndex = nil
+            if !wasConfirmed && !wasLateCancellation { table = nil }
+        }
+        rsvpStatus = newStatus
+    }
+
+    var awaitsSeating: Bool { countsForSeating && needsSeat && table == nil }
+
+    var needsFunFactFollowUp: Bool {
+        countsForSeating && (funFact.trimmingCharacters(in: .whitespaces).isEmpty || !funFactApproved)
+    }
 }

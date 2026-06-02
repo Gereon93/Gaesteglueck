@@ -198,6 +198,22 @@ struct SeatingOptimizerTests {
         #expect(result[max.id] == result[laura.id])
     }
 
+    @Test("Declined guests are not placed by the optimizer")
+    func declinedGuestsSkipped() {
+        let coming = makeGuest("Anna")
+        let declined = Guest(firstName: "Tante", rsvpStatus: .declined)
+        let t1 = GuestTable(name: "T1", shape: .round, diameter: 180)
+
+        let result = SeatingOptimizer.solve(
+            guests: [coming, declined],
+            tables: [t1],
+            tags: [],
+            constraints: []
+        )
+        #expect(result[coming.id] == t1.id)
+        #expect(result[declined.id] == nil)
+    }
+
     @Test("Child table preference survives noise")
     func childTableRobust() {
         // Mixed family with kids + adult friends, child table should still attract kids.

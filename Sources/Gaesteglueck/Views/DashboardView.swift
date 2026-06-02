@@ -22,12 +22,20 @@ struct DashboardView: View {
 
     private var event: Event? { events.first }
 
-    private var assignedGuestCount: Int {
-        guests.filter { $0.table != nil }.count
+    private var attendingGuests: [Guest] {
+        guests.filter(\.countsForSeating)
+    }
+
+    private var seatedGuestCount: Int {
+        attendingGuests.filter { $0.table != nil }.count
+    }
+
+    private var awaitingSeatCount: Int {
+        guests.filter(\.awaitsSeating).count
     }
 
     private var allergyCount: Int {
-        guests.filter { $0.hasIntolerances }.count
+        attendingGuests.filter(\.hasIntolerances).count
     }
 
     private var registrationGroupCount: Int {
@@ -182,12 +190,11 @@ struct DashboardView: View {
     }
 
     private var heroSubtitle: String {
-        let total = guests.count
-        guard total > 0 else {
+        guard !attendingGuests.isEmpty else {
             return "Lass uns mit den ersten Anmeldungen anfangen — sobald die Gästeliste steht, planen wir gemeinsam die Tische."
         }
-        let percent = Int((Double(assignedGuestCount) / Double(total)) * 100)
-        return "Ihr seid auf gutem Weg. \(percent) % der Gäste haben einen Tisch."
+        let percent = Int((Double(seatedGuestCount) / Double(attendingGuests.count)) * 100)
+        return "Ihr seid auf gutem Weg. \(percent) % der zugesagten Gäste haben einen Tisch."
     }
 
     private func heroDateLine(_ event: Event) -> String {
@@ -225,8 +232,8 @@ struct DashboardView: View {
             GGStatCard(
                 icon: "square.grid.3x3",
                 label: "Plätze vergeben",
-                value: "\(assignedGuestCount)",
-                hint: guests.isEmpty ? nil : "von \(guests.count) — \(guests.count - assignedGuestCount) offen",
+                value: "\(seatedGuestCount)",
+                hint: attendingGuests.isEmpty ? nil : "von \(attendingGuests.count) — \(awaitingSeatCount) offen",
                 tint: .sand
             )
             GGStatCard(
@@ -250,7 +257,7 @@ struct DashboardView: View {
     }
 
     private var allergyHint: String? {
-        let allergic = guests.filter { $0.hasIntolerances }
+        let allergic = attendingGuests.filter(\.hasIntolerances)
         guard !allergic.isEmpty else { return nil }
         let allTokens = allergic.flatMap { $0.intolerances }
         let counts = Dictionary(grouping: allTokens, by: { $0 }).mapValues(\.count)
@@ -336,8 +343,8 @@ struct DashboardView: View {
     private var nextStepTitle: String {
         if guests.isEmpty { return "Lade die ersten Anmeldungen rein" }
         if tables.isEmpty { return "Wie viele Tische habt ihr im Saal?" }
-        if assignedGuestCount < guests.count {
-            return "\(guests.count - assignedGuestCount) Gäste warten auf einen Platz"
+        if awaitingSeatCount > 0 {
+            return "\(awaitingSeatCount) Gäste warten auf einen Platz"
         }
         return "Alle Gäste haben einen Tisch — Zeit für die Tischkarten."
     }
@@ -345,7 +352,7 @@ struct DashboardView: View {
     private var nextStepBody: String {
         if guests.isEmpty { return "Aus Google Sheets oder einer Excel-Datei. Die KI parst die Anmeldungen für euch." }
         if tables.isEmpty { return "Form, Größe und Platzierung — alles im Raumplan." }
-        if assignedGuestCount < guests.count {
+        if awaitingSeatCount > 0 {
             return "Lass die KI einen ersten Vorschlag machen oder zieh die Gäste manuell auf den Plan."
         }
         return "Druckfertig: Tischkarten mit Name + Fun Fact, Plakat für den Saal, PDF für den Caterer."
@@ -371,7 +378,7 @@ struct DashboardView: View {
 
     private var recommendations: [RecommendationData] {
         var recs: [RecommendationData] = []
-        if guests.contains(where: { $0.hasIntolerances }) {
+        if allergyCount > 0 {
             recs.append(.init(
                 icon: "exclamationmark.triangle.fill",
                 title: "Allergien im Caterer-Export markieren",
@@ -424,7 +431,7 @@ struct DashboardView: View {
                     DashboardMeter(
                         label: meter.label,
                         count: meter.count,
-                        total: max(guests.count, 1),
+                        total: max(attendingGuests.count, 1),
                         color: meter.color
                     )
                 }
@@ -465,7 +472,7 @@ struct DashboardView: View {
     }
 
     private var menuMeters: [MenuMeterData] {
-        let grouped = Dictionary(grouping: guests, by: \.dietaryChoice).mapValues(\.count)
+        let grouped = Dictionary(grouping: attendingGuests, by: \.dietaryChoice).mapValues(\.count)
         let known = ["Fleisch", "Vegetarisch", "Vegan"]
         var result: [MenuMeterData] = []
         for choice in known {
@@ -478,7 +485,7 @@ struct DashboardView: View {
             }
             result.append(.init(label: choice, count: count, color: color))
         }
-        let undefined = guests.filter { !known.contains($0.dietaryChoice) }.count
+        let undefined = attendingGuests.filter { !known.contains($0.dietaryChoice) }.count
         if undefined > 0 {
             result.append(.init(label: "Noch offen", count: undefined, color: Tokens.Colors.ink4))
         }

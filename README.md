@@ -12,6 +12,27 @@ Macher-freundlicher Hochzeits-Sitzplaner für macOS — komplett lokal, mit loka
 - **VersionedSchema** + Pre-Launch-Backups: Schema-Änderungen brechen keine Daten mehr
 - **PDF-Export** für Sitzplan, Caterer-Übersicht, Tischkarten und Plakat
 
+## Absagen: löschen oder abmelden?
+
+Ein Gast, der nicht kommt, wird je nach Zeitpunkt unterschiedlich behandelt — danach richtet sich, ob eine Spur bleibt.
+
+**Früh genug — der Caterer kennt die Gästezahl noch nicht → Gast löschen.**
+Wer absagt (oder sich nie gemeldet hat), bevor die Mengen beim Caterer durch sind, gehört aus der Liste gelöscht. Kein Sonderzustand, keine Spur — die Person war nie fest eingeplant, also soll sie auch Zählungen, Sitzplan und Exporte nicht verfälschen.
+
+**Zu spät — Essen ist bestellt, Änderung nicht mehr möglich → auf „Abgesagt" stellen.**
+Sagt jemand ab, der schon zugesagt *und* an einem Tisch saß, wird er im Tooling auf „Abgesagt" gesetzt statt gelöscht. Dann passiert:
+
+- Der **Sitzplatz wird frei** und ist sofort neu vergebbar.
+- Der Gast bleibt seinem Tisch als **Vermerk** zugeordnet: Die Tisch-Badge zeigt „N abgemeldet", und der **Caterer-Export** listet den Wegfall mit Name · Tisch · Menü · Unverträglichkeit („−1 Vegetarisch", „Allergikerin an T2 ist nicht mehr da").
+- So weiß der Service vor Ort: Der Stuhl bleibt leer, das **bestellte Essen wird nicht abgerufen** — kein Rätselraten.
+
+Der Status „Abgesagt" ist damit faktisch der *Spätabsage*-Zustand; frühe Fälle löscht man einfach.
+
+**Kommt doch wieder → zurück auf „Zugesagt".**
+Setzt man eine späte Absage wieder auf „Zugesagt" (Irrtum, „kommt doch"), verschwindet der Vermerk und der Gast landet wieder in der „Ohne Tisch"-Inbox zum Neu-Platzieren.
+
+> Technischer Hinweis: Der Vermerk hängt an der beibehaltenen Tisch-Zuordnung (Sitz frei, Tisch bleibt), nicht an einem separaten gespeicherten Feld. Er übersteht das Neu-Belegen des Sitzes, aber **nicht** ein komplettes Layout-Restore oder das Löschen des Tisches.
+
 ## Voraussetzungen
 
 - macOS 15 (Sequoia) oder neuer
@@ -44,7 +65,7 @@ Erzeugt `dist/Gaesteglueck.app` mit eigener `Info.plist`. Kann nach `/Applicatio
 swift test
 ```
 
-114 Tests in 22 Suites.
+221 Tests in 44 Suites.
 
 ## Wo liegen die Daten
 

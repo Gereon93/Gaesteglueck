@@ -13,7 +13,7 @@ struct TableListView: View {
     }
 
     private var totalAssigned: Int {
-        tables.reduce(0) { $0 + $1.guests.count }
+        tables.reduce(0) { $0 + $1.attendingGuests.count }
     }
 
     var body: some View {

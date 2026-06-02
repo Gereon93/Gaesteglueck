@@ -601,9 +601,9 @@ struct KIWizardView: View {
         // KI plant nur die noch UNPLATZIERTEN Gäste. Bereits gesetzte (manuell
         // oder gepinnt) bleiben unangetastet. Restkapazität pro Tisch wird
         // entsprechend reduziert übergeben.
-        let unplacedGuests = guests.filter { $0.table == nil && $0.needsSeat }
+        let unplacedGuests = guests.filter(\.awaitsSeating)
         let placedCounts: [UUID: Int] = Dictionary(uniqueKeysWithValues: tables.map { table in
-            (table.id, table.guests.filter { $0.needsSeat }.count)
+            (table.id, table.attendingGuests.filter { $0.needsSeat }.count)
         })
         let remainingCapacity: [UUID: Int] = Dictionary(uniqueKeysWithValues: tables.map { table in
             (table.id, max(0, table.effectiveCapacity - (placedCounts[table.id] ?? 0)))

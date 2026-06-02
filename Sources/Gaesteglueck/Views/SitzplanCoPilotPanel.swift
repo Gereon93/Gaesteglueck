@@ -214,10 +214,10 @@ struct SitzplanCoPilotPanel: View {
         )
         ctx += "\n\n## Aktuelle Tisch-Belegung\n\n"
         for table in tables.sorted(by: { $0.name < $1.name }) {
-            let names = table.guests.map(\.fullName).sorted().joined(separator: ", ")
-            ctx += "- \(table.name) (\(table.guests.count)/\(table.capacity)): \(names.isEmpty ? "leer" : names)\n"
+            let names = table.attendingGuests.map(\.fullName).sorted().joined(separator: ", ")
+            ctx += "- \(table.name) (\(table.attendingGuests.count)/\(table.capacity)): \(names.isEmpty ? "leer" : names)\n"
         }
-        let unassigned = guests.filter { $0.table == nil }.map(\.fullName).sorted()
+        let unassigned = guests.filter { $0.countsForSeating && $0.table == nil }.map(\.fullName).sorted()
         if !unassigned.isEmpty {
             ctx += "\nNoch nicht zugewiesen: \(unassigned.joined(separator: ", "))\n"
         }

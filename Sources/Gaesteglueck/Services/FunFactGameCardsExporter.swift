@@ -27,8 +27,12 @@ enum FunFactGameCardsExporter {
         return CGSize(width: w, height: h)
     }
 
-    /// Nur Gäste mit nicht-leerem FunFact bekommen eine Karte.
-    /// (Ob approved oder nicht ist egal — du druckst was du hast.)
+    static func cardGuests(_ guests: [Guest]) -> [Guest] {
+        guests
+            .filter { $0.countsForSeating && !$0.funFactDisplay.trimmingCharacters(in: .whitespaces).isEmpty }
+            .sorted { $0.funFactDisplay.localizedCompare($1.funFactDisplay) == .orderedAscending }
+    }
+
     static func generatePDF(guests: [Guest], eventName: String) -> Data {
         let pdfData = NSMutableData()
         guard let consumer = CGDataConsumer(data: pdfData as CFMutableData),
@@ -36,11 +40,7 @@ enum FunFactGameCardsExporter {
             return Data()
         }
 
-        let withFunFact = guests
-            .filter { !$0.funFactDisplay.trimmingCharacters(in: .whitespaces).isEmpty }
-            .sorted { lhs, rhs in
-                lhs.funFactDisplay.localizedCompare(rhs.funFactDisplay) == .orderedAscending
-            }
+        let withFunFact = cardGuests(guests)
 
         if withFunFact.isEmpty {
             beginPage(context: context)

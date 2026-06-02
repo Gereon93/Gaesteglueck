@@ -110,7 +110,7 @@ struct TableCanvasItemView: View {
     private var borderWidth: CGFloat { isSelected ? 2 : 1.5 }
 
     private var allergyCount: Int {
-        table.guests.filter(\.hasIntolerances).count
+        table.attendingGuests.filter(\.hasIntolerances).count
     }
 
     var body: some View {
@@ -172,6 +172,7 @@ struct TableCanvasItemView: View {
                         .foregroundStyle(table.isFull ? Tokens.Colors.warn : Tokens.Colors.ink3)
                         .monospacedDigit()
                     allergyBadge
+                    lateCancellationBadge
                 }
                 if table.combinationGroup != nil {
                     Image(systemName: "link")
@@ -188,13 +189,13 @@ struct TableCanvasItemView: View {
 
     private var capacityLabel: String {
         if let geo = tafelGeometry {
-            let occupied = groupTables.reduce(0) { $0 + $1.guests.filter { $0.seatIndex != nil }.count }
+            let occupied = groupTables.reduce(0) { $0 + $1.attendingGuests.filter { $0.seatIndex != nil }.count }
             let validDisabled = groupTables.reduce(0) { sum, t in
                 sum + t.disabledSeatIndices.filter { $0 < t.capacity(rules: currentRules) }.count
             }
             return "\(occupied)/\(max(0, geo.capacity - validDisabled))"
         }
-        return "\(table.guests.count)/\(table.effectiveCapacity(rules: currentRules))"
+        return "\(table.attendingGuests.count)/\(table.effectiveCapacity(rules: currentRules))"
     }
 
     @ViewBuilder
@@ -211,9 +212,7 @@ struct TableCanvasItemView: View {
                         assignGuestToTafelSeat(guestID: guestID, seat: seat)
                     },
                     onClear: {
-                        if let occ {
-                            occ.seatIndex = nil
-                        }
+                        occ?.seatIndex = nil
                     },
                     isDisabled: isSeatDisabled,
                     onToggleDisabled: {
@@ -256,9 +255,7 @@ struct TableCanvasItemView: View {
                         assignGuestToSeat(guestID: guestID, seatIndex: idx)
                     },
                     onClear: {
-                        if let occ = occupant(at: idx) {
-                            occ.seatIndex = nil
-                        }
+                        occupant(at: idx)?.seatIndex = nil
                     },
                     isDisabled: table.disabledSeatIndices.contains(idx),
                     onToggleDisabled: {
@@ -400,8 +397,7 @@ struct TableCanvasItemView: View {
 
         if let primary = primarySeatIndex, !disabled.contains(primary) {
             if let prior = target.guests.first(where: { $0.seatIndex == primary && $0.id != guest.id }) {
-                let priorSeat = guest.table?.id == target.id ? guest.seatIndex : nil
-                prior.seatIndex = priorSeat
+                prior.seatIndex = guest.table?.id == target.id ? guest.seatIndex : nil
             }
             guest.table = target
             guest.seatIndex = primary
@@ -608,8 +604,34 @@ struct TableCanvasItemView: View {
     }
 
     private var allergyTooltip: String {
-        let names = table.guests.filter(\.hasIntolerances).map(\.fullName).sorted().joined(separator: ", ")
+        let names = table.attendingGuests.filter(\.hasIntolerances).map(\.fullName).sorted().joined(separator: ", ")
         return "\(allergyCount) Gast\(allergyCount == 1 ? "" : "ä")ste mit Unverträglichkeiten: \(names)"
+    }
+
+    @ViewBuilder
+    private var lateCancellationBadge: some View {
+        let ghosts = table.ghostGuests
+        if showTableWarnings, !ghosts.isEmpty {
+            HStack(spacing: 2) {
+                Image(systemName: "person.fill.xmark")
+                    .font(.system(size: 8, weight: .bold))
+                Text("\(ghosts.count)")
+                    .font(.system(size: 9, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1.5)
+            .background(Tokens.Colors.ink3)
+            .clipShape(Capsule())
+            .help(lateCancellationTooltip)
+        }
+    }
+
+    private var lateCancellationTooltip: String {
+        let ghosts = table.ghostGuests
+        let names = ghosts.map(\.fullName).sorted().joined(separator: ", ")
+        return "\(ghosts.count) späte Absage\(ghosts.count == 1 ? "" : "n") – Platz frei, Catering ist bestellt: \(names)"
     }
 
     @ViewBuilder

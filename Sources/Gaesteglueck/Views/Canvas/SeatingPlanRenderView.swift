@@ -187,11 +187,11 @@ struct SeatingPlanRenderView: View {
                     .font(.system(size: 12, weight: .bold, design: .rounded))
                     .foregroundStyle(Tokens.Colors.ink)
                 HStack(spacing: 4) {
-                    Text("\(table.guests.count)/\(cap)")
+                    Text("\(table.attendingGuests.count)/\(cap)")
                         .font(.system(size: 9, design: .rounded))
                         .foregroundStyle(Tokens.Colors.ink3)
                     if showTableWarnings {
-                        let allergic = table.guests.filter(\.hasIntolerances).count
+                        let allergic = table.attendingGuests.filter(\.hasIntolerances).count
                         if allergic > 0 {
                             HStack(spacing: 1) {
                                 Image(systemName: "exclamationmark.triangle.fill")
@@ -210,7 +210,7 @@ struct SeatingPlanRenderView: View {
             .rotationEffect(.degrees(-table.rotation))
 
             ForEach(0..<positions.count, id: \.self) { idx in
-                let occ = table.guests.first { $0.seatIndex == idx }
+                let occ = table.attendingGuests.first { $0.seatIndex == idx }
                 StaticSeatView(
                     occupant: occ,
                     isDisabled: table.disabledSeatIndices.contains(idx),

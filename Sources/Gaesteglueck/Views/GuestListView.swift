@@ -1508,10 +1508,7 @@ struct GuestListView: View {
     /// für Excel/Tabelle.
     @MainActor
     private func exportFunFactWorklist(format: FunFactExportFormat) {
-        let pending = guests.filter { g in
-            let trimmed = g.funFact.trimmingCharacters(in: .whitespaces)
-            return trimmed.isEmpty || !g.funFactApproved
-        }.sorted { lhs, rhs in
+        let pending = guests.filter(\.needsFunFactFollowUp).sorted { lhs, rhs in
             if lhs.firstName == rhs.firstName { return lhs.lastName < rhs.lastName }
             return lhs.firstName < rhs.firstName
         }

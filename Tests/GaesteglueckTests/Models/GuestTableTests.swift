@@ -66,6 +66,40 @@ struct GuestTableTests {
         #expect(table.isChildTable)
     }
 
+    @Test("attendingGuests excludes declined (ghost) guests")
+    func attendingExcludesDeclined() {
+        let table = GuestTable(name: "T", shape: .round, diameter: 180)
+        let coming = Guest(firstName: "Anna", rsvpStatus: .confirmed)
+        let ghost = Guest(firstName: "Tante", rsvpStatus: .declined)
+        coming.table = table
+        ghost.table = table
+        table.guests = [coming, ghost]
+        #expect(table.attendingGuests.map(\.firstName) == ["Anna"])
+    }
+
+    @Test("ghostGuests are the seated declined guests")
+    func ghostGuestsAreDeclined() {
+        let table = GuestTable(name: "T", shape: .round, diameter: 180)
+        let coming = Guest(firstName: "Anna", rsvpStatus: .confirmed)
+        let ghost = Guest(firstName: "Tante", rsvpStatus: .declined)
+        coming.table = table
+        ghost.table = table
+        table.guests = [coming, ghost]
+        #expect(table.ghostGuests.map(\.firstName) == ["Tante"])
+    }
+
+    @Test("Occupancy ignores declined ghost guests")
+    func occupancyIgnoresGhost() {
+        let table = GuestTable(name: "T", shape: .round, diameter: 180)
+        let coming = Guest(firstName: "Anna", rsvpStatus: .confirmed)
+        let ghost = Guest(firstName: "Tante", rsvpStatus: .declined)
+        coming.table = table
+        ghost.table = table
+        table.guests = [coming, ghost]
+        // Nur Anna belegt einen Platz — die abgesagte Tante nicht.
+        #expect(table.remainingSeats == table.capacity - 1)
+    }
+
     @Test("Combination group with order")
     func combinationGroup() {
         let t1 = GuestTable(name: "T1", shape: .rectangular, width: 200, depth: 100)

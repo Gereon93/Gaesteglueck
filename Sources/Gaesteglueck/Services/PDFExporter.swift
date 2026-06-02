@@ -98,15 +98,16 @@ enum PDFExporter {
                     beginPage()
                     y = 40
                 }
-                drawText("\(table.name) (\(table.shape.rawValue), \(table.guests.count)/\(table.capacity) Plätze)",
+                let attending = table.attendingGuests
+                drawText("\(table.name) (\(table.shape.rawValue), \(attending.count)/\(table.capacity) Plätze)",
                          at: CGPoint(x: 40, y: y), font: .boldSystemFont(ofSize: 16))
                 y += 22
-                if table.guests.isEmpty {
+                if attending.isEmpty {
                     drawText("Keine Gäste zugewiesen", at: CGPoint(x: 60, y: y), font: .systemFont(ofSize: 12), color: secondaryColor)
                     y += 18
                 } else {
                     let sortedGuests: [Guest] = options.withSeatNumbers
-                        ? table.guests.sorted { lhs, rhs in
+                        ? attending.sorted { lhs, rhs in
                             switch (lhs.seatIndex, rhs.seatIndex) {
                             case let (l?, r?): return l < r
                             case (_?, nil): return true
@@ -114,7 +115,7 @@ enum PDFExporter {
                             default: return lhs.fullName < rhs.fullName
                             }
                         }
-                        : sortByCoupleOrder(guests: table.guests,
+                        : sortByCoupleOrder(guests: attending,
                                             partner1Name: partner1Name,
                                             partner2Name: partner2Name)
                     for guest in sortedGuests {
@@ -149,40 +150,55 @@ enum PDFExporter {
             drawText("Übersicht für den Caterer", at: CGPoint(x: 40, y: y), font: .boldSystemFont(ofSize: 24))
             y += 35
 
-            let allGuests = tables.flatMap(\.guests)
-            let counts = Dictionary(grouping: allGuests, by: \.dietaryChoice).mapValues(\.count)
-            for (choice, count) in counts.sorted(by: { $0.key < $1.key }) {
-                drawText("\(choice): \(count)", at: CGPoint(x: 40, y: y), font: .systemFont(ofSize: 12))
+            let summary = CatererSummary(tables: tables)
+            for diet in summary.dietCounts {
+                drawText("\(diet.choice): \(diet.count)", at: CGPoint(x: 40, y: y), font: .systemFont(ofSize: 12))
                 y += 20
             }
-            drawText("Gesamt Essen: \(counts.values.reduce(0, +))",
+            drawText("Gesamt Essen: \(summary.totalMeals)",
                      at: CGPoint(x: 40, y: y), font: .boldSystemFont(ofSize: 12))
             y += 20
             y += 6
             // Altersgruppen einzeln auflisten — Caterer braucht das fuer
             // Kindermenue, Hochstuhl-Anzahl etc.
-            let ageOrder: [AgeCategory] = [.adult, .teenager, .child, .toddler, .baby]
-            let ageCounts = Dictionary(grouping: allGuests, by: \.ageCategory).mapValues(\.count)
-            for category in ageOrder {
-                let n = ageCounts[category] ?? 0
-                if n == 0 { continue }
-                drawText("\(category.rawValue): \(n)", at: CGPoint(x: 40, y: y), font: .systemFont(ofSize: 12))
+            for age in summary.ageCounts {
+                drawText("\(age.category.rawValue): \(age.count)", at: CGPoint(x: 40, y: y), font: .systemFont(ofSize: 12))
                 y += 20
             }
-            drawText("Gesamt Personen: \(allGuests.count)",
+            drawText("Gesamt Personen: \(summary.totalPersons)",
                      at: CGPoint(x: 40, y: y), font: .boldSystemFont(ofSize: 12))
             y += 20
             y += 10
 
-            let withIntolerances = allGuests.filter(\.hasIntolerances)
-            if !withIntolerances.isEmpty {
+            if !summary.intolerant.isEmpty {
                 drawText("Unverträglichkeiten:", at: CGPoint(x: 40, y: y), font: .boldSystemFont(ofSize: 16))
                 y += 22
-                for guest in withIntolerances.sorted(by: { $0.fullName < $1.fullName }) {
+                for guest in summary.intolerant {
                     let font: NSFont = options.highlightAllergies ? .boldSystemFont(ofSize: 12) : .systemFont(ofSize: 12)
                     let color = options.highlightAllergies ? allergyColor : primaryColor
                     drawText("  \(guest.fullName): \(guest.intolerances.joined(separator: ", "))",
                              at: CGPoint(x: 60, y: y), font: font, color: color)
+                    y += 18
+                }
+            }
+
+            if !summary.changes.isEmpty {
+                y += 10
+                drawText("Späte Absagen — Plätze bleiben leer, nicht einplanen:",
+                         at: CGPoint(x: 40, y: y), font: .boldSystemFont(ofSize: 16))
+                y += 22
+                let removed = summary.removedDietCounts
+                    .map { "−\($0.count) \($0.choice)" }
+                    .joined(separator: ", ")
+                if !removed.isEmpty {
+                    drawText("Wegfall: \(removed)", at: CGPoint(x: 60, y: y), font: .boldSystemFont(ofSize: 12))
+                    y += 20
+                }
+                for change in summary.changes {
+                    var line = "  \(change.name) (\(change.tableName))"
+                    let detail = CatererSummary.changeDetail(change)
+                    if !detail.isEmpty { line += " — \(detail)" }
+                    drawText(line, at: CGPoint(x: 60, y: y), font: .systemFont(ofSize: 12))
                     y += 18
                 }
             }

@@ -17,7 +17,7 @@ struct TableRowView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Text("\(table.guests.count)/\(table.capacity)")
+            Text("\(table.attendingGuests.count)/\(table.capacity)")
                 .font(.callout)
                 .monospacedDigit()
                 .foregroundStyle(table.isFull ? .red : .secondary)

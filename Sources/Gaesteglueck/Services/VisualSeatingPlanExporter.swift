@@ -62,7 +62,7 @@ enum VisualSeatingPlanExporter {
     ) -> Data? {
         renderLock.lock()
         defer { renderLock.unlock() }
-        let allGuests = tables.flatMap(\.guests)
+        let allGuests = tables.flatMap(\.attendingGuests)
         currentDisplayNames = displayNames(for: allGuests, style: nameStyle)
         currentRenderScale = max(1.0, pixelsPerCM / 2)
         currentLegend = SeatingLegend(guests: allGuests)
@@ -291,7 +291,7 @@ enum VisualSeatingPlanExporter {
         }
 
         // Display-Names einmal pro Generate berechnen
-        let allGuests = tables.flatMap(\.guests)
+        let allGuests = tables.flatMap(\.attendingGuests)
         currentDisplayNames = displayNames(for: allGuests, style: nameStyle)
         currentLegend = SeatingLegend(guests: allGuests)
 
@@ -645,7 +645,7 @@ enum VisualSeatingPlanExporter {
 
         // Draw seats (positions are relative to table center, already in rotated space)
         for (idx, seatPos) in seatPositions.enumerated() {
-            let guest = table.guests.first { $0.seatIndex == idx }
+            let guest = table.attendingGuests.first { $0.seatIndex == idx }
             let isDisabled = table.disabledSeatIndices.contains(idx)
             drawSeat(
                 context: context,
@@ -695,7 +695,7 @@ enum VisualSeatingPlanExporter {
         let ownerName = group.sorted { ($0.combinationOrder ?? 0) < ($1.combinationOrder ?? 0) }.first?.name ?? ownerTable.name
         drawCenteredText(ownerName, at: .zero, offsetY: -8, font: nameFont)
 
-        let totalGuests = group.flatMap(\.guests).count
+        let totalGuests = group.flatMap(\.attendingGuests).count
         let totalCap = geometry.capacity - group.reduce(0) { $0 + $1.disabledSeatIndices.count }
         let countFont = NSFont.systemFont(ofSize: max(8, min(11, scaledWidth / 14)))
         drawCenteredText("\(totalGuests)/\(totalCap) Plätze", at: .zero, offsetY: 8, font: countFont, color: PDFColors.secondary)
@@ -707,7 +707,7 @@ enum VisualSeatingPlanExporter {
 
         for seat in geometry.seats {
             guard let table = group.first(where: { $0.id == seat.tableID }) else { continue }
-            let guest = table.guests.first { $0.seatIndex == seat.localSeatIndex }
+            let guest = table.attendingGuests.first { $0.seatIndex == seat.localSeatIndex }
             let isDisabled = table.disabledSeatIndices.contains(seat.localSeatIndex)
 
             // Convert global seat position to local (relative to tafel center, pre-rotation)
@@ -776,7 +776,7 @@ enum VisualSeatingPlanExporter {
     ) {
         let refSize: CGFloat = table.shape == .round ? scaledDiameter : max(scaledWidth, scaledDepth)
         let nameFont = NSFont.systemFont(ofSize: max(8, min(13, refSize / 8)), weight: .semibold)
-        let occupancy = "\(table.guests.count)/\(table.effectiveCapacity) Plätze"
+        let occupancy = "\(table.attendingGuests.count)/\(table.effectiveCapacity) Plätze"
         let countFont = NSFont.systemFont(ofSize: max(7, min(11, refSize / 11)))
 
         // Counter-rotate damit das Label aufrecht bleibt wenn der Tisch

@@ -11,6 +11,7 @@ struct ExportView: View {
     @Query private var events: [Event]
     @Query private var tables: [GuestTable]
     @Query(sort: \Guest.firstName) private var guests: [Guest]
+    @Query private var tags: [Tag]
 
     @State private var includeTableLists = true
     @State private var includeCatererSummary = true
@@ -19,6 +20,7 @@ struct ExportView: View {
     @State private var includeGameCards = false
     @State private var includePhoneVCards = false
     @State private var includeCanvasPNG = false
+    @State private var includeSpeechGuests = false
     @AppStorage("tableCardsWithTitle") private var tableCardsWithTitle: Bool = false
     @Query private var canvasLabels: [CanvasLabel]
     @AppStorage("includeVisualPlan") private var includeVisualPlan: Bool = true
@@ -184,7 +186,7 @@ struct ExportView: View {
 
     @ViewBuilder
     private var telefonPreview: some View {
-        let stats = phoneCoverage(for: guests)
+        let stats = phoneCoverage(for: guests.filter(\.countsForSeating))
 
         VStack(alignment: .leading, spacing: 24) {
                 VStack(alignment: .leading, spacing: 6) {
@@ -395,11 +397,7 @@ struct ExportView: View {
 
     @ViewBuilder
     private var catererPreview: some View {
-        let allGuests = tables.flatMap(\.guests)
-        let counts = Dictionary(grouping: allGuests, by: \.dietaryChoice).mapValues(\.count)
-        let ageOrder: [AgeCategory] = [.adult, .teenager, .child, .toddler, .baby]
-        let ageCounts = Dictionary(grouping: allGuests, by: \.ageCategory).mapValues(\.count)
-        let allergic = allGuests.filter(\.hasIntolerances)
+        let summary = CatererSummary(tables: tables)
 
         VStack(alignment: .leading, spacing: 16) {
             Text("Übersicht für den Caterer")
@@ -407,50 +405,73 @@ struct ExportView: View {
                 .foregroundStyle(Tokens.Colors.ink)
                 .padding(.bottom, 8)
             VStack(alignment: .leading, spacing: 6) {
-                ForEach(counts.sorted(by: { $0.key < $1.key }), id: \.key) { choice, n in
+                ForEach(summary.dietCounts, id: \.choice) { diet in
                     HStack {
-                        Text(choice).font(.system(size: 12, design: .rounded))
+                        Text(diet.choice).font(.system(size: 12, design: .rounded))
                         Spacer()
-                        Text("\(n)").font(.system(size: 12, weight: .semibold, design: .rounded)).monospacedDigit()
+                        Text("\(diet.count)").font(.system(size: 12, weight: .semibold, design: .rounded)).monospacedDigit()
                     }
                 }
                 HStack {
                     Text("Gesamt Essen").font(.system(size: 12, weight: .semibold, design: .rounded))
                     Spacer()
-                    Text("\(counts.values.reduce(0, +))")
+                    Text("\(summary.totalMeals)")
                         .font(.system(size: 12, weight: .bold, design: .rounded))
                         .monospacedDigit()
                 }
                 Divider().padding(.vertical, 2)
-                ForEach(ageOrder, id: \.self) { cat in
-                    let n = ageCounts[cat] ?? 0
-                    if n > 0 {
-                        HStack {
-                            Text(cat.rawValue).font(.system(size: 12, design: .rounded))
-                            Spacer()
-                            Text("\(n)").font(.system(size: 12, weight: .semibold, design: .rounded)).monospacedDigit()
-                        }
+                ForEach(summary.ageCounts, id: \.category) { age in
+                    HStack {
+                        Text(age.category.rawValue).font(.system(size: 12, design: .rounded))
+                        Spacer()
+                        Text("\(age.count)").font(.system(size: 12, weight: .semibold, design: .rounded)).monospacedDigit()
                     }
                 }
                 HStack {
                     Text("Gesamt Personen").font(.system(size: 12, weight: .semibold, design: .rounded))
                     Spacer()
-                    Text("\(allGuests.count)")
+                    Text("\(summary.totalPersons)")
                         .font(.system(size: 12, weight: .bold, design: .rounded))
                         .monospacedDigit()
                 }
             }
-            if !allergic.isEmpty {
+            if !summary.intolerant.isEmpty {
                 Divider().padding(.vertical, 4)
                 Text("Unverträglichkeiten")
                     .font(.system(size: 13, weight: .semibold, design: .rounded))
-                ForEach(allergic.sorted(by: { $0.fullName < $1.fullName })) { g in
+                ForEach(summary.intolerant) { g in
                     HStack(alignment: .top) {
                         Text(g.fullName).font(.system(size: 12, weight: .medium, design: .rounded))
                         Spacer()
                         Text(g.intolerances.joined(separator: ", "))
                             .font(.system(size: 12, design: .rounded))
-                            .foregroundStyle(Color(hex: "#c44a4a"))
+                            .foregroundStyle(Tokens.Colors.error)
+                    }
+                }
+            }
+            if !summary.changes.isEmpty {
+                Divider().padding(.vertical, 4)
+                Text("Späte Absagen — Plätze bleiben leer")
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                let removed = summary.removedDietCounts
+                    .map { "−\($0.count) \($0.choice)" }
+                    .joined(separator: ", ")
+                if !removed.isEmpty {
+                    Text("Wegfall: \(removed)")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Tokens.Colors.error)
+                }
+                ForEach(Array(summary.changes.enumerated()), id: \.offset) { _, change in
+                    HStack(alignment: .top) {
+                        Text("\(change.name) · \(change.tableName)")
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                        Spacer()
+                        let detail = CatererSummary.changeDetail(change)
+                        if !detail.isEmpty {
+                            Text(detail)
+                                .font(.system(size: 12, design: .rounded))
+                                .foregroundStyle(Tokens.Colors.ink3)
+                        }
                     }
                 }
             }
@@ -465,7 +486,7 @@ struct ExportView: View {
 
     @ViewBuilder
     private var tischkartenPreview: some View {
-        let sample = tables.flatMap(\.guests).first
+        let sample = tables.flatMap(\.attendingGuests).first
         VStack(spacing: 16) {
             Text("Tischkarten · Vorschau für eine Karte")
                 .font(.system(size: 11, design: .rounded))
@@ -555,7 +576,7 @@ struct ExportView: View {
                                 .frame(width: max(t.width * 0.18, 22), height: max(t.depth * 0.18, 14))
                         }
                     }
-                    .overlay(Text("\(t.guests.count)").font(.system(size: 8, weight: .semibold, design: .rounded)))
+                    .overlay(Text("\(t.attendingGuests.count)").font(.system(size: 8, weight: .semibold, design: .rounded)))
                     .rotationEffect(.degrees(t.rotation))
                     .position(
                         x: t.positionX * 0.4 + 240,
@@ -655,7 +676,7 @@ struct ExportView: View {
         // Subtitle ist die reine Gäste-Anzahl. Frühere Versionen hatten eine
         // Tag-basierte Sub-Beschriftung, die ist aber nicht mehr aktiv —
         // toter Branch entfernt.
-        return "\(table.guests.count) \(table.guests.count == 1 ? "Gast" : "Gäste")"
+        return "\(table.attendingGuests.count) \(table.attendingGuests.count == 1 ? "Gast" : "Gäste")"
     }
 
     private func tableContents(table: GuestTable) -> some View {
@@ -682,7 +703,7 @@ struct ExportView: View {
                 Rectangle().fill(Color(white: 0.85)).frame(height: 1)
             }
 
-            ForEach(table.guests) { guest in
+            ForEach(table.attendingGuests) { guest in
                 HStack {
                     Text(guest.fullName)
                         .font(.system(size: 12, weight: .medium, design: .rounded))
@@ -692,7 +713,7 @@ struct ExportView: View {
                         .frame(width: 100, alignment: .leading)
                     Text(guest.intolerances.first ?? "—")
                         .font(.system(size: 12, weight: highlightAllergies && guest.hasIntolerances ? .semibold : .regular, design: .rounded))
-                        .foregroundStyle(highlightAllergies && guest.hasIntolerances ? Color(hex: "#c44a4a") : Color.gray)
+                        .foregroundStyle(highlightAllergies && guest.hasIntolerances ? Tokens.Colors.error : Color.gray)
                         .frame(width: 100, alignment: .trailing)
                 }
                 .padding(.vertical, 8)
@@ -706,7 +727,7 @@ struct ExportView: View {
 
     private func footerLine(event: Event, table: GuestTable) -> some View {
         HStack {
-            Text("\(table.name) — \(table.capacity) Plätze, \(table.guests.count) belegt")
+            Text("\(table.name) — \(table.capacity) Plätze, \(table.attendingGuests.count) belegt")
                 .frame(maxWidth: .infinity, alignment: .leading)
             Text(footerStandLine(event: event))
         }
@@ -740,6 +761,7 @@ struct ExportView: View {
                         CheckRow(label: "FunFact-Spielkarten", hint: "Anonyme Karten zum Verteilen + Lösungsblatt", isOn: $includeGameCards)
                         CheckRow(label: "Telefonnummern (vCard)", hint: ".vcf — fuer WhatsApp-Gruppe der Trauzeugin", isOn: $includePhoneVCards)
                         CheckRow(label: "Sitzplan als PNG", hint: "Volle Canvas inkl. Saalplan, frei skalierbar", isOn: $includeCanvasPNG)
+                        CheckRow(label: "Gäste für die Rede (Markdown)", hint: ".md — nach Seite & Tags, für Claude Desktop", isOn: $includeSpeechGuests)
                     }
                 }
                 InspectorSection("Optionen") {
@@ -811,7 +833,7 @@ struct ExportView: View {
         }
         if includeTableCards {
             items.append(ExportItem(filename: "Tischkarten-\(safeName).pdf",
-                                    data: TableCardExporter.generatePDF(guests: guests,
+                                    data: TableCardExporter.generatePDF(guests: guests.filter(\.countsForSeating),
                                                                         eventName: event.name,
                                                                         withTitle: tableCardsWithTitle)))
         }
@@ -819,7 +841,7 @@ struct ExportView: View {
             items.append(ExportItem(filename: "Plakat-\(safeName).pdf",
                                     data: PosterExporter.generatePDF(
                                         tables: tables,
-                                        unassignedGuests: guests.filter { $0.table == nil },
+                                        unassignedGuests: guests.filter { $0.countsForSeating && $0.table == nil },
                                         eventName: event.name,
                                         date: event.date)))
         }
@@ -836,17 +858,21 @@ struct ExportView: View {
         }
         if includePhoneVCards {
             items.append(ExportItem(filename: "Telefonnummern-\(safeName).vcf",
-                                    data: PhoneVCardExporter.generate(guests: guests, eventName: event.name)))
+                                    data: PhoneVCardExporter.generate(guests: guests.filter(\.countsForSeating), eventName: event.name)))
+        }
+        if includeSpeechGuests {
+            items.append(ExportItem(filename: "Gaeste-Rede-\(safeName).md",
+                                    data: SpeechGuestExporter.generate(guests: guests, tags: tags, event: event)))
         }
         if includeCanvasPNG {
             let style = VisualSeatingPlanExporter.NameStyle(rawValue: canvasSeatNameStyleRaw) ?? .full
             let names = canvasShowSeatNames
-                ? VisualSeatingPlanExporter.displayNames(for: tables.flatMap(\.guests), style: style)
+                ? VisualSeatingPlanExporter.displayNames(for: tables.flatMap(\.attendingGuests), style: style)
                 : [:]
             let bg = event.roomPlanImageData.flatMap { NSImage(data: $0) }
             let infoMode = SeatInfoDisplay(rawValue: canvasSeatInfoModeRaw) ?? .none
             let chipContent = SeatChipContent(rawValue: canvasSeatChipContentRaw) ?? .initials
-            let legend = SeatingLegend(guests: tables.flatMap(\.guests).filter { $0.table != nil })
+            let legend = SeatingLegend(guests: tables.flatMap(\.attendingGuests))
             if let png = CanvasImageExporter.generatePNG(
                 tables: tables,
                 displayNames: names,

@@ -91,11 +91,11 @@ enum HappinessScorer {
         }
         // Over-capacity check
         for table in tables {
-            if table.guests.count > table.capacity {
+            if table.attendingGuests.count > table.capacity {
                 violations.append(Violation(
                     type: .tableOverCapacity,
-                    guestIDs: table.guests.map(\.id),
-                    description: "\(table.name) ist überbelegt (\(table.guests.count)/\(table.capacity))"
+                    guestIDs: table.attendingGuests.map(\.id),
+                    description: "\(table.name) ist überbelegt (\(table.attendingGuests.count)/\(table.capacity))"
                 ))
             }
         }

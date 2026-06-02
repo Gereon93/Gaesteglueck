@@ -190,7 +190,7 @@ enum GroupAnalyzer {
             for table in tables.sorted(by: { $0.name < $1.name }) {
                 ctx += "- \(table.name): \(table.shape.rawValue), \(table.capacity) Plätze"
                 if table.isChildTable { ctx += " [Kindertisch]" }
-                ctx += " (\(table.guests.count) zugewiesen)\n"
+                ctx += " (\(table.attendingGuests.count) zugewiesen)\n"
             }
         }
 

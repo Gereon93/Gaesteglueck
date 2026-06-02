@@ -10,6 +10,7 @@ enum SeatingOptimizer {
         constraints: [Constraint],
         iterations: Int = 6000
     ) -> [UUID: UUID] {
+        let guests = guests.filter(\.countsForSeating)
         guard !guests.isEmpty, !tables.isEmpty else { return [:] }
 
         let graph = SeatingGraph(guests: guests, tags: tags, constraints: constraints, tables: tables)

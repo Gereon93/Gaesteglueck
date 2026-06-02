@@ -559,7 +559,7 @@ struct GuestFormView: View {
             guest.dietaryChoice = dietaryChoice
             guest.intolerances = parsedIntolerances
             guest.ageCategory = ageCategory
-            guest.rsvpStatus = rsvpStatus
+            guest.applyRSVP(rsvpStatus)
             // Rohdaten geändert → alte vereinheitlichte Fassung passt nicht
             // mehr, daher verwerfen (Fallback auf neuen Rohtext bis neu
             // vereinheitlicht wird). Kein stilles Auseinanderlaufen.

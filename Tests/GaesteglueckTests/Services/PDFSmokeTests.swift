@@ -56,7 +56,7 @@ struct PDFSmokeTests {
         }
 
         // Brautpaar + 6 Trauzeugen an der Brauttafel
-        let g0a = guest("Max", "Beispiel", side: .partner1, diet: "Fleisch", funFact: "Hat schon mal auf drei Kontinenten Karaoke gesungen")
+        let g0a = guest("Max", "Beispiel", side: .partner1, diet: "Fleisch", funFact: "Hat schon mal ein eigenes Gedicht im Gemeindeblatt veröffentlicht")
         let g0b = guest("Maria", "Beispiel", side: .partner2, diet: "Vegetarisch", funFact: "Sammelt alte Kochbücher vom Flohmarkt")
         g0a.isPinned = true
         g0b.isPinned = true

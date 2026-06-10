@@ -59,17 +59,28 @@ open dist/Gaesteglueck.app
 
 Erzeugt `dist/Gaesteglueck.app` mit eigener `Info.plist`. Kann nach `/Applications/` kopiert oder im Dock abgelegt werden. Saubere Bundle-Identität, keine macOS-Logs mehr.
 
-### Variante C — iPad-App (experimentell)
+### Variante C — Xcode-Workspace (Mac + iPad)
 
 ```bash
-open ios/Gaesteglueck-iPad.xcodeproj
+open Gaesteglueck.xcworkspace
 ```
 
-Eigenes Xcode-Target, das dieselben Sources kompiliert (Conditional
-Compilation — die Mac-App bleibt unberührt). Einschränkungen der v1:
-kein PDF-/Bild-Export auf dem iPad. KI-Provider auf dem iPad:
-**OpenRouter**, **Apple Intelligence** (ab iPadOS 26, on-device) — oder
-LM Studio über die LAN-IP des Macs als Endpoint.
+Die Workspace bündelt beides (wie eine Visual-Studio-Solution):
+
+| Scheme | Ziel | Was es ist |
+|---|---|---|
+| `Gaesteglueck` | **My Mac** | das SwiftPM-Executable (wie `swift run`) |
+| `Gaesteglueck-iPad` | iPad-Simulator/-Gerät | die iPad-App (experimentell) |
+
+> ⚠️ Das Scheme `Gaesteglueck` nicht auf ein iOS-Ziel stellen — SwiftPM
+> baut kein App-Bundle, der Start crasht dann sofort mit
+> `missing bundleID`. Für iPad immer `Gaesteglueck-iPad` nehmen.
+
+Die iPad-App kompiliert dieselben Sources (Conditional Compilation —
+die Mac-App bleibt unberührt). Einschränkungen der v1: kein PDF-/Bild-
+Export auf dem iPad. KI-Provider auf dem iPad: **OpenRouter**,
+**Apple Intelligence** (ab iPadOS 26, on-device) — oder LM Studio über
+die LAN-IP des Macs als Endpoint.
 
 ### Tests
 

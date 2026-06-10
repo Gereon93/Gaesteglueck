@@ -40,7 +40,6 @@ struct FloorPlanSetupView: View {
                         allowedContentTypes: [.image]
                     ) { result in
                         guard let url = try? result.get() else { return }
-                        // iOS liefert security-scoped URLs aus dem Files-Picker
                         let scoped = url.startAccessingSecurityScopedResource()
                         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
                         if let data = try? Data(contentsOf: url) {

@@ -39,8 +39,6 @@ enum ContactsService {
         case .authorized:
             return true
         case .limited:
-            // User hat nur ausgewählte Kontakte freigegeben — für Suche und
-            // Telefon-Verify reicht das, wir sehen eben nur diese Auswahl.
             return true
         case .denied, .restricted:
             throw ContactsServiceError.accessDenied

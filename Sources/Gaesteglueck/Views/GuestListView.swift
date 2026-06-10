@@ -975,7 +975,6 @@ struct GuestListView: View {
 
     private func handleRowTap(guest: Guest) {
         #if os(iOS)
-        // Touch hat keine Modifier: Tap toggelt die Auswahl, Anker folgt
         if selectedGuestIDs.contains(guest.id) {
             selectedGuestIDs.remove(guest.id)
         } else {

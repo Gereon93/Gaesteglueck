@@ -69,24 +69,50 @@ jobs:
           EVAL_JUDGE_MODEL: ${{ vars.EVAL_JUDGE_MODEL || 'openai/gpt-4o-mini' }}
         run: python -m pytest -v --no-header
 
-  bundle-app:
+  release:
+    # Baut bei jedem Merge auf main eine DMG und veröffentlicht sie als
+    # GitHub Release. Ad-hoc-signiert (kein Developer-Zertifikat) — beim
+    # ersten Start daher Rechtsklick → Öffnen nötig, steht in den Release-Notes.
     needs: build-and-test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: macos-15
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
       - name: Build .app bundle
         run: ./scripts/build-macos-app.sh
 
-      - name: Zip bundle
-        run: |
-          cd dist
-          zip -r Gaesteglueck.app.zip Gaesteglueck.app
+      - name: Ad-hoc codesign
+        run: codesign --force --deep --sign - dist/Gaesteglueck.app
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - name: Read version
+        id: version
+        run: |
+          VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' scripts/Info.plist)
+          echo "tag=v${VERSION}-build${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      - name: Create DMG
+        run: |
+          mkdir -p dist/dmg
+          cp -R dist/Gaesteglueck.app dist/dmg/
+          ln -s /Applications dist/dmg/Applications
+          hdiutil create -volname "Gästeglück" -srcfolder dist/dmg -ov -format UDZO dist/Gaesteglueck.dmg
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          name: Gaesteglueck-${{ github.sha }}
-          path: dist/Gaesteglueck.app.zip
-          retention-days: 30
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Gästeglück ${{ steps.version.outputs.tag }}
+          files: dist/Gaesteglueck.dmg
+          generate_release_notes: true
+          body: |
+            Automatischer Build vom Merge auf `main` (${{ github.sha }}).
+
+            **Installation:** DMG öffnen, App nach „Programme" ziehen.
+            Die App ist ad-hoc-signiert (nicht notarisiert) — beim ersten Start
+            **Rechtsklick → Öffnen** wählen, oder:
+            ```
+            xattr -dr com.apple.quarantine /Applications/Gaesteglueck.app
+            ```

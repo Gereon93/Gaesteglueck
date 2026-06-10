@@ -242,8 +242,14 @@ struct SettingsView: View {
 
     private func loadFeatureRouting() {
         for f in AIFeature.allCases {
-            featureProviderRaw[f.rawValue] =
-                UserDefaults.standard.string(forKey: f.providerKey) ?? autoTag
+            var provider = UserDefaults.standard.string(forKey: f.providerKey) ?? autoTag
+            // Gespeicherte Apple-Intelligence-Wahl ohne Geräte-Support: zurück
+            // auf Auto — sonst hat der Feature-Picker eine Selektion ohne Tag.
+            if provider == LLMProvider.appleOnDevice.rawValue, !AppleOnDeviceModel.isSupported {
+                provider = autoTag
+                UserDefaults.standard.set(autoTag, forKey: f.providerKey)
+            }
+            featureProviderRaw[f.rawValue] = provider
             featureModelRaw[f.rawValue] =
                 UserDefaults.standard.string(forKey: f.modelKey) ?? ""
         }

@@ -132,7 +132,7 @@ jobs:
           body: |
             Automatischer Build vom Merge auf `main` (${{ github.sha }}).
 
-            **Installation:** DMG öffnen, App nach „Programme" ziehen.
+            **Installation:** DMG öffnen, App nach „Programme“ ziehen.
             Die App ist ad-hoc-signiert (nicht notarisiert) — beim ersten Start
             **Rechtsklick → Öffnen** wählen, oder:
             ```

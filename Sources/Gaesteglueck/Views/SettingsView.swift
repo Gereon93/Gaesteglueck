@@ -157,7 +157,7 @@ struct SettingsView: View {
             VStack(spacing: 10) {
                 SettingsRow(label: "Standard-Provider") {
                     Picker("", selection: $llmProviderRaw) {
-                        ForEach(LLMProvider.allCases) { p in
+                        ForEach(LLMProvider.selectableCases) { p in
                             Text(p.displayName).tag(p.rawValue)
                         }
                     }
@@ -201,6 +201,8 @@ struct SettingsView: View {
             return "Deine Gästeliste verlässt nie den Mac. Wir sprechen nur mit LM Studio auf dieser Maschine."
         case .openRouter:
             return "OpenRouter ruft Modelle über die Cloud auf. Daten verlassen den Mac — nur nutzen, wenn das ok ist."
+        case .appleOnDevice:
+            return "Apples System-Modell läuft komplett auf diesem Gerät — keine Cloud, kein API-Key."
         }
     }
 
@@ -252,6 +254,9 @@ struct SettingsView: View {
                                 Text("Auto").tag(autoTag)
                                 Text("LM Studio").tag(LLMProvider.lmStudio.rawValue)
                                 Text("OpenRouter").tag(LLMProvider.openRouter.rawValue)
+                                if AppleOnDeviceModel.isSupported {
+                                    Text("Apple Intelligence").tag(LLMProvider.appleOnDevice.rawValue)
+                                }
                             }
                             .labelsHidden()
                             .frame(maxWidth: 200, alignment: .leading)

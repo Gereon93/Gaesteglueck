@@ -107,7 +107,13 @@ jobs:
         id: version
         run: |
           VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' scripts/Info.plist)
-          echo "tag=v${VERSION}-build${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          TAG="v${VERSION}-build${{ github.run_number }}"
+          # Bei Workflow-Reruns bleibt run_number gleich — Suffix verhindert
+          # die Tag-Kollision mit dem ersten Versuch.
+          if [ "${{ github.run_attempt }}" -gt 1 ]; then
+            TAG="${TAG}.${{ github.run_attempt }}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Create DMG
         run: |

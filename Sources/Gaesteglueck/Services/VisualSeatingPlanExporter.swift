@@ -68,7 +68,7 @@ enum VisualSeatingPlanExporter {
                     result[g.id] = initial.isEmpty ? first : "\(first) \(initial)."
                 } else {
                     for g in subgroup {
-                        result[g.id] = "\(first) \(g.lastName)"
+                        result[g.id] = g.lastName.isEmpty ? first : "\(first) \(g.lastName)"
                     }
                 }
             }

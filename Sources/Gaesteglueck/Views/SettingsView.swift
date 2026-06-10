@@ -192,6 +192,14 @@ struct SettingsView: View {
                     GGToggle(isOn: $algorithmFallback)
                 }
             }
+            .onAppear {
+                // Gespeicherte Apple-Intelligence-Wahl auf einem Gerät, das es
+                // nicht (mehr) kann: zurück auf LM Studio — sonst zeigt der
+                // Picker eine Auswahl, die er gar nicht anbietet.
+                if llmProvider == .appleOnDevice, !AppleOnDeviceModel.isSupported {
+                    llmProviderRaw = LLMProvider.lmStudio.rawValue
+                }
+            }
         }
     }
 

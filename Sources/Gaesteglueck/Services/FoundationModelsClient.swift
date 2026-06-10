@@ -30,14 +30,22 @@ struct FoundationModelsClient: LLMClient {
             .filter { $0.role == "system" }
             .map(\.content)
             .joined(separator: "\n\n")
-        let prompt = messages
-            .filter { $0.role != "system" }
-            .map(\.content)
-            .joined(separator: "\n\n")
         let session = LanguageModelSession(instructions: instructions)
         let options = GenerationOptions(temperature: temperature, maximumResponseTokens: maxTokens)
-        let response = try await session.respond(to: prompt, options: options)
+        let response = try await session.respond(to: promptText(from: messages), options: options)
         return response.content
+    }
+
+    /// Einzelne User-Nachricht geht roh ans Modell; Mehrturn-Historie wird
+    /// mit Rollen-Markern verflacht, damit Wer-sagte-was erhalten bleibt.
+    private func promptText(from messages: [LLMMessage]) -> String {
+        let conversation = messages.filter { $0.role != "system" }
+        if conversation.count <= 1 {
+            return conversation.first?.content ?? ""
+        }
+        return conversation
+            .map { "\($0.role): \($0.content)" }
+            .joined(separator: "\n\n")
     }
 }
 #endif

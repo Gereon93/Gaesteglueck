@@ -19,7 +19,7 @@ struct CSVParserTests {
 
     @Test("Quoted cell with embedded newline keeps the newline")
     func multiLineQuotedCell() throws {
-        // Genau das Brandt/Dallmann-Pattern wie in echten Google-Forms-Exporten
+        // Genau das Brandt/Dallmann-Pattern, wie es Google-Forms-Exporte erzeugen
         let csv = "Familienname,Anzahl,Gäste-Details,Fun Facts,Anmerkungen\n" +
                   "Brandt und Dallmann,2,\"Nils Brandt, Fleisch\nMartha Dallmann, Fleisch\",,\n"
         let rows = try CSVParser.parseRegistrations(csv)

@@ -40,7 +40,7 @@ struct PDFSmokeTests {
         let t3 = GuestTable(name: "Freunde Maria", shape: .round, diameter: 180)
         t3.positionX = 800
         t3.positionY = 500
-        let t4 = GuestTable(name: "Familie Godde", shape: .square, width: 140, depth: 140)
+        let t4 = GuestTable(name: "Familie Mustermann", shape: .square, width: 140, depth: 140)
         t4.positionX = 350
         t4.positionY = 700
         t4.rotation = -15
@@ -56,7 +56,7 @@ struct PDFSmokeTests {
         }
 
         // Brautpaar + 6 Trauzeugen an der Brauttafel
-        let g0a = guest("Gereon", "Godde", side: .partner1, diet: "Fleisch", funFact: "Hat schon mal auf drei Kontinenten Karaoke gesungen", phoneNumber: "+49 170 1111111")
+        let g0a = guest("Max", "Beispiel", side: .partner1, diet: "Fleisch", funFact: "Hat schon mal auf drei Kontinenten Karaoke gesungen")
         let g0b = guest("Maria", "Beispiel", side: .partner2, diet: "Vegetarisch", funFact: "Sammelt alte Kochbücher vom Flohmarkt")
         g0a.isPinned = true
         g0b.isPinned = true
@@ -88,7 +88,7 @@ struct PDFSmokeTests {
                   intolerances: i == 3 ? ["Histamin"] : [])
         })
         assign(t4, (1...4).map { i in
-            guest("Cousin\(i)", "Godde", side: .partner1, diet: "Fleisch")
+            guest("Cousin\(i)", "Mustermann", side: .partner1, diet: "Fleisch")
         })
 
         let allGuests = allTables.flatMap(\.guests) + [

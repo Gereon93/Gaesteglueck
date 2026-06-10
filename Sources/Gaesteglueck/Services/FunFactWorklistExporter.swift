@@ -91,7 +91,7 @@ enum FunFactWorklistExporter {
                  at: CGPoint(x: 40, y: y), font: .boldSystemFont(ofSize: 11))
         y += 16
         let examples = [
-            "Hat schon mal auf drei Kontinenten Karaoke gesungen",
+            "Hat schon mal ein eigenes Gedicht im Gemeindeblatt veröffentlicht",
             "Hat das Brautpaar einst am selben Hotelpool kennengelernt",
             "Hat seine Frau im Schachverein kennengelernt",
             "Wird seit der Schulzeit von allen nur beim Spitznamen genannt",

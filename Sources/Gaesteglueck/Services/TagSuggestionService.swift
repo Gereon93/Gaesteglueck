@@ -410,9 +410,8 @@ WICHTIG: Familie (Eltern, Onkel, Tanten, Geschwister, Cousins, Schwiegereltern, 
 
 REGELN:
 1. Pro genannter Beziehungsgruppe entsteht GENAU EIN Tag (nicht mehrere).
-2. Der Tag-Name beschreibt die Gruppe knapp und enthält den Vornamen des Partners als Suffix, wenn die Gruppe partnerspezifisch ist (z.B. "Realschulfreunde Gereon"). Bei "Eltern" wird daraus "Eltern Gereon" / "Eltern Maria". Bei JGA wird daraus zwei Tags: "JGA Gereon" und "JGA Maria".
+2. Der Tag-Name beschreibt die Gruppe knapp und enthält den Vornamen des Partners als Suffix, wenn die Gruppe partnerspezifisch ist (z.B. "Realschulfreunde Gereon"). Bei JGA wird daraus zwei Tags: "JGA Gereon" und "JGA Maria".
 3. category (englisches Token):
-   - family   = Verwandtschaft, Eltern, Geschwister, Cousins, Onkel/Tanten, Großeltern, Familie + Anhang
    - friends  = Freundesgruppen jeder Art (Realschule, Studium, Kindheit, Sport, Nachbarn) UND der JGA-Kreis (das ist ein Freundeskreis, kein Job am Hochzeitstag)
    - work     = Arbeitskollegen, Berufsschule (sofern beruflich gemeint)
    - hobby    = Vereine, Fasching, Sport, gemeinsame Aktivitäten
@@ -425,12 +424,11 @@ REGELN:
    - null      = neutral
 5. derivationRule: 1 deutscher Satz, der erklärt wer in den Tag fällt. Beispiel: "Personen die mit Gereon auf der Realschule waren."
 6. guestIDs: Liste der UUIDs aus der Gästeliste die zu diesem Tag gehören. Heuristik:
-   - Family-Tags (Eltern, Geschwister, Cousins): bevorzugt über Familienname/registrationGroup
-   - Freundes-Tags: nutze Hinweise aus funFact/notes/Hobbys, sonst leer lassen
+   - Nutze Hinweise aus funFact/notes/Hobbys, sonst leer lassen
    - Wenn kein Match möglich: leeres Array zurückgeben (User ordnet später per Hand zu)
 7. JGA-Spezialfall: Wenn der Begriff in BEIDEN Listen vorkommt → zwei separate Tags (einer pro Partner), Inhalt: nur die jeweils zugehörigen Gäste.
 
-Antworte mit einem JSON-Objekt das ein Feld "tags" enthält. Jeder Tag-Eintrag hat die Felder name (string), category (einer von: family, friends, work, hobby, role, other), partnerAssignment (einer von: partner1, partner2, both, oder null), derivationRule (string, ein deutscher Satz), guestIDs (array von UUID-strings aus der Gästeliste, kann leer sein).
+Antworte mit einem JSON-Objekt das ein Feld "tags" enthält. Jeder Tag-Eintrag hat die Felder name (string), category (einer von: friends, work, hobby, role, other), partnerAssignment (einer von: partner1, partner2, both, oder null), derivationRule (string, ein deutscher Satz), guestIDs (array von UUID-strings aus der Gästeliste, kann leer sein).
 
 Beispiel-Schema (NICHT diese Werte zurückgeben — sondern eigene Vorschläge basierend auf den Eingaben):
 - name: "Realschulfreunde Gereon"

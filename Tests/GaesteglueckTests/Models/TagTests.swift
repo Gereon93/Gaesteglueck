@@ -6,8 +6,8 @@ import Foundation
 struct TagTests {
     @Test("Tag creation with defaults")
     func tagCreation() {
-        let tag = Tag(name: "Studienfreunde Maria", category: .friendGroup)
-        #expect(tag.name == "Studienfreunde Maria")
+        let tag = Tag(name: "Studienfreunde Alice", category: .friendGroup)
+        #expect(tag.name == "Studienfreunde Alice")
         #expect(tag.category == .friendGroup)
         #expect(tag.color == TagCategory.friendGroup.defaultColor)
         #expect(tag.guestIDs.isEmpty)
@@ -16,7 +16,7 @@ struct TagTests {
     @Test("Tag with custom color and partner")
     func tagWithCustomColor() {
         let tag = Tag(
-            name: "JGA Gereon",
+            name: "JGA Bob",
             category: .activity,
             color: "#FF5733",
             partnerAssignment: .partner1

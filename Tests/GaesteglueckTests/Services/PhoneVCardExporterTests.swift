@@ -50,11 +50,11 @@ struct PhoneVCardExporterTests {
 
     @Test("Escapet Sonderzeichen in Namen")
     func escapesSpecialChars() {
-        let g = Guest(firstName: "Anna; Maria", lastName: "Müller, geb. Schmidt")
+        let g = Guest(firstName: "Anna; Alice", lastName: "Müller, geb. Schmidt")
         g.phoneNumber = "1"
         let text = String(data: PhoneVCardExporter.generate(guests: [g], eventName: "X"),
                           encoding: .utf8) ?? ""
-        #expect(text.contains("Anna\\; Maria"))
+        #expect(text.contains("Anna\\; Alice"))
         #expect(text.contains("Müller\\, geb. Schmidt"))
     }
 }

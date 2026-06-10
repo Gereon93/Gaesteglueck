@@ -206,7 +206,7 @@ struct GuestListView: View {
 
     private var filteredGuests: [Guest] {
         // Vorberechnung: welche registrationGroups haben mindestens ein
-        // Mitglied das schon eine Seite (Maria/Gereon/Beide) hat? Solche
+        // Mitglied das schon eine Seite (Alice/Bob/Beide) hat? Solche
         // Anmeldungen blenden wir beim "Unzugeordnet"-Filter komplett aus —
         // weil ein zugeordnetes Familienmitglied via mustSitTogether-Constraint
         // den Rest der Familie zum gleichen Tisch zieht. Es gibt also
@@ -391,9 +391,9 @@ struct GuestListView: View {
             } else if hasActiveFilter, !filteredGuests.isEmpty {
                 // Wenn nichts ausgewählt aber ein Filter aktiv ist → Quick-
                 // Action zum Massen-Selektieren des sichtbaren Bereichs.
-                // Workflow: Filter side=Gereon + tag=Freundesgruppe → klick
+                // Workflow: Filter side=Bob + tag=Freundesgruppe → klick
                 // "Alle X auswählen" → im Inspector "Tag hinzufügen" mit
-                // "Geburtstag Gereon".
+                // "Geburtstag Bob".
                 Button {
                     selectAllVisible()
                 } label: {
@@ -1316,8 +1316,8 @@ struct GuestListView: View {
 
     private func addTagToSelection(_ tag: Tag) {
         // Bewusst KEIN Side-Auto-Derive beim Massen-Tag-Zuweisen — der
-        // User markiert evtl. die "Schwiegermutter Maria" als Mitglied
-        // eines neutralen Tags ohne damit ihre Zuordnung zu Marias Seite
+        // User markiert evtl. die "Schwiegermutter Alice" als Mitglied
+        // eines neutralen Tags ohne damit ihre Zuordnung zu Alices Seite
         // ändern zu wollen. Side bleibt wie sie ist; ggf. einzeln im Edit-
         // Sheet anpassen.
         for id in selectedGuestIDs where !tag.guestIDs.contains(id) {
@@ -1330,7 +1330,7 @@ struct GuestListView: View {
     }
 
     /// Familienrolle + Seite in einer Zeile für den Inspector. „Vater von
-    /// Gereon", „Schwester von Maria", oder dezenter Hinweis wenn nichts
+    /// Bob", „Schwester von Alice", oder dezenter Hinweis wenn nichts
     /// gepflegt ist (mit Quick-Edit-Button).
     @ViewBuilder
     private func familyRoleSummary(for guest: Guest) -> some View {

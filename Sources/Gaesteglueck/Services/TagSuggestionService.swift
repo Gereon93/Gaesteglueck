@@ -26,7 +26,7 @@ struct GuestSnapshot: Sendable, Equatable {
     let hobbies: [String]
     /// Wenn der User die Familienrolle schon am Gast gepflegt hat (Mutter,
     /// Onkel, Cousin), kann der lokale Tag-Generator daraus die Mitglieder
-    /// von Family-Tags wie "Eltern Gereon" ohne KI ableiten.
+    /// von Family-Tags wie "Eltern Bob" ohne KI ableiten.
     let familyRole: FamilyRole?
     let familyRolePartner: PartnerAssignment?
 }
@@ -96,7 +96,7 @@ enum LocalTagDeriver {
     /// Begriffe die bereits über `Guest.familyRole` modelliert werden — diese
     /// als Tag zu erzeugen wäre Doppelarbeit (und würde im Tag-Bereich nur
     /// Krach machen). Beispiele: "Eltern", "Onkel & Tanten", "Schwester mit
-    /// Familie", "Cousine/Cousin", "Schwiegereltern", "Familie Maria".
+    /// Familie", "Cousine/Cousin", "Schwiegereltern", "Familie Alice".
     /// "Familienfreunde" / "Familien Freunde" zählen NICHT als Family-only —
     /// das sind Freundes-Tags die nur das Wort "Familie" enthalten.
     private static func isFamilyOnlyTerm(_ raw: String) -> Bool {
@@ -177,7 +177,7 @@ enum LocalTagDeriver {
 
         let displayName: String
         if let pn = partnerName, partner != .both {
-            // Identität bleibt: "Trauzeuge Gereon" / "Trauzeugin Maria"
+            // Identität bleibt: "Trauzeuge Bob" / "Trauzeugin Alice"
             displayName = "\(cleanName) \(pn)"
         } else if partner == .both {
             displayName = "\(cleanName) (beide)"
@@ -406,11 +406,11 @@ Antworte SOFORT mit dem fertigen JSON, ohne vorheriges Nachdenken oder Selbstges
 
 Du bist ein Hochzeits-Beziehungs-Analyst. Aus zwei Freitext-Listen (Partner 1 und Partner 2) erzeugst du strukturierte Tags und ordnest jeden Gast dem passenden Tag zu.
 
-WICHTIG: Familie (Eltern, Onkel, Tanten, Geschwister, Cousins, Schwiegereltern, Großeltern) wird bereits über das `familyRole`-Feld am Gast erfasst. Erzeuge KEINE Family-Tags wie "Eltern Gereon" oder "Onkel Maria". Konzentriere dich ausschließlich auf Freundeskreise (Realschule, Studium, Wohnheim), Aktivitäten (Fasching, Sport, Hobby), Arbeitskontexte, Hochzeitsrollen (Trauzeugen, JGA) und übergreifende Crews ("Geburtstagsfeier-Stammtisch", "Skihütten-Crew").
+WICHTIG: Familie (Eltern, Onkel, Tanten, Geschwister, Cousins, Schwiegereltern, Großeltern) wird bereits über das `familyRole`-Feld am Gast erfasst. Erzeuge KEINE Family-Tags wie "Eltern Bob" oder "Onkel Alice". Konzentriere dich ausschließlich auf Freundeskreise (Realschule, Studium, Wohnheim), Aktivitäten (Fasching, Sport, Hobby), Arbeitskontexte, Hochzeitsrollen (Trauzeugen, JGA) und übergreifende Crews ("Geburtstagsfeier-Stammtisch", "Skihütten-Crew").
 
 REGELN:
 1. Pro genannter Beziehungsgruppe entsteht GENAU EIN Tag (nicht mehrere).
-2. Der Tag-Name beschreibt die Gruppe knapp und enthält den Vornamen des Partners als Suffix, wenn die Gruppe partnerspezifisch ist (z.B. "Realschulfreunde Gereon"). Bei JGA wird daraus zwei Tags: "JGA Gereon" und "JGA Maria".
+2. Der Tag-Name beschreibt die Gruppe knapp und enthält den Vornamen des Partners als Suffix, wenn die Gruppe partnerspezifisch ist (z.B. "Realschulfreunde Bob"). Bei JGA wird daraus zwei Tags: "JGA Bob" und "JGA Alice".
 3. category (englisches Token):
    - friends  = Freundesgruppen jeder Art (Realschule, Studium, Kindheit, Sport, Nachbarn) UND der JGA-Kreis (das ist ein Freundeskreis, kein Job am Hochzeitstag)
    - work     = Arbeitskollegen, Berufsschule (sofern beruflich gemeint)
@@ -422,7 +422,7 @@ REGELN:
    - "partner2" = nur Partner 2
    - "both"    = explizit gemeinsam (z.B. "Familienfreunde von beiden", JGA-Gesamtkreis)
    - null      = neutral
-5. derivationRule: 1 deutscher Satz, der erklärt wer in den Tag fällt. Beispiel: "Personen die mit Gereon auf der Realschule waren."
+5. derivationRule: 1 deutscher Satz, der erklärt wer in den Tag fällt. Beispiel: "Personen die mit Bob auf der Realschule waren."
 6. guestIDs: Liste der UUIDs aus der Gästeliste die zu diesem Tag gehören. Heuristik:
    - Nutze Hinweise aus funFact/notes/Hobbys, sonst leer lassen
    - Wenn kein Match möglich: leeres Array zurückgeben (User ordnet später per Hand zu)
@@ -431,10 +431,10 @@ REGELN:
 Antworte mit einem JSON-Objekt das ein Feld "tags" enthält. Jeder Tag-Eintrag hat die Felder name (string), category (einer von: friends, work, hobby, role, other), partnerAssignment (einer von: partner1, partner2, both, oder null), derivationRule (string, ein deutscher Satz), guestIDs (array von UUID-strings aus der Gästeliste, kann leer sein).
 
 Beispiel-Schema (NICHT diese Werte zurückgeben — sondern eigene Vorschläge basierend auf den Eingaben):
-- name: "Realschulfreunde Gereon"
+- name: "Realschulfreunde Bob"
 - category: "friends"
 - partnerAssignment: "partner1"
-- derivationRule: "Personen die mit Gereon zur Realschule gegangen sind."
+- derivationRule: "Personen die mit Bob zur Realschule gegangen sind."
 - guestIDs: ["..."]
 """
 

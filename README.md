@@ -59,13 +59,25 @@ open dist/Gaesteglueck.app
 
 Erzeugt `dist/Gaesteglueck.app` mit eigener `Info.plist`. Kann nach `/Applications/` kopiert oder im Dock abgelegt werden. Saubere Bundle-Identität, keine macOS-Logs mehr.
 
+### Variante C — iPad-App (experimentell)
+
+```bash
+open ios/Gaesteglueck-iPad.xcodeproj
+```
+
+Eigenes Xcode-Target, das dieselben Sources kompiliert (Conditional
+Compilation — die Mac-App bleibt unberührt). Einschränkungen der v1:
+kein PDF-/Bild-Export auf dem iPad. KI-Provider auf dem iPad:
+**OpenRouter**, **Apple Intelligence** (ab iPadOS 26, on-device) — oder
+LM Studio über die LAN-IP des Macs als Endpoint.
+
 ### Tests
 
 ```bash
 swift test
 ```
 
-221 Tests in 44 Suites.
+225 Tests in 44 Suites.
 
 ## Wo liegen die Daten
 

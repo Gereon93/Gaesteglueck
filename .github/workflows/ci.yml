@@ -26,6 +26,20 @@ jobs:
       - name: Test
         run: swift test
 
+  ios-build:
+    # Compile-Check fürs iPad-Target (Simulator, kein Signing) — die
+    # iPad-App wird nicht released, soll aber nicht stillschweigend brechen.
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build iPad app for simulator
+        run: |
+          xcodebuild -project ios/Gaesteglueck-iPad.xcodeproj \
+            -scheme Gaesteglueck-iPad \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO build
+
   prompt-eval:
     # KI-Prompt-Gate: prüft beim Merge auf main ob die Produktions-Prompts
     # noch wie erwartet greifen (deepeval + OpenRouter). Ohne gesetztes

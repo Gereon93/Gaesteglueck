@@ -1,3 +1,4 @@
+#if os(macOS)
 #if canImport(AppKit)
 import Foundation
 import AppKit
@@ -194,4 +195,5 @@ enum FunFactGameCardsExporter {
         (text as NSString).draw(at: point, withAttributes: attrs)
     }
 }
+#endif
 #endif

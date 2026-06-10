@@ -1,3 +1,4 @@
+#if os(macOS)
 #if canImport(AppKit)
 import Foundation
 import AppKit
@@ -270,4 +271,5 @@ enum PDFExporter {
         return y + 15
     }
 }
+#endif
 #endif

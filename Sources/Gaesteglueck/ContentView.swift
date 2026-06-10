@@ -33,7 +33,15 @@ struct ContentView: View {
             case .assistant:
                 KIWizardView()
             case .export:
+                #if os(macOS)
                 ExportView()
+                #else
+                ContentUnavailableView(
+                    "Export nur am Mac",
+                    systemImage: "square.and.arrow.up",
+                    description: Text("PDF- und Bild-Exporte sind in der iPad-Version noch nicht verfügbar.")
+                )
+                #endif
             case .settings:
                 SettingsView()
             case nil:

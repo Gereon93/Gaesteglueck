@@ -1,4 +1,4 @@
-#if canImport(SwiftUI) && canImport(SwiftData) && canImport(AppKit)
+#if canImport(SwiftUI) && canImport(SwiftData)
 import SwiftUI
 import SwiftData
 
@@ -23,8 +23,8 @@ struct ScaleCalibrationOverlay: View {
                 .padding()
 
             GeometryReader { geo in
-                if let imageData = roomPlan.imageData, let nsImage = NSImage(data: imageData) {
-                    Image(nsImage: nsImage)
+                if let imageData = roomPlan.imageData, let image = PlatformImage(data: imageData) {
+                    Image(platformImage: image)
                         .resizable()
                         .scaledToFit()
                         .overlay {

@@ -6,6 +6,7 @@ let package = Package(
     name: "Gaesteglueck",
     platforms: [
         .macOS(.v15),
+        .iOS(.v18),
     ],
     products: [
         .executable(name: "Gaesteglueck", targets: ["Gaesteglueck"])

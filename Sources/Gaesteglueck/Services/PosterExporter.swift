@@ -1,3 +1,4 @@
+#if os(macOS)
 #if canImport(AppKit)
 import Foundation
 import AppKit
@@ -23,4 +24,5 @@ enum PosterExporter {
         )
     }
 }
+#endif
 #endif

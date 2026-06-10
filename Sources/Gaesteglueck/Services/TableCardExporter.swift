@@ -1,3 +1,4 @@
+#if os(macOS)
 #if canImport(AppKit)
 import Foundation
 import AppKit
@@ -167,4 +168,5 @@ enum TableCardExporter {
         (text as NSString).draw(at: point, withAttributes: attrs)
     }
 }
+#endif
 #endif

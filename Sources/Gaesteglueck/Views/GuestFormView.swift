@@ -180,7 +180,9 @@ struct GuestFormView: View {
                         TextField("z.B. spielt Klavier seit 20 Jahren", text: $funFact)
                     }
                     Toggle("FunFact ist gut – darf erzaehlt werden", isOn: $funFactApproved)
+                        #if os(macOS)
                         .toggleStyle(.checkbox)
+                        #endif
                         .disabled(funFact.trimmingCharacters(in: .whitespaces).isEmpty)
                         .help("Bestaetige dass dieser FunFact konkret und persoenlich ist und beim Brauttisch erwaehnt werden kann.")
                     LabeledContent("Notizen") {

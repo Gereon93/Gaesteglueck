@@ -93,3 +93,7 @@ dist/
 
 # Tool-generierter Code-Index (GitNexus/Codegraph)
 .codegraph/
+
+# iOS-Build-Artefakte (lokale Compile-Checks)
+.build-ios/
+.build-ios-dd/

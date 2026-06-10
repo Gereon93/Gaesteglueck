@@ -1,13 +1,84 @@
-#if canImport(AppKit)
 import Foundation
+#if os(macOS)
 import AppKit
 import CoreText
+#endif
 
 /// Bildlicher Sitzplan als A3-Querformat-PDF: jeder Tisch wird als echte
 /// Form (Rechteck/Kreis) an seiner Position auf dem Saalplan gezeichnet,
 /// mit Namen direkt an den Sitzpositionen. Diätwahl wird als kleiner
 /// farbiger Punkt angezeigt; Allergien als roter "!" am Sitz.
+///
+/// `NameStyle` + `displayNames` sind plattformneutral, weil das Canvas sie
+/// auch für die On-Screen-Anzeige nutzt; das eigentliche Zeichnen (PDF/PNG)
+/// ist macOS-only.
 enum VisualSeatingPlanExporter {
+    /// Wie soll der Name jedes Gastes auf dem Sitzplan angezeigt werden?
+    enum NameStyle: String, CaseIterable, Identifiable, Sendable {
+        /// Vorname + voller Nachname für jeden Gast.
+        case full = "Voller Name"
+        /// Nur Vorname.
+        case firstOnly = "Nur Vorname"
+        /// Vorname + Initial (z.B. "Anna B.") für jeden Gast.
+        case firstWithInitial = "Vorname + Initial"
+        /// Vorname allein wenn eindeutig, sonst + Initial. Bei Restdoppel
+        /// fällt auf vollen Nachnamen zurück. (Default — am kürzesten lesbar.)
+        case smartDeduped = "Vorname (Initial bei Doppelten)"
+
+        public var id: String { rawValue }
+    }
+
+    /// Berechnet den Anzeige-Namen pro Gast nach gewähltem Stil.
+    static func displayNames(for guests: [Guest], style: NameStyle = .smartDeduped) -> [UUID: String] {
+        switch style {
+        case .full:
+            return Dictionary(uniqueKeysWithValues: guests.map {
+                ($0.id, $0.lastName.isEmpty ? $0.firstName : "\($0.firstName) \($0.lastName)")
+            })
+        case .firstOnly:
+            return Dictionary(uniqueKeysWithValues: guests.map { ($0.id, $0.firstName) })
+        case .firstWithInitial:
+            return Dictionary(uniqueKeysWithValues: guests.map { g in
+                let initial = String(g.lastName.prefix(1)).uppercased()
+                return (g.id, initial.isEmpty ? g.firstName : "\(g.firstName) \(initial).")
+            })
+        case .smartDeduped:
+            return smartDedupedNames(for: guests)
+        }
+    }
+
+    private static func smartDedupedNames(for guests: [Guest]) -> [UUID: String] {
+        var byFirst: [String: [Guest]] = [:]
+        for g in guests {
+            byFirst[g.firstName, default: []].append(g)
+        }
+        var result: [UUID: String] = [:]
+        for (first, group) in byFirst {
+            if group.count == 1, let g = group.first {
+                result[g.id] = first
+                continue
+            }
+            var byInitial: [String: [Guest]] = [:]
+            for g in group {
+                let initial = String(g.lastName.prefix(1)).uppercased()
+                byInitial[initial, default: []].append(g)
+            }
+            for (initial, subgroup) in byInitial {
+                if subgroup.count == 1, let g = subgroup.first {
+                    result[g.id] = initial.isEmpty ? first : "\(first) \(initial)."
+                } else {
+                    for g in subgroup {
+                        result[g.id] = "\(first) \(g.lastName)"
+                    }
+                }
+            }
+        }
+        return result
+    }
+}
+
+#if os(macOS)
+extension VisualSeatingPlanExporter {
     private static let pageWidth: CGFloat = 1191   // A3 landscape
     private static let pageHeight: CGFloat = 842
     private static let titleAreaHeight: CGFloat = 80
@@ -210,69 +281,6 @@ enum VisualSeatingPlanExporter {
                            y: canvasRect.minY + cm.y * scaleY)
         }
         return CGPoint(x: canvasRect.midX + cm.x, y: canvasRect.midY + cm.y)
-    }
-
-    /// Wie soll der Name jedes Gastes auf dem Sitzplan angezeigt werden?
-    enum NameStyle: String, CaseIterable, Identifiable, Sendable {
-        /// Vorname + voller Nachname für jeden Gast.
-        case full = "Voller Name"
-        /// Nur Vorname.
-        case firstOnly = "Nur Vorname"
-        /// Vorname + Initial (z.B. "Anna B.") für jeden Gast.
-        case firstWithInitial = "Vorname + Initial"
-        /// Vorname allein wenn eindeutig, sonst + Initial. Bei Restdoppel
-        /// fällt auf vollen Nachnamen zurück. (Default — am kürzesten lesbar.)
-        case smartDeduped = "Vorname (Initial bei Doppelten)"
-
-        public var id: String { rawValue }
-    }
-
-    /// Berechnet den Anzeige-Namen pro Gast nach gewähltem Stil.
-    static func displayNames(for guests: [Guest], style: NameStyle = .smartDeduped) -> [UUID: String] {
-        switch style {
-        case .full:
-            return Dictionary(uniqueKeysWithValues: guests.map {
-                ($0.id, $0.lastName.isEmpty ? $0.firstName : "\($0.firstName) \($0.lastName)")
-            })
-        case .firstOnly:
-            return Dictionary(uniqueKeysWithValues: guests.map { ($0.id, $0.firstName) })
-        case .firstWithInitial:
-            return Dictionary(uniqueKeysWithValues: guests.map { g in
-                let initial = String(g.lastName.prefix(1)).uppercased()
-                return (g.id, initial.isEmpty ? g.firstName : "\(g.firstName) \(initial).")
-            })
-        case .smartDeduped:
-            return smartDedupedNames(for: guests)
-        }
-    }
-
-    private static func smartDedupedNames(for guests: [Guest]) -> [UUID: String] {
-        var byFirst: [String: [Guest]] = [:]
-        for g in guests {
-            byFirst[g.firstName, default: []].append(g)
-        }
-        var result: [UUID: String] = [:]
-        for (first, group) in byFirst {
-            if group.count == 1, let g = group.first {
-                result[g.id] = first
-                continue
-            }
-            var byInitial: [String: [Guest]] = [:]
-            for g in group {
-                let initial = String(g.lastName.prefix(1)).uppercased()
-                byInitial[initial, default: []].append(g)
-            }
-            for (initial, subgroup) in byInitial {
-                if subgroup.count == 1, let g = subgroup.first {
-                    result[g.id] = initial.isEmpty ? first : "\(first) \(initial)."
-                } else {
-                    for g in subgroup {
-                        result[g.id] = "\(first) \(g.lastName)"
-                    }
-                }
-            }
-        }
-        return result
     }
 
     static func generatePDF(

@@ -427,6 +427,7 @@ struct GuestListView: View {
             .warmButton(.secondary)
             .disabled(isNormalizingFunFacts || guests.isEmpty)
             .help("FunFacts per KI in einheitliche Ich-Form bringen — du bestätigst vor dem Übernehmen")
+            #if os(macOS)
             Menu {
                 Button("Als PDF exportieren") {
                     exportFunFactWorklist(format: .pdf)
@@ -447,6 +448,7 @@ struct GuestListView: View {
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .disabled(funFactWorklistCount == 0)
+            #endif
             #if canImport(UniformTypeIdentifiers)
             ImportButton()
             #endif
@@ -972,6 +974,15 @@ struct GuestListView: View {
     }
 
     private func handleRowTap(guest: Guest) {
+        #if os(iOS)
+        // Touch hat keine Modifier: Tap toggelt die Auswahl, Anker folgt
+        if selectedGuestIDs.contains(guest.id) {
+            selectedGuestIDs.remove(guest.id)
+        } else {
+            selectedGuestIDs.insert(guest.id)
+            anchorGuestID = guest.id
+        }
+        #else
         let flags = NSEvent.modifierFlags
         if flags.contains(.shift), let anchor = anchorGuestID {
             // Range-Auswahl: alles zwischen anchor und guest in der aktuell sichtbaren
@@ -999,6 +1010,7 @@ struct GuestListView: View {
             selectedGuestIDs = [guest.id]
             anchorGuestID = guest.id
         }
+        #endif
     }
 
     private func deleteSelection() {
@@ -1502,6 +1514,7 @@ struct GuestListView: View {
 
     private enum FunFactExportFormat { case pdf, csv, reminderCSV }
 
+    #if os(macOS)
     /// Exportiert die Liste aller Gäste mit fehlendem oder unbestätigtem
     /// FunFact — pro Gast Vor- und Nachname, derzeitiger FunFact, Status.
     /// Alphabetisch sortiert. PDF mit Erklärung + Beispielen oder CSV
@@ -1541,6 +1554,7 @@ struct GuestListView: View {
             try? data.write(to: url)
         }
     }
+    #endif
 
     private func runFunFactCheck() {
         funFactCheckProgress = (0, 0)

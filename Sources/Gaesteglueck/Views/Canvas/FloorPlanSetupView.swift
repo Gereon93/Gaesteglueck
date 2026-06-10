@@ -1,6 +1,7 @@
 #if canImport(SwiftUI) && canImport(SwiftData)
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 struct FloorPlanSetupView: View {
     @Environment(\.dismiss) private var dismiss

@@ -87,7 +87,9 @@ jobs:
     # Baut bei jedem Merge auf main eine DMG und veröffentlicht sie als
     # GitHub Release. Ad-hoc-signiert (kein Developer-Zertifikat) — beim
     # ersten Start daher Rechtsklick → Öffnen nötig, steht in den Release-Notes.
-    needs: build-and-test
+    # prompt-eval ist bewusst KEINE Voraussetzung: ein flakiges LLM-Judge-Urteil
+    # soll kein Release blockieren.
+    needs: [build-and-test, ios-build]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: macos-15
     permissions:

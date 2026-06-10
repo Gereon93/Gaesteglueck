@@ -79,8 +79,9 @@ Die Workspace bündelt beides (wie eine Visual-Studio-Solution):
 Die iPad-App kompiliert dieselben Sources (Conditional Compilation —
 die Mac-App bleibt unberührt). Einschränkungen der v1: kein PDF-/Bild-
 Export auf dem iPad. KI-Provider auf dem iPad: **OpenRouter**,
-**Apple Intelligence** (ab iPadOS 26, on-device) — oder LM Studio über
-die LAN-IP des Macs als Endpoint.
+**Apple Intelligence** (on-device; die App läuft ab iPadOS 18, dieser
+Provider erscheint erst ab iPadOS 26 auf fähiger Hardware) — oder
+LM Studio über die LAN-IP des Macs als Endpoint.
 
 ### Tests
 

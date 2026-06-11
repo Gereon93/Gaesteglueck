@@ -150,7 +150,7 @@ OUTPUT (NUR JSON):
       "name": "Brauttafel",
       "isBridal": true,
       "isChild": false,
-      "clusters": ["Brautpaar", "Trauzeugen Gereon"],
+      "clusters": ["Brautpaar", "Trauzeugen Bob"],
       "reason": "Brautpaar + Trauzeugen-Crew, 12 Plätze."
     },
     {
@@ -161,7 +161,7 @@ OUTPUT (NUR JSON):
       "name": "T1 — Hü-Fos",
       "isBridal": false,
       "isChild": false,
-      "clusters": ["Familie Maier", "Familienfreunde Gereon"],
+      "clusters": ["Familie Maier", "Familienfreunde Bob"],
       "reason": "Großfamilie der Brautmutter, 8 Personen."
     },
     {

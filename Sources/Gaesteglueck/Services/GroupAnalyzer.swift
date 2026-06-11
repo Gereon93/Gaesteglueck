@@ -95,8 +95,8 @@ enum GroupAnalyzer {
         }
 
         // Familien-Cluster: alle Gäste mit FamilyRole nach Seite + Rolle
-        // gruppieren. So sieht die KI auf einen Blick "die Eltern Gereon's
-        // sind X, Y" oder "Onkel/Tanten Maria: A, B, C".
+        // gruppieren. So sieht die KI auf einen Blick "die Eltern Bobs
+        // sind X, Y" oder "Onkel/Tanten Alice: A, B, C".
         let withFamilyRole = guests.filter { $0.familyRole != nil }
         if !withFamilyRole.isEmpty {
             ctx += "\n## Familien-Cluster (aus Familienrollen)\n\n"

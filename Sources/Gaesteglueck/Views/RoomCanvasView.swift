@@ -28,8 +28,7 @@ struct RoomCanvasView: View {
     @State private var showingVersionsSheet = false
     @State private var showingResetAssignmentsAlert = false
     @State private var inboxTagFilter: UUID? = nil
-    #if canImport(AppKit)
-    @State private var cachedRoomPlanImageRef: NSImage?
+    @State private var cachedRoomPlanImageRef: PlatformImage?
     @State private var cachedRoomPlanImageDigest: Int = 0
     @AppStorage("canvasShowSeatNames") private var showSeatNames = false
     @AppStorage("canvasSeatNameStyle") private var canvasSeatNameStyleRaw =
@@ -50,7 +49,6 @@ struct RoomCanvasView: View {
     @State private var legendDrag: CGSize = .zero
     @State private var canvasSize: CGSize = .zero
     @State private var legendCursorPushed = false
-    #endif
 
     private var event: Event? { events.first }
 
@@ -236,12 +234,22 @@ struct RoomCanvasView: View {
     @ViewBuilder
     private var rightSideStack: some View {
         if showingCoPilot {
+            #if os(macOS)
             VSplitView {
                 detailPanel
                     .frame(minHeight: 200)
                 SitzplanCoPilotPanel()
                     .frame(minHeight: 280)
             }
+            #else
+            VStack(spacing: 0) {
+                detailPanel
+                    .frame(minHeight: 200)
+                Divider()
+                SitzplanCoPilotPanel()
+                    .frame(minHeight: 280)
+            }
+            #endif
         } else {
             detailPanel
         }
@@ -315,6 +323,7 @@ struct RoomCanvasView: View {
             .fixedSize()
             .help("Was im Sitzplan angezeigt wird — alles ein-/ausblendbar")
             AutoPlaceButton()
+            #if os(macOS)
             if let event {
                 ExportButton(
                     tables: tables,
@@ -325,6 +334,7 @@ struct RoomCanvasView: View {
                     partner2Name: event.partner2Name
                 )
             }
+            #endif
             Button {
                 showingFloorPlanSetup = true
             } label: {
@@ -555,19 +565,16 @@ struct RoomCanvasView: View {
 
     @ViewBuilder
     private var roomPlanBackgroundIfAvailable: some View {
-        #if canImport(AppKit)
-        if let nsImage = cachedRoomPlanImageRef {
-            Image(nsImage: nsImage)
+        if let image = cachedRoomPlanImageRef {
+            Image(platformImage: image)
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .opacity(0.35)
                 .padding(28)
                 .allowsHitTesting(false)
         }
-        #endif
     }
 
-    #if canImport(AppKit)
     private func refreshRoomPlanImageCache() {
         guard let data = roomPlans.first?.imageData else {
             cachedRoomPlanImageRef = nil
@@ -576,10 +583,9 @@ struct RoomCanvasView: View {
         }
         let digest = data.hashValue
         if digest == cachedRoomPlanImageDigest, cachedRoomPlanImageRef != nil { return }
-        cachedRoomPlanImageRef = NSImage(data: data)
+        cachedRoomPlanImageRef = PlatformImage(data: data)
         cachedRoomPlanImageDigest = digest
     }
-    #endif
 
     private var canvas: some View {
         canvasContents

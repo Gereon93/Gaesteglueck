@@ -1,3 +1,4 @@
+#if os(macOS)
 #if canImport(SwiftUI) && canImport(SwiftData)
 import SwiftUI
 import SwiftData
@@ -462,4 +463,5 @@ private struct StaticSeatView: View {
         }
     }
 }
+#endif
 #endif

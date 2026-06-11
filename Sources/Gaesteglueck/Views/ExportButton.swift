@@ -1,3 +1,4 @@
+#if os(macOS)
 #if canImport(SwiftUI) && canImport(AppKit)
 import SwiftUI
 
@@ -79,4 +80,5 @@ struct ExportButton: View {
         }
     }
 }
+#endif
 #endif

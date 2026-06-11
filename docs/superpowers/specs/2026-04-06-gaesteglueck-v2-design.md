@@ -17,11 +17,11 @@ Wedding Seating Planner als macOS SwiftUI App. Importiert Gästelisten aus CSV/E
 | Feld | Typ | Beschreibung |
 |------|-----|-------------|
 | id | UUID | Primary Key |
-| name | String | z.B. "Hochzeit Gereon & Maria" |
+| name | String | z.B. "Hochzeit Bob & Alice" |
 | date | Date | Hochzeitsdatum |
 | location | String | Venue-Name |
-| partner1Name | String | Frei wählbar, z.B. "Gereon" |
-| partner2Name | String | Frei wählbar, z.B. "Maria" |
+| partner1Name | String | Frei wählbar, z.B. "Bob" |
+| partner2Name | String | Frei wählbar, z.B. "Alice" |
 | partner1PreMarriageName | String | Nachname vor Hochzeit (für Import-Matching) |
 | partner2PreMarriageName | String | Nachname vor Hochzeit |
 | menuOptions | [String] | Verfügbare Essensoptionen: ["Fleisch", "Vegetarisch", "Vegan"] |
@@ -62,8 +62,8 @@ Wedding Seating Planner als macOS SwiftUI App. Importiert Gästelisten aus CSV/E
 | isPinned | Bool | Fixiert am zugewiesenen Tisch |
 
 ### PartnerAssignment (Enum)
-- `.partner1` — Gast gehört zu Partner 1 (z.B. Gereons Verwandtschaft)
-- `.partner2` — Gast gehört zu Partner 2 (z.B. Marias Studienfreunde)
+- `.partner1` — Gast gehört zu Partner 1 (z.B. Bobs Verwandtschaft)
+- `.partner2` — Gast gehört zu Partner 2 (z.B. Alices Studienfreunde)
 - `.both` — Gast gehört zu beiden (gemeinsame Freunde)
 
 ### AgeCategory (Enum)
@@ -82,7 +82,7 @@ Wedding Seating Planner als macOS SwiftUI App. Importiert Gästelisten aus CSV/E
 |------|-----|-------------|
 | id | UUID | Primary Key |
 | event | Event | Zugehöriges Event |
-| name | String | z.B. "Studienfreunde Maria", "JGA Gereon" |
+| name | String | z.B. "Studienfreunde Alice", "JGA Bob" |
 | category | TagCategory | Gruppierungstyp |
 | color | String | Hex-Farbe für UI-Darstellung |
 | partnerAssignment | PartnerAssignment? | Optional: gehört dieser Tag zu P1/P2/Beide |
@@ -284,15 +284,15 @@ Strukturierter Dialog, KI führt:
 1. **Cluster-Erkennung:**
    KI analysiert alle Tags und Beziehungen, präsentiert gefundene Gruppen:
    > "Ich sehe folgende natürliche Gruppen:
-   > - Marias Studienfreunde (12 Personen)
+   > - Alices Studienfreunde (12 Personen)
    > - Familie Falkenberg (8 Personen, 3 Anmeldungen)
-   > - Gereons WG-Mitbewohner (4 Personen)
+   > - Bobs WG-Mitbewohner (4 Personen)
    > - ..."
 
 2. **Harmonie-Vorschläge:**
    KI schlägt vor welche Gruppen zusammen passen könnten:
-   > "Marias Studienfreunde + Chef von Siemens: gemeinsamer Arbeitskontext.
-   > Gereons WG + Marias Studienfreunde: ähnliches Alter, könnten passen.
+   > "Alices Studienfreunde + Chef von Siemens: gemeinsamer Arbeitskontext.
+   > Bobs WG + Alices Studienfreunde: ähnliches Alter, könnten passen.
    > Was meint ihr — kennen sich die?"
 
 3. **User bestätigt/korrigiert:**

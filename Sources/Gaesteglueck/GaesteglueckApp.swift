@@ -159,7 +159,7 @@ struct GaesteglueckApp: App {
 
     /// Bestehende Tags die VOR der Categorize-Heuristik-Korrektur erstellt
     /// wurden und falsch in `.family` gelandet sind (z.B. "Familien Freunde
-    /// Gereon" wurde als Family-Tag geclasst weil "familie" als Substring in
+    /// Bob" wurde als Family-Tag geclasst weil "familie" als Substring in
     /// "Familienfreunde" steckt). Beim Start einmalig nachziehen — ist
     /// idempotent: wenn schon korrekt, passiert nichts.
     private static func fixupLegacyTagCategories(_ container: ModelContainer) {

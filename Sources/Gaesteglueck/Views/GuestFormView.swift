@@ -180,7 +180,9 @@ struct GuestFormView: View {
                         TextField("z.B. spielt Klavier seit 20 Jahren", text: $funFact)
                     }
                     Toggle("FunFact ist gut – darf erzaehlt werden", isOn: $funFactApproved)
+                        #if os(macOS)
                         .toggleStyle(.checkbox)
+                        #endif
                         .disabled(funFact.trimmingCharacters(in: .whitespaces).isEmpty)
                         .help("Bestaetige dass dieser FunFact konkret und persoenlich ist und beim Brauttisch erwaehnt werden kann.")
                     LabeledContent("Notizen") {
@@ -611,13 +613,13 @@ struct GuestFormView: View {
             }
         }
         // Wenn der Gast noch keine Seite hat, leiten wir sie aus den Tags ab.
-        // Beispiel: Tobias ist in "JGA Gereon" + "Realschulfreunde Gereon"
-        // → Seite = Gereon. So muss der User nicht zwei Stellen pflegen.
+        // Beispiel: Tobias ist in "JGA Bob" + "Realschulfreunde Bob"
+        // → Seite = Bob. So muss der User nicht zwei Stellen pflegen.
         PartnerSideDeriver.applyIfUnassigned(targetGuest, in: allTags, allGuests: allGuests)
 
         // Sippe nachziehen: wenn der Gast jetzt eine Seite hat, ziehen wir
         // alle anderen unzugeordneten Mitglieder der Anmeldung mit. Beispiel:
-        // Carina (Cousine Maria) → Tom (Mann) und Hugo (Sohn) erben Maria.
+        // Carina (Cousine Alice) → Tom (Mann) und Hugo (Sohn) erben Alice.
         PartnerSideDeriver.propagateSide(targetGuest.partnerAssignment, fromGuest: targetGuest, in: allGuests)
 
         // Geschwister-Sippe: wenn dieser Gast eine Schwester/Bruder/Schwager/
@@ -631,7 +633,7 @@ struct GuestFormView: View {
     /// Wenn der gerade gespeicherte Gast eine Geschwister-Rolle hat und in
     /// seiner registrationGroup Kinder ohne familyRole sind, markieren wir
     /// die als Nichte (Default — User kann auf Neffe umstellen). Auch die
-    /// familyRolePartner-Seite wird übernommen, damit "Nichte von Gereon"
+    /// familyRolePartner-Seite wird übernommen, damit "Nichte von Bob"
     /// klar bleibt.
     private func propagateSiblingRoleToKids(of saved: Guest) {
         guard let role = saved.familyRole else { return }

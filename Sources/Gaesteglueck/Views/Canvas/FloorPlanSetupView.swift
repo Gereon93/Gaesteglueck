@@ -1,6 +1,7 @@
-#if canImport(SwiftUI) && canImport(SwiftData) && canImport(AppKit)
+#if canImport(SwiftUI) && canImport(SwiftData)
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 struct FloorPlanSetupView: View {
     @Environment(\.dismiss) private var dismiss
@@ -8,6 +9,7 @@ struct FloorPlanSetupView: View {
     @Bindable var roomPlan: RoomPlan
 
     @State private var phase: SetupPhase = .chooseImage
+    @State private var showingImagePicker = false
 
     enum SetupPhase {
         case chooseImage
@@ -30,17 +32,21 @@ struct FloorPlanSetupView: View {
                         .foregroundStyle(.secondary)
 
                     Button("Bild auswählen") {
-                        let panel = NSOpenPanel()
-                        panel.allowedContentTypes = [.image]
-                        panel.begin { response in
-                            if response == .OK, let url = panel.url,
-                               let data = try? Data(contentsOf: url) {
-                                roomPlan.imageData = data
-                                phase = .calibrate
-                            }
-                        }
+                        showingImagePicker = true
                     }
                     .buttonStyle(.bordered)
+                    .fileImporter(
+                        isPresented: $showingImagePicker,
+                        allowedContentTypes: [.image]
+                    ) { result in
+                        guard let url = try? result.get() else { return }
+                        let scoped = url.startAccessingSecurityScopedResource()
+                        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                        if let data = try? Data(contentsOf: url) {
+                            roomPlan.imageData = data
+                            phase = .calibrate
+                        }
+                    }
 
                     if roomPlan.imageData != nil {
                         Button("Vorhandenen Plan verwenden") {

@@ -77,7 +77,7 @@ enum LLMSeatingPlanner {
         1. ZUERST nach Familie-Tags clustern. Familien-Mitglieder zusammen, auch \
            wenn sie zu unterschiedlichen Brautpaar-Seiten gehören (Cousinen \
            untereinander mögen sich oft auch).
-        2. DANN nach Freundesgruppe-Tags clustern (z.B. "JGA Gereon", "Kommilitonen").
+        2. DANN nach Freundesgruppe-Tags clustern (z.B. "JGA Bob", "Kommilitonen").
         3. DANN nach Eigene/User-Tags clustern.
         4. NUR wenn nach Schritten 1-3 noch Gäste oder Plätze übrig sind: \
            Aktivität und Arbeitskontext als Fallback nutzen.

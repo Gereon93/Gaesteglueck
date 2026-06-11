@@ -18,8 +18,8 @@ struct PDFSmokeTests {
             name: "Hochzeit",
             date: Date(timeIntervalSince1970: 1_780_704_000),
             venue: "Gut Beispiel",
-            partner1Name: "Gereon",
-            partner2Name: "Maria"
+            partner1Name: "Bob",
+            partner2Name: "Alice"
         )
 
         // 5 Tische mit verschiedenen Formen + Rotation
@@ -33,11 +33,11 @@ struct PDFSmokeTests {
         let t1 = GuestTable(name: "Familie Maier", shape: .round, diameter: 180)
         t1.positionX = 200
         t1.positionY = 400
-        let t2 = GuestTable(name: "Freunde Gereon", shape: .round, diameter: 180)
+        let t2 = GuestTable(name: "Freunde Bob", shape: .round, diameter: 180)
         t2.positionX = 500
         t2.positionY = 500
         t2.rotation = 30
-        let t3 = GuestTable(name: "Freunde Maria", shape: .round, diameter: 180)
+        let t3 = GuestTable(name: "Freunde Alice", shape: .round, diameter: 180)
         t3.positionX = 800
         t3.positionY = 500
         let t4 = GuestTable(name: "Familie Mustermann", shape: .square, width: 140, depth: 140)
@@ -56,8 +56,8 @@ struct PDFSmokeTests {
         }
 
         // Brautpaar + 6 Trauzeugen an der Brauttafel
-        let g0a = guest("Max", "Beispiel", side: .partner1, diet: "Fleisch", funFact: "Hat schon mal auf drei Kontinenten Karaoke gesungen")
-        let g0b = guest("Maria", "Beispiel", side: .partner2, diet: "Vegetarisch", funFact: "Sammelt alte Kochbücher vom Flohmarkt")
+        let g0a = guest("Bob", "Beispiel", side: .partner1, diet: "Fleisch", funFact: "Hat schon mal ein eigenes Gedicht im Gemeindeblatt veröffentlicht")
+        let g0b = guest("Alice", "Beispiel", side: .partner2, diet: "Vegetarisch", funFact: "Sammelt alte Kochbücher vom Flohmarkt")
         g0a.isPinned = true
         g0b.isPinned = true
         assign(brauttisch, [g0a, g0b,
@@ -79,11 +79,11 @@ struct PDFSmokeTests {
         ])
 
         assign(t2, (1...8).map { i in
-            guest("Freund\(i)", "Gereons", side: .partner1, diet: i % 3 == 0 ? "Vegetarisch" : "Fleisch",
+            guest("Freund\(i)", "Bobs", side: .partner1, diet: i % 3 == 0 ? "Vegetarisch" : "Fleisch",
                   funFact: i % 2 == 0 ? "Hat als Kind eine ganze Woche im Zelt im Garten geschlafen" : "")
         })
         assign(t3, (1...8).map { i in
-            guest("Freundin\(i)", "Marias", side: .partner2,
+            guest("Freundin\(i)", "Alices", side: .partner2,
                   diet: i % 4 == 0 ? "Vegan" : "Vegetarisch",
                   intolerances: i == 3 ? ["Histamin"] : [])
         })

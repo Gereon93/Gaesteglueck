@@ -11,7 +11,7 @@ struct SpeechGuestExporterTests {
         return t
     }
     private func event() -> Event {
-        Event(name: "Test", partner1Name: "Maria", partner2Name: "Gereon")
+        Event(name: "Test", partner1Name: "Alice", partner2Name: "Bob")
     }
 
     @Test("Declined guests are excluded from the speech material")
@@ -27,8 +27,8 @@ struct SpeechGuestExporterTests {
     func groupedBySide() {
         let g = Guest(firstName: "Max", partnerAssignment: .partner2)
         let md = SpeechGuestExporter.generateMarkdown(guests: [g], tags: [], event: event())
-        #expect(md.contains("## Seite Gereon"))
-        #expect(!md.contains("## Seite Maria"))
+        #expect(md.contains("## Seite Bob"))
+        #expect(!md.contains("## Seite Alice"))
     }
 
     @Test("Role tag wins the category bucket but all tags are still listed")
@@ -46,9 +46,9 @@ struct SpeechGuestExporterTests {
     @Test("Side is derived from a tag when the guest is unassigned")
     func sideDerivedFromTag() {
         let g = Guest(firstName: "Carina", partnerAssignment: .unassigned)
-        let t = tag("Marias Mädels", .friendGroup, side: .partner1, guests: [g])
+        let t = tag("Alices Mädels", .friendGroup, side: .partner1, guests: [g])
         let md = SpeechGuestExporter.generateMarkdown(guests: [g], tags: [t], event: event())
-        #expect(md.contains("## Seite Maria"))
+        #expect(md.contains("## Seite Alice"))
     }
 
     @Test("Rich fields appear; empty fields are skipped")

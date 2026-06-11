@@ -1,3 +1,4 @@
+#if os(macOS)
 #if canImport(AppKit)
 import Foundation
 import AppKit
@@ -176,4 +177,5 @@ enum FunFactWorklistExporter {
         return pdfData as Data
     }
 }
+#endif
 #endif

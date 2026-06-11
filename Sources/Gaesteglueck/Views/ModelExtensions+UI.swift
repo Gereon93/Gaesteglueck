@@ -42,8 +42,8 @@ extension PartnerAssignment {
 }
 
 /// Leitet aus Tag-Mitgliedschaften die Partner-Seite eines Gastes ab.
-/// Wenn Tobias in "JGA Gereon" und "Realschulfreunde Gereon" steckt, ist klar:
-/// Tobias gehört zu Gereon — auch wenn der User die Seite am Gast noch nicht
+/// Wenn Tobias in "JGA Bob" und "Realschulfreunde Bob" steckt, ist klar:
+/// Tobias gehört zu Bob — auch wenn der User die Seite am Gast noch nicht
 /// explizit gesetzt hat.
 enum PartnerSideDeriver {
     /// Errechnet die plausible Partner-Seite aus den Tags des Gastes.
@@ -61,11 +61,11 @@ enum PartnerSideDeriver {
     }
 
     /// Setzt die Seite am Gast WENN sie noch unzugeordnet ist. Eine bewusst
-    /// vom User gesetzte Seite (Maria/Gereon/Beide) wird nie überschrieben.
+    /// vom User gesetzte Seite (Alice/Bob/Beide) wird nie überschrieben.
     /// Wenn `allGuests` mitgegeben wird, ziehen wir auch noch die anderen
     /// Mitglieder der gleichen `registrationGroup` mit auf die abgeleitete
     /// Seite (sofern die noch unzugeordnet sind) — sonst hätte z.B. nur
-    /// Carina die Maria-Seite, nicht aber ihr Mann Tom und Sohn Hugo.
+    /// Carina die Alice-Seite, nicht aber ihr Mann Tom und Sohn Hugo.
     static func applyIfUnassigned(_ guest: Guest, in tags: [Tag], allGuests: [Guest] = []) {
         guard guest.partnerAssignment == .unassigned else { return }
         guard let derived = derive(for: guest.id, from: tags) else { return }

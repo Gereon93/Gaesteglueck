@@ -1,3 +1,4 @@
+#if os(macOS)
 #if canImport(SwiftUI) && canImport(SwiftData) && canImport(AppKit)
 import SwiftUI
 import UniformTypeIdentifiers
@@ -1049,4 +1050,5 @@ private struct RadioRow: View {
         .buttonStyle(.plain)
     }
 }
+#endif
 #endif

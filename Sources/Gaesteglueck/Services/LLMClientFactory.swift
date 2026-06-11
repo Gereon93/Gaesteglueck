@@ -3,6 +3,7 @@ import Foundation
 enum LLMProvider: String, Sendable, CaseIterable, Identifiable {
     case lmStudio
     case openRouter
+    case appleOnDevice
 
     var id: String { rawValue }
 
@@ -10,7 +11,14 @@ enum LLMProvider: String, Sendable, CaseIterable, Identifiable {
         switch self {
         case .lmStudio: "LM Studio (lokal)"
         case .openRouter: "OpenRouter"
+        case .appleOnDevice: "Apple Intelligence (on-device)"
         }
+    }
+
+    /// Was die Settings-Picker anbieten: Apple Intelligence nur auf Geräten,
+    /// die das System-Modell tatsächlich haben (macOS 26/iOS 26 + Hardware).
+    static var selectableCases: [LLMProvider] {
+        allCases.filter { $0 != .appleOnDevice || AppleOnDeviceModel.isSupported }
     }
 }
 
@@ -62,6 +70,7 @@ enum LLMClientFactory {
             let model = defaults.string(forKey: openRouterModelKey) ?? ""
             if key.isEmpty || model.isEmpty { return .lmStudio }
         }
+        if provider == .appleOnDevice, !AppleOnDeviceModel.isSupported { return .lmStudio }
         return provider
     }
 
@@ -80,9 +89,21 @@ enum LLMClientFactory {
                 return OpenRouterClient(apiKey: key, model: model)
             }
             return makeLMStudio(defaults: defaults)
+        case .appleOnDevice:
+            if let client = makeAppleOnDevice() { return client }
+            return makeLMStudio(defaults: defaults)
         case .lmStudio:
             return makeLMStudio(defaults: defaults)
         }
+    }
+
+    private static func makeAppleOnDevice() -> LLMClient? {
+        #if canImport(FoundationModels)
+        if #available(macOS 26.0, iOS 26.0, *), AppleOnDeviceModel.isSupported {
+            return FoundationModelsClient()
+        }
+        #endif
+        return nil
     }
 
     private static func makeLMStudio(defaults: UserDefaults) -> LMStudioClient {
@@ -117,6 +138,7 @@ enum LLMClientFactory {
             let model = featureModel(for: feature, defaults: defaults)
             if key.isEmpty || model.isEmpty { return .lmStudio }
         }
+        if resolved == .appleOnDevice, !AppleOnDeviceModel.isSupported { return .lmStudio }
         return resolved
     }
 
@@ -144,6 +166,18 @@ enum LLMClientFactory {
                 return LoggingLLMClient(
                     wrapped: OpenRouterClient(apiKey: key, model: model),
                     feature: feature.rawValue, provider: "openRouter", model: model
+                )
+            }
+            let endpoint = defaults.string(forKey: lmStudioEndpointKey) ?? "http://localhost:1234"
+            return LoggingLLMClient(
+                wrapped: makeLMStudio(defaults: defaults),
+                feature: feature.rawValue, provider: "lmStudio (fallback)", model: endpoint
+            )
+        case .appleOnDevice:
+            if let client = makeAppleOnDevice() {
+                return LoggingLLMClient(
+                    wrapped: client,
+                    feature: feature.rawValue, provider: "appleOnDevice", model: "system"
                 )
             }
             let endpoint = defaults.string(forKey: lmStudioEndpointKey) ?? "http://localhost:1234"

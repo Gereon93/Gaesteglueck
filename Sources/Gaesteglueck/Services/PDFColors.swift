@@ -1,3 +1,4 @@
+#if os(macOS)
 #if canImport(AppKit)
 import AppKit
 
@@ -12,4 +13,5 @@ enum PDFColors {
     static let allergy = NSColor(srgbRed: 0.77, green: 0.29, blue: 0.29, alpha: 1)
     static let accent = NSColor(srgbRed: 0.78, green: 0.47, blue: 0.55, alpha: 1)
 }
+#endif
 #endif

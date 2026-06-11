@@ -157,7 +157,7 @@ struct SettingsView: View {
             VStack(spacing: 10) {
                 SettingsRow(label: "Standard-Provider") {
                     Picker("", selection: $llmProviderRaw) {
-                        ForEach(LLMProvider.allCases) { p in
+                        ForEach(LLMProvider.selectableCases) { p in
                             Text(p.displayName).tag(p.rawValue)
                         }
                     }
@@ -192,6 +192,7 @@ struct SettingsView: View {
                     GGToggle(isOn: $algorithmFallback)
                 }
             }
+            .onAppear { resetStaleAppleOnDeviceSelectionIfNeeded() }
         }
     }
 
@@ -201,6 +202,8 @@ struct SettingsView: View {
             return "Deine Gästeliste verlässt nie den Mac. Wir sprechen nur mit LM Studio auf dieser Maschine."
         case .openRouter:
             return "OpenRouter ruft Modelle über die Cloud auf. Daten verlassen den Mac — nur nutzen, wenn das ok ist."
+        case .appleOnDevice:
+            return "Apples System-Modell läuft komplett auf diesem Gerät — keine Cloud, kein API-Key."
         }
     }
 
@@ -232,10 +235,28 @@ struct SettingsView: View {
 
     private func loadFeatureRouting() {
         for f in AIFeature.allCases {
-            featureProviderRaw[f.rawValue] =
-                UserDefaults.standard.string(forKey: f.providerKey) ?? autoTag
+            featureProviderRaw[f.rawValue] = normalizedFeatureProvider(for: f)
             featureModelRaw[f.rawValue] =
                 UserDefaults.standard.string(forKey: f.modelKey) ?? ""
+        }
+    }
+
+    /// Eine gespeicherte Provider-Wahl, die der Picker auf diesem Gerät gar
+    /// nicht anbietet (Apple Intelligence ohne System-Support), wäre eine
+    /// Selektion ohne Tag — solche Werte werden auf Auto zurückgesetzt.
+    private func normalizedFeatureProvider(for feature: AIFeature) -> String {
+        let provider = UserDefaults.standard.string(forKey: feature.providerKey) ?? autoTag
+        guard provider == LLMProvider.appleOnDevice.rawValue,
+              !AppleOnDeviceModel.isSupported else { return provider }
+        UserDefaults.standard.set(autoTag, forKey: feature.providerKey)
+        return autoTag
+    }
+
+    /// Gleicher Fall für den Standard-Provider: ohne Geräte-Support zurück
+    /// auf LM Studio — die Factory fällt dahin ohnehin schon zurück.
+    private func resetStaleAppleOnDeviceSelectionIfNeeded() {
+        if llmProvider == .appleOnDevice, !AppleOnDeviceModel.isSupported {
+            llmProviderRaw = LLMProvider.lmStudio.rawValue
         }
     }
 
@@ -252,6 +273,9 @@ struct SettingsView: View {
                                 Text("Auto").tag(autoTag)
                                 Text("LM Studio").tag(LLMProvider.lmStudio.rawValue)
                                 Text("OpenRouter").tag(LLMProvider.openRouter.rawValue)
+                                if AppleOnDeviceModel.isSupported {
+                                    Text("Apple Intelligence").tag(LLMProvider.appleOnDevice.rawValue)
+                                }
                             }
                             .labelsHidden()
                             .frame(maxWidth: 200, alignment: .leading)

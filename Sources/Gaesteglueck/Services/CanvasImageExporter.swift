@@ -1,3 +1,4 @@
+#if os(macOS)
 #if canImport(SwiftUI) && canImport(AppKit) && canImport(SwiftData)
 import SwiftUI
 import AppKit
@@ -56,4 +57,5 @@ enum CanvasImageExporter {
         return png
     }
 }
+#endif
 #endif

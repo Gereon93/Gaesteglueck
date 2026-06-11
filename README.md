@@ -59,13 +59,37 @@ open dist/Gaesteglueck.app
 
 Erzeugt `dist/Gaesteglueck.app` mit eigener `Info.plist`. Kann nach `/Applications/` kopiert oder im Dock abgelegt werden. Saubere Bundle-Identität, keine macOS-Logs mehr.
 
+### Variante C — Xcode-Workspace (Mac + iPad)
+
+```bash
+open Gaesteglueck.xcworkspace
+```
+
+Die Workspace bündelt beides (wie eine Visual-Studio-Solution):
+
+| Scheme | Ziel | Was es ist |
+|---|---|---|
+| `Gaesteglueck` | **My Mac** | das SwiftPM-Executable (wie `swift run`) |
+| `Gaesteglueck-iPad` | iPad-Simulator/-Gerät | die iPad-App (experimentell) |
+
+> ⚠️ Das Scheme `Gaesteglueck` nicht auf ein iOS-Ziel stellen — SwiftPM
+> baut kein App-Bundle, der Start crasht dann sofort mit
+> `missing bundleID`. Für iPad immer `Gaesteglueck-iPad` nehmen.
+
+Die iPad-App kompiliert dieselben Sources (Conditional Compilation —
+die Mac-App bleibt unberührt). Einschränkungen der v1: kein PDF-/Bild-
+Export auf dem iPad. KI-Provider auf dem iPad: **OpenRouter**,
+**Apple Intelligence** (on-device; die App läuft ab iPadOS 18, dieser
+Provider erscheint erst ab iPadOS 26 auf fähiger Hardware) — oder
+LM Studio über die LAN-IP des Macs als Endpoint.
+
 ### Tests
 
 ```bash
 swift test
 ```
 
-221 Tests in 44 Suites.
+225 Tests in 44 Suites.
 
 ## Wo liegen die Daten
 

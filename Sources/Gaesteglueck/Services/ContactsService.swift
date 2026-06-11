@@ -38,6 +38,8 @@ enum ContactsService {
         switch CNContactStore.authorizationStatus(for: .contacts) {
         case .authorized:
             return true
+        case .limited:
+            return true
         case .denied, .restricted:
             throw ContactsServiceError.accessDenied
         case .notDetermined:

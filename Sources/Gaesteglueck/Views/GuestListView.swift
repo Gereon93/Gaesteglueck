@@ -206,7 +206,7 @@ struct GuestListView: View {
 
     private var filteredGuests: [Guest] {
         // Vorberechnung: welche registrationGroups haben mindestens ein
-        // Mitglied das schon eine Seite (Maria/Gereon/Beide) hat? Solche
+        // Mitglied das schon eine Seite (Alice/Bob/Beide) hat? Solche
         // Anmeldungen blenden wir beim "Unzugeordnet"-Filter komplett aus —
         // weil ein zugeordnetes Familienmitglied via mustSitTogether-Constraint
         // den Rest der Familie zum gleichen Tisch zieht. Es gibt also
@@ -391,9 +391,9 @@ struct GuestListView: View {
             } else if hasActiveFilter, !filteredGuests.isEmpty {
                 // Wenn nichts ausgewählt aber ein Filter aktiv ist → Quick-
                 // Action zum Massen-Selektieren des sichtbaren Bereichs.
-                // Workflow: Filter side=Gereon + tag=Freundesgruppe → klick
+                // Workflow: Filter side=Bob + tag=Freundesgruppe → klick
                 // "Alle X auswählen" → im Inspector "Tag hinzufügen" mit
-                // "Geburtstag Gereon".
+                // "Geburtstag Bob".
                 Button {
                     selectAllVisible()
                 } label: {
@@ -427,6 +427,7 @@ struct GuestListView: View {
             .warmButton(.secondary)
             .disabled(isNormalizingFunFacts || guests.isEmpty)
             .help("FunFacts per KI in einheitliche Ich-Form bringen — du bestätigst vor dem Übernehmen")
+            #if os(macOS)
             Menu {
                 Button("Als PDF exportieren") {
                     exportFunFactWorklist(format: .pdf)
@@ -447,6 +448,7 @@ struct GuestListView: View {
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .disabled(funFactWorklistCount == 0)
+            #endif
             #if canImport(UniformTypeIdentifiers)
             ImportButton()
             #endif
@@ -972,6 +974,14 @@ struct GuestListView: View {
     }
 
     private func handleRowTap(guest: Guest) {
+        #if os(iOS)
+        if selectedGuestIDs.contains(guest.id) {
+            selectedGuestIDs.remove(guest.id)
+        } else {
+            selectedGuestIDs.insert(guest.id)
+            anchorGuestID = guest.id
+        }
+        #else
         let flags = NSEvent.modifierFlags
         if flags.contains(.shift), let anchor = anchorGuestID {
             // Range-Auswahl: alles zwischen anchor und guest in der aktuell sichtbaren
@@ -999,6 +1009,7 @@ struct GuestListView: View {
             selectedGuestIDs = [guest.id]
             anchorGuestID = guest.id
         }
+        #endif
     }
 
     private func deleteSelection() {
@@ -1304,8 +1315,8 @@ struct GuestListView: View {
 
     private func addTagToSelection(_ tag: Tag) {
         // Bewusst KEIN Side-Auto-Derive beim Massen-Tag-Zuweisen — der
-        // User markiert evtl. die "Schwiegermutter Maria" als Mitglied
-        // eines neutralen Tags ohne damit ihre Zuordnung zu Marias Seite
+        // User markiert evtl. die "Schwiegermutter Alice" als Mitglied
+        // eines neutralen Tags ohne damit ihre Zuordnung zu Alices Seite
         // ändern zu wollen. Side bleibt wie sie ist; ggf. einzeln im Edit-
         // Sheet anpassen.
         for id in selectedGuestIDs where !tag.guestIDs.contains(id) {
@@ -1318,7 +1329,7 @@ struct GuestListView: View {
     }
 
     /// Familienrolle + Seite in einer Zeile für den Inspector. „Vater von
-    /// Gereon", „Schwester von Maria", oder dezenter Hinweis wenn nichts
+    /// Bob", „Schwester von Alice", oder dezenter Hinweis wenn nichts
     /// gepflegt ist (mit Quick-Edit-Button).
     @ViewBuilder
     private func familyRoleSummary(for guest: Guest) -> some View {
@@ -1502,6 +1513,7 @@ struct GuestListView: View {
 
     private enum FunFactExportFormat { case pdf, csv, reminderCSV }
 
+    #if os(macOS)
     /// Exportiert die Liste aller Gäste mit fehlendem oder unbestätigtem
     /// FunFact — pro Gast Vor- und Nachname, derzeitiger FunFact, Status.
     /// Alphabetisch sortiert. PDF mit Erklärung + Beispielen oder CSV
@@ -1541,6 +1553,7 @@ struct GuestListView: View {
             try? data.write(to: url)
         }
     }
+    #endif
 
     private func runFunFactCheck() {
         funFactCheckProgress = (0, 0)

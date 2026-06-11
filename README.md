@@ -2,6 +2,11 @@
 
 Macher-freundlicher Hochzeits-Sitzplaner für macOS — komplett lokal, mit lokaler KI über LM Studio.
 
+> Entstanden als echtes Projekt für meine **eigene Hochzeit** — und dort auch
+> tatsächlich eingesetzt, nicht nur als Demo gebaut. Entwickelt KI-gestützt mit
+> Claude Code; die Produkt- und Architekturentscheidungen sind als Specs unter
+> [`docs/`](docs/) dokumentiert.
+
 ## Was kann's
 
 - **Gäste-Import** aus CSV / Excel / Google Sheets, mit RFC-4180-Parser für Multi-Line-Zellen und Auto-Skip unveränderter Re-Imports
@@ -82,6 +87,22 @@ Export auf dem iPad. KI-Provider auf dem iPad: **OpenRouter**,
 **Apple Intelligence** (on-device; die App läuft ab iPadOS 18, dieser
 Provider erscheint erst ab iPadOS 26 auf fähiger Hardware) — oder
 LM Studio über die LAN-IP des Macs als Endpoint.
+
+### Erster Start (Gatekeeper)
+
+Eine aus den [Releases](../../releases) geladene `.dmg` ist **ad-hoc signiert,
+nicht notarisiert** (kein bezahlter Apple-Developer-Account). macOS 15 blockt
+sie deshalb beim ersten Start mit „Apple konnte nicht überprüfen…". Einmalig
+das Quarantäne-Flag entfernen — Pfad ggf. an den tatsächlichen Ablageort der
+App anpassen (z. B. noch im gemounteten DMG oder im Download-Ordner):
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Gaesteglueck.app
+```
+
+Alternativ über **Systemeinstellungen → Datenschutz & Sicherheit → „Trotzdem
+öffnen"** nach dem ersten Startversuch. Selbst gebaute Apps (Variante A/B)
+sind nicht betroffen.
 
 ### Tests
 

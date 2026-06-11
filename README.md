@@ -93,7 +93,8 @@ LM Studio über die LAN-IP des Macs als Endpoint.
 Eine aus den [Releases](../../releases) geladene `.dmg` ist **ad-hoc signiert,
 nicht notarisiert** (kein bezahlter Apple-Developer-Account). macOS 15 blockt
 sie deshalb beim ersten Start mit „Apple konnte nicht überprüfen…". Einmalig
-das Quarantäne-Flag entfernen:
+das Quarantäne-Flag entfernen — Pfad ggf. an den tatsächlichen Ablageort der
+App anpassen (z. B. noch im gemounteten DMG oder im Download-Ordner):
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/Gaesteglueck.app

@@ -22,7 +22,7 @@ liegen als Specs unter `docs/superpowers/specs/`.
 ## Struktur
 
 - `Sources/Gaesteglueck/{Models,Services,Views}/` — Produktivcode
-- `Tests/GaesteglueckTests/` — `swift test`, 225 Tests in 44 Suites
+- `Tests/GaesteglueckTests/` — `swift test`
 - `docs/` — VISION, Specs und Pläne
 - `eval/` — Prompt-Evaluierung der KI-Features
 - `scripts/build-macos-app.sh` — bündelt das SPM-Executable als `.app`
@@ -32,7 +32,7 @@ liegen als Specs unter `docs/superpowers/specs/`.
 ```bash
 swift build                       # bauen
 swift test                        # Tests
-swift-format lint --recursive Sources/ Tests/ --strict   # Lint (CI-Gate)
+swift-format lint --recursive Sources/ Tests/ --strict   # Lint (läuft in CI, wenn swift-format verfügbar)
 ./scripts/build-macos-app.sh      # .app-Bundle nach dist/
 ```
 

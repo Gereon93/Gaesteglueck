@@ -1,91 +1,45 @@
-# CLAUDE.md (Global Standard)
+# CLAUDE.md
 
-## 🤖 Claude Modus & Mindset
-- **Rolle:** Senior Software Architect & Enterprise Professional.
-- **Prinzip:** Erst Discovery (VISION.md/SPEC.md), dann Planung (PROJECT_STATE.md), dann Execution.
-- **Qualität:** DDD, TDD, Clean Architecture, SOLID.
-- **Handover:** Aktualisiere `PROJECT_STATE.md` vor JEDEM Session-Ende.
+Kontext für KI-Assistenten (Claude Code u. a.), die an diesem Repo arbeiten.
 
-## 🛠️ Global Tooling & Orchestration (Mandatory)
-### 1. Multi-Agent Flow (Octopus/Maestro)
-- **Lead:** Claude Code (Execution).
-- **Auditor:** Gemini (via Maestro CLI) für Code-Reviews und Architektur-Checks.
-- **Rule:** Nutze Gemini für Research-Tasks mit großem Kontext (>100k Tokens).
+## Projekt
 
-### 2. Knowledge Graphen (LSP & Graph)
-- **GitNexus:** Nutze `query` und `impact` Tools für High-Level Flows.
-- **Codegraph:** Nutze `codegraph diff-impact --staged` vor jedem Commit.
-- **LSP:** Nutze immer `kotlin-lsp` oder `csharp-lsp` für Typsicherheit.
+**Gästeglück** — macOS-first Hochzeits-Sitzplaner, komplett lokal, mit optionaler
+lokaler KI (LM Studio / OpenRouter / Apple Intelligence). Siehe `README.md` für
+Features und `docs/VISION.md` für die Roadmap.
 
-## 🔄 Standard Workflow
-1. **Sync:** Führe `npx gitnexus analyze` oder `codegraph build` aus, wenn der Index stale ist.
-2. **Plan:** Dokumentiere den nächsten Schritt in `PROJECT_STATE.md`.
-3. **Review:** Nach dem Coden `gemini maestro:review` triggern (via Maestro Hook).
+Entwickelt KI-gestützt (Claude Code) als reales Projekt — für die eigene
+Hochzeit gebaut und dort eingesetzt. Architektur- und Produktentscheidungen
+liegen als Specs unter `docs/superpowers/specs/`.
 
-## 📂 Projekt-Spezifisches (Hier anpassen)
-- **Stack:** Swift/iOS
-- **GitNexus ID:** Gaesteglueck
-- **Tests:** swift test
+## Stack
 
-<!-- gitnexus:start -->
-# GitNexus MCP
+- **Sprache:** Swift 6 (strikte Concurrency)
+- **UI:** SwiftUI (macOS 15+, experimentelles iPad-Target)
+- **Persistenz:** SwiftData mit `VersionedSchema` + Migrationen
+- **Build:** Swift Package Manager (`Package.swift`); iPad-Target als Xcode-Projekt unter `ios/`
 
-This project is indexed by GitNexus as **Gaesteglueck** (39 symbols, 30 relationships, 0 execution flows).
+## Struktur
 
-GitNexus provides a knowledge graph over this codebase — call chains, blast radius, execution flows, and semantic search.
+- `Sources/Gaesteglueck/{Models,Services,Views}/` — Produktivcode
+- `Tests/GaesteglueckTests/` — `swift test`, 225 Tests in 44 Suites
+- `docs/` — VISION, Specs und Pläne
+- `eval/` — Prompt-Evaluierung der KI-Features
+- `scripts/build-macos-app.sh` — bündelt das SPM-Executable als `.app`
 
-## Always Start Here
+## Befehle
 
-For any task involving code understanding, debugging, impact analysis, or refactoring, you must:
-
-1. **Read `gitnexus://repo/{name}/context`** — codebase overview + check index freshness
-2. **Match your task to a skill below** and **read that skill file**
-3. **Follow the skill's workflow and checklist**
-
-> If step 1 warns the index is stale, run `npx gitnexus analyze` in the terminal first.
-
-## Skills
-
-| Task | Read this skill file |
-|------|---------------------|
-| Understand architecture / "How does X work?" | `.claude/skills/gitnexus/exploring/SKILL.md` |
-| Blast radius / "What breaks if I change X?" | `.claude/skills/gitnexus/impact-analysis/SKILL.md` |
-| Trace bugs / "Why is X failing?" | `.claude/skills/gitnexus/debugging/SKILL.md` |
-| Rename / extract / split / refactor | `.claude/skills/gitnexus/refactoring/SKILL.md` |
-
-## Tools Reference
-
-| Tool | What it gives you |
-|------|-------------------|
-| `query` | Process-grouped code intelligence — execution flows related to a concept |
-| `context` | 360-degree symbol view — categorized refs, processes it participates in |
-| `impact` | Symbol blast radius — what breaks at depth 1/2/3 with confidence |
-| `detect_changes` | Git-diff impact — what do your current changes affect |
-| `rename` | Multi-file coordinated rename with confidence-tagged edits |
-| `cypher` | Raw graph queries (read `gitnexus://repo/{name}/schema` first) |
-| `list_repos` | Discover indexed repos |
-
-## Resources Reference
-
-Lightweight reads (~100-500 tokens) for navigation:
-
-| Resource | Content |
-|----------|---------|
-| `gitnexus://repo/{name}/context` | Stats, staleness check |
-| `gitnexus://repo/{name}/clusters` | All functional areas with cohesion scores |
-| `gitnexus://repo/{name}/cluster/{clusterName}` | Area members |
-| `gitnexus://repo/{name}/processes` | All execution flows |
-| `gitnexus://repo/{name}/process/{processName}` | Step-by-step trace |
-| `gitnexus://repo/{name}/schema` | Graph schema for Cypher |
-
-## Graph Schema
-
-**Nodes:** File, Function, Class, Interface, Method, Community, Process
-**Edges (via CodeRelation.type):** CALLS, IMPORTS, EXTENDS, IMPLEMENTS, DEFINES, MEMBER_OF, STEP_IN_PROCESS
-
-```cypher
-MATCH (caller)-[:CodeRelation {type: 'CALLS'}]->(f:Function {name: "myFunc"})
-RETURN caller.name, caller.filePath
+```bash
+swift build                       # bauen
+swift test                        # Tests
+swift-format lint --recursive Sources/ Tests/ --strict   # Lint (CI-Gate)
+./scripts/build-macos-app.sh      # .app-Bundle nach dist/
 ```
 
-<!-- gitnexus:end -->
+## Konventionen
+
+- **Sprache:** Deutsch in Code-Kommentaren, Commits, Docs und UI.
+- **Kommentare:** sparsam. Nicht-triviale Begründungen als erklärende Methode
+  oder Spec, nicht als Inline-Kommentar.
+- **Commits:** pro logischem Arbeitspaket, kein Sammel-Commit.
+- **Tests:** Logik in Services/Models testbar halten; Views dünn.

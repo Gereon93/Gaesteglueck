@@ -12,7 +12,7 @@ Macher-freundlicher Hochzeits-Sitzplaner für macOS — komplett lokal, mit loka
 - **Gäste-Import** aus CSV / Excel / Google Sheets, mit RFC-4180-Parser für Multi-Line-Zellen und Auto-Skip unveränderter Re-Imports
 - **Tag-Generator** leitet aus der Beziehungs-Beschreibung automatisch Freundeskreise, Hochzeitsrollen und Aktivitäten ab — Familie wird über Familienrollen am Gast modelliert (kein Doppelpflegen)
 - **Saal-Konfigurator** nimmt Inventar (max Anzahl + Größen) + Cluster-Kontext und schlägt eine konkrete Tisch-Konfiguration vor — direkt anwendbar plus optionale Auto-Sitzvergabe
-- **Sitzplan-Co-Pilot-Chat** im Canvas: „Patrick auf T2", „Tausche Lisa und Anna", „Welche Tische haben Plätze?" → KI führt aus
+- **Sitzplan-Co-Pilot-Chat** im Canvas: „Patrick auf T2“, „Tausche Lisa und Anna“, „Welche Tische haben Plätze?“ → KI führt aus
 - **Raumplan-Hintergrund** mit 2-Punkt-Skalierung; Tische skalieren proportional zum Raum
 - **VersionedSchema** + Pre-Launch-Backups: Schema-Änderungen brechen keine Daten mehr
 - **PDF-Export** für Sitzplan, Caterer-Übersicht, Tischkarten und Plakat
@@ -24,17 +24,17 @@ Ein Gast, der nicht kommt, wird je nach Zeitpunkt unterschiedlich behandelt — 
 **Früh genug — der Caterer kennt die Gästezahl noch nicht → Gast löschen.**
 Wer absagt (oder sich nie gemeldet hat), bevor die Mengen beim Caterer durch sind, gehört aus der Liste gelöscht. Kein Sonderzustand, keine Spur — die Person war nie fest eingeplant, also soll sie auch Zählungen, Sitzplan und Exporte nicht verfälschen.
 
-**Zu spät — Essen ist bestellt, Änderung nicht mehr möglich → auf „Abgesagt" stellen.**
-Sagt jemand ab, der schon zugesagt *und* an einem Tisch saß, wird er im Tooling auf „Abgesagt" gesetzt statt gelöscht. Dann passiert:
+**Zu spät — Essen ist bestellt, Änderung nicht mehr möglich → auf „Abgesagt“ stellen.**
+Sagt jemand ab, der schon zugesagt *und* an einem Tisch saß, wird er im Tooling auf „Abgesagt“ gesetzt statt gelöscht. Dann passiert:
 
 - Der **Sitzplatz wird frei** und ist sofort neu vergebbar.
-- Der Gast bleibt seinem Tisch als **Vermerk** zugeordnet: Die Tisch-Badge zeigt „N abgemeldet", und der **Caterer-Export** listet den Wegfall mit Name · Tisch · Menü · Unverträglichkeit („−1 Vegetarisch", „Allergikerin an T2 ist nicht mehr da").
+- Der Gast bleibt seinem Tisch als **Vermerk** zugeordnet: Die Tisch-Badge zeigt „N abgemeldet“, und der **Caterer-Export** listet den Wegfall mit Name · Tisch · Menü · Unverträglichkeit („−1 Vegetarisch“, „Allergikerin an T2 ist nicht mehr da“).
 - So weiß der Service vor Ort: Der Stuhl bleibt leer, das **bestellte Essen wird nicht abgerufen** — kein Rätselraten.
 
-Der Status „Abgesagt" ist damit faktisch der *Spätabsage*-Zustand; frühe Fälle löscht man einfach.
+Der Status „Abgesagt“ ist damit faktisch der *Spätabsage*-Zustand; frühe Fälle löscht man einfach.
 
-**Kommt doch wieder → zurück auf „Zugesagt".**
-Setzt man eine späte Absage wieder auf „Zugesagt" (Irrtum, „kommt doch"), verschwindet der Vermerk und der Gast landet wieder in der „Ohne Tisch"-Inbox zum Neu-Platzieren.
+**Kommt doch wieder → zurück auf „Zugesagt“.**
+Setzt man eine späte Absage wieder auf „Zugesagt“ (Irrtum, „kommt doch“), verschwindet der Vermerk und der Gast landet wieder in der „Ohne Tisch“-Inbox zum Neu-Platzieren.
 
 > Technischer Hinweis: Der Vermerk hängt an der beibehaltenen Tisch-Zuordnung (Sitz frei, Tisch bleibt), nicht an einem separaten gespeicherten Feld. Er übersteht das Neu-Belegen des Sitzes, aber **nicht** ein komplettes Layout-Restore oder das Löschen des Tisches.
 
@@ -92,7 +92,7 @@ LM Studio über die LAN-IP des Macs als Endpoint.
 
 Eine aus den [Releases](../../releases) geladene `.dmg` ist **ad-hoc signiert,
 nicht notarisiert** (kein bezahlter Apple-Developer-Account). macOS 15 blockt
-sie deshalb beim ersten Start mit „Apple konnte nicht überprüfen…". Einmalig
+sie deshalb beim ersten Start mit „Apple konnte nicht überprüfen…“. Einmalig
 das Quarantäne-Flag entfernen — Pfad ggf. an den tatsächlichen Ablageort der
 App anpassen (z. B. noch im gemounteten DMG oder im Download-Ordner):
 
@@ -101,7 +101,7 @@ xattr -dr com.apple.quarantine /Applications/Gaesteglueck.app
 ```
 
 Alternativ über **Systemeinstellungen → Datenschutz & Sicherheit → „Trotzdem
-öffnen"** nach dem ersten Startversuch. Selbst gebaute Apps (Variante A/B)
+öffnen“** nach dem ersten Startversuch. Selbst gebaute Apps (Variante A/B)
 sind nicht betroffen.
 
 ### Tests
@@ -117,6 +117,22 @@ swift test
 `~/Library/Application Support/Gaesteglueck/`
 - `Gaesteglueck.store` (+ `-shm`, `-wal`) — SwiftData-Datenbank
 - `Backups/` — automatische Pre-Launch-Snapshots (Retention 3) plus manuelle Backups via Settings
+
+## Praxis-Check: was sich im echten Einsatz bewährt hat
+
+Gebaut für die eigene Hochzeit — und dabei auch gelernt, wo Anspruch und Realität auseinandergehen. Ehrlich eingeordnet:
+
+- **Der eigentliche Kern-Use-Case — Gäste *automatisch* auf verschiedene Tisch-Anordnungen verteilen — ist im echten Einsatz nicht erprobt.** Bei uns fiel die Entscheidung auf **5 lange Tafeln**; da mussten wir Leute nur noch platzieren, nicht verteilen lassen. Der Solver samt Harmonie-Heuristik ist unit-getestet und funktioniert, lief aber nie gegen ein echtes, unstrukturiertes Gäste-Set. → [#6](../../issues/6)
+- **Klar bewährt haben sich dagegen:**
+  - **Der laufende Anmelde-/Änderungs-Flow** — genau das Tagesgeschäft zwischen Zusage und Tag X war das eigentliche Arbeitspferd: spontane Absagen umsetzen, Gäste umsetzen, Plätze als wegfallend markieren. Ein wegfallender Platz bleibt am Tisch sichtbar vermerkt, und der **Caterer-Export** weist den Wegfall mit Name · Tisch · Menü · Unverträglichkeit aus — so weiß der Service vor Ort auch bei einer Spätabsage, dass z. B. an Tisch 3 ein Gast mit Unverträglichkeit nicht mehr kommt und das bestellte Essen nicht abgerufen wird. (Details im Abschnitt [„Absagen: löschen oder abmelden?“](#absagen-löschen-oder-abmelden) oben.)
+  - **Familien-Drag** — zieht man eine Person an einen Tisch, kommen alle Familienmitglieder mit und werden um sie herum gesetzt. Spart enorm Klickarbeit.
+  - **Diät-/Unverträglichkeits-Übersicht** — farblich codiert auf einen Blick sehen, wo Veggie/Vegan/Allergiker sitzen. Beim Caterer-Abgleich und am Tag selbst Gold wert.
+  - **Tag-/Kategorien-Export** — die getaggten Gäste samt „woher kenne ich wen“-Kategorien rausziehen: einmal als **Foto-Gruppen** und einmal als **Markdown-Grundstamm für die Rede**, um die Gäste als Brautpaar geordnet vorstellen zu können. Beides direkt nutzbar.
+  - **Fun-Facts-Management** — pro Gast Fun Facts erfassen, prüfen und gebündelt aufbereiten (u. a. als Vorlage für die Rede). Wurde komplett über das Tool gepflegt.
+  - **Apple-Contacts-Anbindung** — Telefonnummern einzelner Gäste schnell zuweisen (praktisch z. B. für Trauzeugen), **ohne den vollen Kontaktzugriff teilen zu müssen**: der eingeschränkte Kontaktzugriff (`.limited`) wird unterstützt, man kann der App also nur ausgewählte Kontakte freigeben statt des ganzen Adressbuchs.
+- **Harmonie-Logik ehrlich eingeordnet:** „Wer harmoniert mit wem“ lief bei uns gut, bräuchte für verlässliche Ergebnisse aber deutlich mehr strukturierten Input über die Gäste, als man realistisch pflegt.
+
+**Unterm Strich, ehrlich:** Die ursprüngliche Kern-Idee — dass die KI vorschlägt, *wie* man die Leute setzt und die Tische stellt — kam bei uns nie zum echten Einsatz, weil die Entscheidung auf feste Tafeln fiel. Das wurmt, weil genau das der Ausgangspunkt des Projekts war. Trotzdem hat sich die Entwicklung getragen: die vielen anderen Einsätze — Platzierung, farbcodierte Übersicht, der laufende Änderungs-/Absage-Flow, die Exporte, die Kontakt-Anbindung — waren im realen Betrieb stark genug, um die investierte Zeit zu rechtfertigen.
 
 ## Lizenz
 

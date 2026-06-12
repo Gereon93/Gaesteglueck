@@ -132,7 +132,7 @@ Gebaut für die eigene Hochzeit — und dabei auch gelernt, wo Anspruch und Real
   - **Apple-Contacts-Anbindung** — Telefonnummern einzelner Gäste schnell zuweisen (praktisch z. B. für Trauzeugen), **ohne den vollen Kontaktzugriff teilen zu müssen**: der eingeschränkte Kontaktzugriff (`.limited`) wird unterstützt, man kann der App also nur ausgewählte Kontakte freigeben statt des ganzen Adressbuchs.
 - **Harmonie-Logik ehrlich eingeordnet:** „Wer harmoniert mit wem" lief bei uns gut, bräuchte für verlässliche Ergebnisse aber deutlich mehr strukturierten Input über die Gäste, als man realistisch pflegt.
 
-Unterm Strich: als **Platzier- und Übersichts-Werkzeug** hat es getragen; die voll-automatische Optimierung bleibt der spannendste, aber am wenigsten battle-getestete Teil.
+**Unterm Strich, ehrlich:** Die ursprüngliche Kern-Idee — dass die KI vorschlägt, *wie* man die Leute setzt und die Tische stellt — kam bei uns nie zum echten Einsatz, weil die Entscheidung auf feste Tafeln fiel. Das wurmt, weil genau das der Ausgangspunkt des Projekts war. Trotzdem hat sich die Entwicklung getragen: die vielen anderen Einsätze — Platzierung, farbcodierte Übersicht, der laufende Änderungs-/Absage-Flow, die Exporte, die Kontakt-Anbindung — waren im realen Betrieb stark genug, um die investierte Zeit zu rechtfertigen.
 
 ## Lizenz
 

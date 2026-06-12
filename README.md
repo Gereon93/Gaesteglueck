@@ -118,6 +118,19 @@ swift test
 - `Gaesteglueck.store` (+ `-shm`, `-wal`) — SwiftData-Datenbank
 - `Backups/` — automatische Pre-Launch-Snapshots (Retention 3) plus manuelle Backups via Settings
 
+## Praxis-Check: was sich im echten Einsatz bewährt hat
+
+Gebaut für die eigene Hochzeit — und dabei auch gelernt, wo Anspruch und Realität auseinandergehen. Ehrlich eingeordnet:
+
+- **Der eigentliche Kern-Use-Case — Gäste *automatisch* auf verschiedene Tisch-Anordnungen verteilen — ist im echten Einsatz nicht erprobt.** Bei uns fiel die Entscheidung auf **5 lange Tafeln**; da mussten wir Leute nur noch platzieren, nicht verteilen lassen. Der Solver samt Harmonie-Heuristik ist unit-getestet und funktioniert, lief aber nie gegen ein echtes, unstrukturiertes Gäste-Set. → [#6](../../issues/6)
+- **Klar bewährt haben sich dagegen:**
+  - **Familien-Drag** — zieht man eine Person an einen Tisch, kommen alle Familienmitglieder mit und werden um sie herum gesetzt. Spart enorm Klickarbeit.
+  - **Diät-/Unverträglichkeits-Übersicht** — farblich codiert auf einen Blick sehen, wo Veggie/Vegan/Allergiker sitzen. Beim Caterer-Abgleich und am Tag selbst Gold wert.
+  - **Kategorien-Export als Foto-Gruppen** und der **Markdown-Export für die Rede** — beide direkt nutzbar.
+- **Harmonie-Logik ehrlich eingeordnet:** „Wer harmoniert mit wem" lief bei uns gut, bräuchte für verlässliche Ergebnisse aber deutlich mehr strukturierten Input über die Gäste, als man realistisch pflegt.
+
+Unterm Strich: als **Platzier- und Übersichts-Werkzeug** hat es getragen; die voll-automatische Optimierung bleibt der spannendste, aber am wenigsten battle-getestete Teil.
+
 ## Lizenz
 
 GNU General Public License v3.0 — siehe [LICENSE](LICENSE). Bei Weitergabe

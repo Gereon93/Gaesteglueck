@@ -124,9 +124,12 @@ Gebaut für die eigene Hochzeit — und dabei auch gelernt, wo Anspruch und Real
 
 - **Der eigentliche Kern-Use-Case — Gäste *automatisch* auf verschiedene Tisch-Anordnungen verteilen — ist im echten Einsatz nicht erprobt.** Bei uns fiel die Entscheidung auf **5 lange Tafeln**; da mussten wir Leute nur noch platzieren, nicht verteilen lassen. Der Solver samt Harmonie-Heuristik ist unit-getestet und funktioniert, lief aber nie gegen ein echtes, unstrukturiertes Gäste-Set. → [#6](../../issues/6)
 - **Klar bewährt haben sich dagegen:**
+  - **Der laufende Anmelde-/Änderungs-Flow** — genau das Tagesgeschäft zwischen Zusage und Tag X war das eigentliche Arbeitspferd: spontane Absagen umsetzen, Gäste umsetzen, Plätze als wegfallend markieren. Ein wegfallender Platz bleibt am Tisch sichtbar vermerkt, und der **Caterer-Export** weist den Wegfall mit Name · Tisch · Menü · Unverträglichkeit aus — so weiß der Service vor Ort auch bei einer Spätabsage, dass z. B. an Tisch 3 ein Gast mit Unverträglichkeit nicht mehr kommt und das bestellte Essen nicht abgerufen wird. (Details im Abschnitt [„Absagen: löschen oder abmelden?"](#absagen-löschen-oder-abmelden) oben.)
   - **Familien-Drag** — zieht man eine Person an einen Tisch, kommen alle Familienmitglieder mit und werden um sie herum gesetzt. Spart enorm Klickarbeit.
   - **Diät-/Unverträglichkeits-Übersicht** — farblich codiert auf einen Blick sehen, wo Veggie/Vegan/Allergiker sitzen. Beim Caterer-Abgleich und am Tag selbst Gold wert.
   - **Kategorien-Export als Foto-Gruppen** und der **Markdown-Export für die Rede** — beide direkt nutzbar.
+  - **Fun-Facts-Management** — pro Gast Fun Facts erfassen, prüfen und gebündelt aufbereiten (u. a. als Vorlage für die Rede). Wurde komplett über das Tool gepflegt.
+  - **Apple-Contacts-Anbindung** — Telefonnummern einzelner Gäste schnell zuweisen (praktisch z. B. für Trauzeugen), **ohne den vollen Kontaktzugriff teilen zu müssen**: der eingeschränkte Kontaktzugriff (`.limited`) wird unterstützt, man kann der App also nur ausgewählte Kontakte freigeben statt des ganzen Adressbuchs.
 - **Harmonie-Logik ehrlich eingeordnet:** „Wer harmoniert mit wem" lief bei uns gut, bräuchte für verlässliche Ergebnisse aber deutlich mehr strukturierten Input über die Gäste, als man realistisch pflegt.
 
 Unterm Strich: als **Platzier- und Übersichts-Werkzeug** hat es getragen; die voll-automatische Optimierung bleibt der spannendste, aber am wenigsten battle-getestete Teil.

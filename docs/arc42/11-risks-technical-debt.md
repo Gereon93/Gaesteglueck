@@ -1,20 +1,24 @@
 # 11. Risiken und technische Schulden
 
-## 11.1 Große Dateien (Maintainability)
+## 11.1 Große Dateien (Maintainability) — Erledigt ✅
 
-**Problem:** 14 Dateien > 500 Zeilen, davon 4 > 1000 Zeilen.
+**Status:** Issue #3 geschlossen. Alle Views wurden in Sub-Views aufgeteilt.
 
-| Datei | Zeilen | Problem |
-|-------|--------|---------|
-| `GuestListView.swift` | 1833 | Guest-Liste + Filter + Inspector + FunFact-Check |
-| `ImportPreviewView.swift` | 1221 | Import-Preview + Edit-Sheet + Parsing |
-| `SettingsView.swift` | 1084 | Alle Settings in einer View |
-| `ExportView.swift` | 1054 | Alle Export-Optionen + Preview |
-| `VisualSeatingPlanExporter.swift` | 1031 | Komplettes PDF-Rendering in einer Datei |
+| Datei (vorher) | Zeilen (vorher) | Zeilen (nachher) |
+|-------|--------|--------|
+| `GuestListView.swift` (+ `GuestListView+Table.swift`) | 1833 | 219 + 374 |
+| `ImportPreviewView.swift` | 1221 | 230 |
+| `SettingsView.swift` | 1084 | 42 |
+| `ExportView.swift` | 1054 | 186 |
+| `VisualSeatingPlanExporter.swift` | 1031 | 354 |
+| `RoomCanvasView.swift` | 963 | 310 |
+| `RoomSetupView.swift` | 946 | 311 |
+| `KIWizardView.swift` | 715 | 331 |
+| `TableCanvasItemView.swift` | 662 | 416 |
+| `GuestFormView.swift` | 651 | 383 |
+| `SaalKonfiguratorView.swift` | 640 | 219 |
 
-**Risiko:** Schwierige Navigation, hohe kognitive Last, Merge-Konflikte.
-
-**Empfehlung:** Views in Sub-Views aufteilen. Exporter in spezialisierte Dateien zerlegen.
+**Größte Datei jetzt:** `DashboardView.swift` mit 587 Zeilen.
 
 ## 11.2 Duplicierter Code (Wartbarkeit)
 
@@ -90,17 +94,16 @@ PDF-Seitengrößen, Margins, Font-Größen über Exporter verstreut.
 
 ## 11.5 `nonisolated(unsafe)` Statics (Concurrency)
 
-**Problem:** 5 mutable static vars umgehen Swift 6 Concurrency-Checks.
+**Problem:** Verbleibende mutable static vars umgehen Swift 6 Concurrency-Checks.
 
 | Datei | Variable | Risiko |
 |-------|----------|--------|
 | `GaesteglueckApp.swift:10` | `didActivate` | Gering (einmalig gesetzt) |
-| `VisualSeatingPlanExporter.swift:107-109` | `currentDisplayNames`, `currentRenderScale`, `currentLegend` | **Hoch** (Race bei parallelen Exports) |
 | `GuestTable.swift:42` | `_activeRules` | Mittel (könnte bei schnellen Änderungen racen) |
 
-**Risiko:** Data race wenn zwei Exports gleichzeitig laufen.
+**Hinweis:** Die früheren `VisualSeatingPlanExporter`-Render-Statics wurden entfernt. Stattdessen wird pro Export ein `RenderContext`-Struct gebaut und durch alle Draw-Helfer gereicht – kein Data-Race mehr bei parallelen Exports.
 
-**Empfehlung:** Render-State als Parameter durchreichen statt static var.
+**Empfehlung:** Verbleibende Statics entweder eliminieren oder durch Locks schützen.
 
 ## 11.6 `try?` Error-Silencing (Debuggability)
 
@@ -114,7 +117,7 @@ PDF-Seitengrößen, Margins, Font-Größen über Exporter verstreut.
 
 **Empfehlung:** Zumindest `os_log` für kritische `try?`-Stellen.
 
-## 11.7 Fehlende Features (aus VISION.md)
+## 11.7 Fehlende Features (aus [docs/VISION.md](../VISION.md))
 
 | Feature | Status | Risiko |
 |---------|--------|--------|

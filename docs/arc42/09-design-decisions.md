@@ -46,7 +46,8 @@ keine stabile ID verfügbar.
 
 **Begründung:** Greedy liefert schnellen, brauchbaren Start. SA verbessert
 lokal ohne kombinatorische Explosion. 6000 Iterationen in <1s auf M-Chip.
-Hard-Constraints werden als Gate erzwungen (niemals verletzt).
+Hard-Constraints werden im SA-Schritt als Gate geprüft; beim Greedy-Schritt
+best-effort (übergrößere mustSitTogether-Cluster können auseinanderfallen).
 
 ## DD-7: Graph-basiertes Scoring
 
@@ -58,7 +59,7 @@ Brücken-Personen (+10) — alle in einem Graph modellierbar.
 
 ## DD-8: Pre-Launch-Backups
 
-**Entscheidung:** Automatische Store-Kopie vor jedem Launch, Retention 3.
+**Entscheidung:** Automatische Store-Kopie vor jedem Launch, max. 1 pro Stunde, Retention 3.
 
 **Begründung:** Migrationen können schiefgehen. Backups sind die letzte
 Verteidigungslinie. 3 Backups = Schutz gegen korrupte Snapshots.

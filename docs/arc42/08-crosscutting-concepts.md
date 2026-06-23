@@ -19,10 +19,12 @@ automatisch durch.
 
 ```
 Backups/
-├── pre-launch-{timestamp}.store      # Automatisch vor Launch
-├── pre-launch-{timestamp}.store-shm
-├── pre-launch-{timestamp}.store-wal
-└── manual-{timestamp}.store          # Manuell via Settings
+├── yyyy-MM-dd_HH-pre-launch.store       # Automatisch vor Launch (max. 1 pro Stunde)
+├── yyyy-MM-dd_HH-pre-launch.store-shm
+├── yyyy-MM-dd_HH-pre-launch.store-wal
+├── yyyy-MM-dd_HH-mm-ss-Gaesteglueck.store  # Manuell via Settings
+├── yyyy-MM-dd_HH-mm-ss-Gaesteglueck.store-shm
+└── yyyy-MM-dd_HH-mm-ss-Gaesteglueck.store-wal
 ```
 
 ## 8.2 Sicherheit

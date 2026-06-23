@@ -12,7 +12,7 @@ Das System wurde für die eigene Hochzeit des Entwicklers gebaut und dort produk
 
 | Priorität | Ziel | Szenario |
 |-----------|------|----------|
-| 1 | **Privatsphäre** | Keine Gästedaten verlassen den Mac. Keine Cloud, kein Account, keine Telemetrie. KI läuft optional lokal via LM Studio. |
+| 1 | **Privatsphäre** | By default verlassen keine Gästedaten den Mac. Keine Cloud, kein Account, keine Telemetrie. KI läuft lokal via LM Studio – nur bei expliziter Konfiguration eines Cloud-Providers (z.B. OpenRouter) werden Prompt-Daten übertragen. |
 | 1 | **Datensicherheit** | Crash darf nie Daten verlieren. SwiftData persistiert nach jeder Mutation. Pre-Launch-Backups mit Retention 3. |
 | 2 | **Benutzbarkeit** | Ein Paar ohne Anleitung kommt vom Excel-Import zum ersten Sitzplan-Vorschlag in unter 30 Minuten. |
 | 2 | **Iterierbarkeit** | Der Sitzplan wird über Tage/Wochen immer wieder angepasst (Absagen, Umsetzungen). Diese Änderungen sind Erstklass-Workflows. |

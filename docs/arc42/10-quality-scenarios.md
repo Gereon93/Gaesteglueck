@@ -67,11 +67,11 @@
 2. LM Studio läuft nicht
 
 **Erwartung:**
-- Fehlermeldung: "LM Studio antwortet gerade nicht"
-- Fallback anbieten: "Plan auch ohne KI berechnen"
-- Algorithmus als Plan B (SeatingOptimizer)
+- Fehlermeldung: "Konnte Plan nicht erstellen"
+- User kann Retry anstoßen
+- Algorithmus als Plan B (SeatingOptimizer) – entweder manuell über "Auto-Platzierung" oder zukünftig automatisch
 
-**Status:** ✅ Implementiert (Fallback-Strategie in allen KI-Services)
+**Status:** 🟡 Teilweise (Fehler + Retry; automatischer Algorithmus-Fallback noch nicht aktiv)
 
 ### Szenario: LLM liefert ungültiges JSON
 
@@ -96,10 +96,10 @@
 
 **Erwartung:**
 - Post-Processing erkennt Verstoß
-- Constraint wird erzwungen (Gast umsetzen)
-- User wird informiert ("X wurde umgesetzt, weil...")
+- Constraint wird als Warning gemeldet
+- User sieht Hinweis im Vorschlag-Dialog und entscheidet, ob er den Plan trotzdem übernimmt
 
-**Status:** ✅ Implementiert (Hard-Constraint-Gate in LLMSeatingPlanner)
+**Status:** ✅ Implementiert (Validierung + Warnungen in LLMSeatingPlanner; keine automatische Umsetzung)
 
 ## 10.4 Import-Robustheit
 

@@ -9,18 +9,21 @@ App Launch
 ┌──────────────────────────────────┐
 │ GaesteglueckApp.init()           │
 │                                  │
-│ 1. Legacy-Store migration        │
-│    (default.store → neuer Pfad)  │
-│ 2. Pre-Launch-Backup             │
-│    (store + WAL → Backups/)      │
-│ 3. Pending Restore prüfen        │
-│    (UserDefaults-Flag)           │
-│ 4. ModelContainer erstellen      │
-│    (Schema V5, alle Migrationen) │
-│ 5. Legacy-Tag-Fixup              │
-│    (falsche Kategorien korr.)    │
-│ 6. API-Key-Migration             │
+│ 1. API-Key-Migration             │
 │    (UserDefaults → Keychain)     │
+│                                  │
+│ makeContainer():                 │
+│ 2. Pending Restore prüfen        │
+│    (UserDefaults-Flag) – VOR     │
+│    dem Öffnen des Stores         │
+│ 3. Legacy-Store migration        │
+│    (default.store → neuer Pfad)  │
+│ 4. Pre-Launch-Backup             │
+│    (store + WAL → Backups/)      │
+│ 5. ModelContainer erstellen      │
+│    (Schema V5, alle Migrationen) │
+│ 6. Legacy-Tag-Fixup              │
+│    (falsche Kategorien korr.)    │
 └──────────────────────────────────┘
     │
     ▼

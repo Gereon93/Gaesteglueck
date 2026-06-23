@@ -8,7 +8,6 @@ struct GuestFormView: View {
     @Query private var events: [Event]
     @Query(sort: \Tag.name) private var allTags: [Tag]
     @Query(sort: \Guest.firstName) private var allGuests: [Guest]
-    @Query private var allConstraints: [Constraint]
 
     let guest: Guest?
 
@@ -32,10 +31,6 @@ struct GuestFormView: View {
     @State private var showingExtraDetails = false
     @State private var selectedTagIDs: Set<UUID> = []
     @State private var didLoadInitialTags = false
-    @State private var newConflictGuestID: UUID? = nil
-    @State private var newConflictReason: String = ""
-    @State private var newPairGuestID: UUID? = nil
-    @State private var newPairReason: String = ""
     @State private var contactPickerMatches: [ContactMatch] = []
     @State private var showingContactPicker = false
     @State private var contactErrorMessage: String?
@@ -144,19 +139,11 @@ struct GuestFormView: View {
                     Text("Beziehung")
                 }
 
-                Section("Tags") {
-                    if allTags.isEmpty {
-                        Text("Noch keine Tags angelegt — über Beziehungen → Auto-Tags erstellen.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        tagsByCategory
-                    }
-                }
+                GuestTagsSection(selectedTagIDs: $selectedTagIDs)
 
                 if guest != nil {
-                    pairingsSection
-                    conflictsSection
+                    GuestPairingsSection(guest: guest, firstName: firstName)
+                    GuestConflictsSection(guest: guest, firstName: firstName)
                 }
 
                 Section("Essen & Unverträglichkeiten") {
@@ -255,261 +242,6 @@ struct GuestFormView: View {
                 selectedTagIDs = Set(allTags.filter { $0.guestIDs.contains(g.id) }.map(\.id))
             }
         }
-    }
-
-    // MARK: - Pairings (mustSitTogether)
-
-    /// Constraints vom Typ mustSitTogether die diesen Gast referenzieren UND
-    /// nicht aus einer registrationGroup-Auto-Erstellung stammen. Eine
-    /// Anmeldungs-Gruppe-Constraint hat den Reason-Prefix "Gemeinsame Anmeldung —"
-    /// und wird nicht als manuelle Pairing angezeigt — sonst blendet die UI
-    /// die Familie selbst doppelt rein.
-    private var pairingsForThisGuest: [Constraint] {
-        guard let g = guest else { return [] }
-        return allConstraints.filter {
-            $0.type == .mustSitTogether
-                && $0.guestIDs.contains(g.id)
-                && !$0.reason.hasPrefix("Gemeinsame Anmeldung")
-        }
-    }
-
-    private var eligiblePairingTargets: [Guest] {
-        let alreadyPaired = Set(pairingsForThisGuest.flatMap { $0.guestIDs })
-        return otherGuests.filter { !alreadyPaired.contains($0.id) }
-    }
-
-    @ViewBuilder
-    private var pairingsSection: some View {
-        Section {
-            if pairingsForThisGuest.isEmpty {
-                Text("Niemand fest mit \(firstName.isEmpty ? "diesem Gast" : firstName) verknüpft. Anmeldungs-Gruppen werden automatisch zusammengehalten — hier sind nur zusätzliche Pflicht-Verknüpfungen sichtbar (z.B. 'Manuel muss zu Karen').")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            } else {
-                ForEach(pairingsForThisGuest) { c in
-                    let otherID = c.guestIDs.first { $0 != guest?.id }
-                    let other = otherID.flatMap { id in allGuests.first(where: { $0.id == id }) }
-                    HStack(spacing: 8) {
-                        Image(systemName: "link.circle.fill")
-                            .foregroundStyle(.green)
-                            .font(.caption)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(other?.fullName ?? "—")
-                                .font(.system(size: 13, weight: .medium, design: .rounded))
-                            if !c.reason.isEmpty {
-                                Text(c.reason)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        Spacer()
-                        Button {
-                            modelContext.delete(c)
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 6) {
-                Picker("Pflicht-Nachbar", selection: $newPairGuestID) {
-                    Text("Gast wählen …").tag(nil as UUID?)
-                    ForEach(eligiblePairingTargets) { g in
-                        Text(g.fullName).tag(g.id as UUID?)
-                    }
-                }
-                LabeledContent("Beziehung (optional)") {
-                    TextField("z.B. Mann von Karen, Plus-1, …", text: $newPairReason)
-                }
-                HStack {
-                    Spacer()
-                    Button("Pflicht-Verknüpfung hinzufügen") {
-                        addPairing()
-                    }
-                    .disabled(newPairGuestID == nil || guest == nil)
-                }
-            }
-            .padding(.vertical, 4)
-        } header: {
-            Text("Muss zusammen sitzen mit")
-        } footer: {
-            Text("Der Sitzplaner platziert diese beiden Gäste garantiert am gleichen Tisch — auch wenn sie nicht in der gleichen Anmeldung sind. Spiegelt sich beidseitig (öffnest du den anderen Gast, ist die Verknüpfung dort auch sichtbar).")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    private func addPairing() {
-        guard let g = guest, let otherID = newPairGuestID else { return }
-        let constraint = Constraint(
-            type: .mustSitTogether,
-            guestIDs: [g.id, otherID],
-            reason: newPairReason.trimmingCharacters(in: .whitespacesAndNewlines)
-        )
-        modelContext.insert(constraint)
-        newPairGuestID = nil
-        newPairReason = ""
-    }
-
-    // MARK: - Konflikte (mustNotSitTogether)
-
-    /// Constraints vom Typ mustNotSitTogether, in denen dieser Gast vorkommt.
-    private var conflictsForThisGuest: [Constraint] {
-        guard let g = guest else { return [] }
-        return allConstraints.filter {
-            $0.type == .mustNotSitTogether && $0.guestIDs.contains(g.id)
-        }
-    }
-
-    /// Alle anderen Gäste — für den Picker beim Hinzufügen eines Konflikts.
-    private var otherGuests: [Guest] {
-        allGuests.filter { $0.id != guest?.id }
-    }
-
-    @ViewBuilder
-    private var conflictsSection: some View {
-        Section {
-            if conflictsForThisGuest.isEmpty {
-                Text("Keine Tabus für \(firstName.isEmpty ? "diesen Gast" : firstName).")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(conflictsForThisGuest) { c in
-                    let otherID = c.guestIDs.first { $0 != guest?.id }
-                    let other = otherID.flatMap { id in allGuests.first(where: { $0.id == id }) }
-                    HStack(spacing: 8) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.red)
-                            .font(.caption)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(other?.fullName ?? "—")
-                                .font(.system(size: 13, weight: .medium, design: .rounded))
-                            if !c.reason.isEmpty {
-                                Text(c.reason)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        Spacer()
-                        Button {
-                            modelContext.delete(c)
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-
-            // Add-Form
-            VStack(alignment: .leading, spacing: 6) {
-                Picker("Tabu mit", selection: $newConflictGuestID) {
-                    Text("Gast wählen …").tag(nil as UUID?)
-                    ForEach(eligibleConflictTargets) { g in
-                        Text(g.fullName).tag(g.id as UUID?)
-                    }
-                }
-                LabeledContent("Grund (optional)") {
-                    TextField("z.B. Streit auf der letzten Familienfeier", text: $newConflictReason)
-                }
-                HStack {
-                    Spacer()
-                    Button("Tabu hinzufügen") {
-                        addConflict()
-                    }
-                    .disabled(newConflictGuestID == nil || guest == nil)
-                }
-            }
-            .padding(.vertical, 4)
-        } header: {
-            Text("Tabus — sollte NICHT zusammen sitzen")
-        } footer: {
-            Text("Der Sitzplaner stellt sicher, dass diese beiden Gäste an unterschiedlichen Tischen platziert werden.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    /// Filter aus dem Picker: keine Selbst-Referenz, kein bereits bestehender
-    /// Tabu-Eintrag (sonst hätte man Duplikate).
-    private var eligibleConflictTargets: [Guest] {
-        let alreadyConflicting = Set(conflictsForThisGuest.flatMap { $0.guestIDs })
-        return otherGuests.filter { !alreadyConflicting.contains($0.id) }
-    }
-
-    private func addConflict() {
-        guard let g = guest, let otherID = newConflictGuestID else { return }
-        let constraint = Constraint(
-            type: .mustNotSitTogether,
-            guestIDs: [g.id, otherID],
-            reason: newConflictReason.trimmingCharacters(in: .whitespacesAndNewlines)
-        )
-        modelContext.insert(constraint)
-        newConflictGuestID = nil
-        newConflictReason = ""
-    }
-
-    @ViewBuilder
-    private var tagsByCategory: some View {
-        // Tags sind nach Kategorie gruppiert für bessere Übersicht
-        let grouped = Dictionary(grouping: allTags, by: \.category)
-        ForEach(TagCategory.allCases) { cat in
-            if let tagsInCat = grouped[cat], !tagsInCat.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(cat.rawValue.uppercased())
-                        .font(.system(size: 10, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.secondary)
-                        .tracking(0.5)
-                    LazyVGrid(
-                        columns: [GridItem(.adaptive(minimum: 100), spacing: 6, alignment: .leading)],
-                        alignment: .leading,
-                        spacing: 6
-                    ) {
-                        ForEach(tagsInCat) { tag in
-                            tagChip(tag)
-                        }
-                    }
-                }
-                .padding(.vertical, 2)
-            }
-        }
-    }
-
-    private func tagChip(_ tag: Tag) -> some View {
-        let isSelected = selectedTagIDs.contains(tag.id)
-        return Button {
-            if isSelected {
-                selectedTagIDs.remove(tag.id)
-            } else {
-                selectedTagIDs.insert(tag.id)
-            }
-        } label: {
-            HStack(spacing: 5) {
-                Circle()
-                    .fill(Color(hex: tag.color))
-                    .frame(width: 7, height: 7)
-                Text(tag.name)
-                    .font(.system(size: 11.5, design: .rounded))
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 9, weight: .bold))
-                }
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(isSelected ? Color(hex: tag.color).opacity(0.22) : Color.gray.opacity(0.08))
-            .foregroundStyle(isSelected ? Color(hex: tag.color) : .primary)
-            .overlay(
-                Capsule().strokeBorder(isSelected ? Color(hex: tag.color) : .clear, lineWidth: 1)
-            )
-            .clipShape(Capsule())
-        }
-        .buttonStyle(.plain)
     }
 
     @MainActor

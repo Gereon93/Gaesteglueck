@@ -1,166 +1,189 @@
 # AGENTS.md
 
-> Drop this at the repository root. Codex applies the closest `AGENTS.md` to each
-> changed file, so you can place a more specific one deeper in the tree if a
-> package needs extra scrutiny. Edit the Project context / Tech stack per repo.
+## Projekt
 
-## Project context
-
-<!-- One or two lines: what this repo does, who/what consumes it. Edit per repo. -->
 Gästeglück ist ein macOS-nativer Hochzeits-Sitzplaner mit optionaler lokaler KI
 (LM Studio, OpenRouter, Apple Intelligence). Entwickelt für die eigene Hochzeit
 und dort produktiv eingesetzt. Komplett lokal, keine Cloud, keine Accounts.
 
-## Tech stack
+## Tech Stack
 
-- Swift 6 (strikte Concurrency, `@MainActor`, `actor`, `Sendable`)
-- SwiftUI (macOS 15+, experimentelles iPad-Target)
-- SwiftData mit `VersionedSchema` + manuellen Migrationen (V1–V5)
-- Build: Swift Package Manager (`Package.swift`)
-- Architektur: MV (Model-View) + Service Layer, **kein** MVVM, **kein** DDD/CQRS
-- Sprache: Deutsch in Code, Kommentaren, Commits, Docs und UI
+- **Swift 6.0** (strikte Concurrency, `swift-tools-version: 6.0`)
+- **SwiftUI** (macOS 15+, experimentelles iPad-Target iOS 18+)
+- **SwiftData** mit `VersionedSchema` V1–V5 + `SchemaMigrationPlan` (lightweight)
+- **Build:** Swift Package Manager (`Package.swift`)
+- **Einzige externe Dependency:** CoreXLSX (Excel-Import)
+- **Architektur:** MV (Model-View) + Service Layer — **kein** MVVM, **kein** DDD/CQRS
+- **Test-Framework:** Swift Testing (`import Testing`, `@Suite`, `@Test`, `#expect`)
+- **Sprache:** Deutsch in Code, Kommentaren, Commits, Docs und UI
 
-## Review guidelines
+## Architektur-Konventionen
 
-Codex surfaced nur **P0** und **P1** findings on GitHub pull requests. Anything
-lower will not appear, so everything worth a human's attention belongs in one of
-these two buckets.
+### Services sind `enum` mit `static func`
 
-**Guiding principle: behavior first.** A change that compiles and reads cleanly
-but breaks or silently alters an intended process or UI/UX flow is worse than a
-style issue. Verify the code does what it is supposed to do before commenting on
-how it is written. Function follows design.
+Stateless Services sind `enum` — keine Instanzen nötig:
 
-### P0 — block the merge
+```swift
+enum SeatingOptimizer {
+    static func solve(guests: [Guest], tables: [GuestTable], ...) -> [GuestTable] { ... }
+}
+```
 
-- **Behavioral regressions:** the change breaks or silently alters an existing
-  process, workflow, or UI/UX behavior, or the implemented behavior does not
-  match the apparent intent of the PR.
-- **Security:** hardcoded secrets / keys / connection strings, missing auth or
-  authorization checks, injection (SQL, command, path), unsafe deserialization,
-  logging of PII or credentials. API-Keys müssen im Keychain, nicht in
-  UserDefaults.
+Services mit Dependency (z.B. `LLMClient`) sind `struct` mit Property:
+
+```swift
+struct SitzplanCoPilot {
+    let client: LLMClient
+    func requestSuggestion(...) async throws -> CoPilotResponse { ... }
+}
+```
+
+### Views queryn SwiftData via `@Query`
+
+```swift
+@Query(sort: \Guest.firstName) private var guests: [Guest]
+@Environment(\.modelContext) private var modelContext
+```
+
+Views enthalten **keine** Geschäftslogik — die gehört in Services.
+
+### Concurrency
+
+- **Views + Model-Mutationen:** `@MainActor`
+- **LLM-Clients:** `actor` (`LMStudioClient`, `OpenRouterClient`)
+- **Stateless Services:** `nonisolated` (enum/struct)
+- **`LLMClient`-Protocol:** erfordert `Sendable`
+- **Actor-Grenzen:** `GuestSnapshot`-Struct statt `@Model`-Objekt überreichen
+- **`nonisolated(unsafe)`** nur mit explizitem Lock (`NSLock`, `renderLock`)
+
+### SwiftData
+
+- **12 Models** in SchemaV5: `Event`, `Guest`, `GuestTable`, `Tag`, `Constraint`,
+  `RoomPlan`, `TableInventoryItem`, `CanvasLabel`, `LayoutVersion`,
+  `LayoutTableSnapshot`, `LayoutLabelSnapshot`, `LayoutSeatSnapshot`
+- **Migration:** `AppMigrationPlan` mit 4 lightweight stages (V1→V2→V3→V4→V5)
+- **Pre-Launch-Backup** vor `ModelContainer`-Öffnung
+- **`#if canImport(SwiftData)`** um `@Model`-Deklaration für Cross-Platform-Kompilierung
+
+### LLM-Integration
+
+- **Protocol:** `LLMClient` mit `chat(messages:temperature:maxTokens:jsonMode:)`
+- **3 Implementierungen:** `LMStudioClient` (actor), `OpenRouterClient` (actor),
+  `FoundationModelsClient` (struct)
+- **Factory:** `LLMClientFactory` routet pro `AIFeature` (chat, tags, seating, funfact, importParse)
+- **Decorator:** `LoggingLLMClient` wrapt jeden Client für Debug-Logging
+- **API-Keys:** `KeychainStore` (enum), **nicht** UserDefaults
+
+### Plattform-Guards
+
+- **`#if os(macOS)`** um PDF/Canvas-Export (20 Dateien)
+- **`#if canImport(AppKit)`** / **`canImport(UIKit)`** mit `PlatformImage`-Typealias
+- **`canImport(FoundationModels)`** für Apple Intelligence (macOS 26+)
+- **`canImport(Security)`** für Keychain, **`canImport(Contacts)`** für Kontakt-Picker
+
+## Review-Richtlinien
+
+**Grundsatz: Behavior first.** Ein Change der kompiliert und sauber aussieht,
+aber einen bestehenden Workflow bricht, ist schlimmer als ein Style-Problem.
+
+### P0 — Block den Merge
+
+- **Behavioral Regression:** Der Change bricht oder verändert still einen
+  bestehenden Prozess, UI-Flow oder eine Berechnung.
+- **Security:** Hardcoded Secrets, API-Keys in UserDefaults (müssen in Keychain),
+  Injection, unsafe Deserialization, PII-Logging.
 - **Swift 6 Concurrency:**
-  - `nonisolated(unsafe)` mutable statics ohne Synchronisation (Data Race).
-  - `@MainActor`-Verletzung: SwiftData `ModelContext`-Mutationen off-main.
-  - Actor-Isolation umgangen (z.B. sync Zugriff auf actor state).
-  - `Sendable`-Violations: non-Sendable types über Isolation-Grenzen.
-- **SwiftData correctness:**
+  - `nonisolated(unsafe)` mutable statics ohne Lock (Data Race).
+  - `@MainActor`-Verletzung: `ModelContext`-Mutation off-main.
+  - Actor-Isolation umgangen (sync Zugriff auf actor state).
+  - `Sendable`-Violation: non-Sendable über Isolation-Grenzen.
+- **SwiftData:**
   - Force unwrap auf Optional-Relationships (`guest.table!.id`) ohne guard.
-  - Schema-Migration ohne Pre-Launch-Backup-Test.
-  - `try?` auf kritischen Operationen (Migration, Backup, Store-Copy) ohne
-    Logging — Fehler werden verschluckt.
-- **Data correctness:** money / decimal rounding errors, off-by-one, null or
-  empty edge cases that change results. Bei Gästeglück: Kapazitätsberechnung
-  (60 cm pro Person), Füllgrad-Berechnung, Constraint-Verletzungen.
-- **Resource leaks:** undisposed `IDisposable`, unclosed streams / connections,
-  mishandled `CancellationToken`. In Swift: offene `FileHandle`, `CGContext`,
-  `ModelContext` ohne save.
-- **Untested behavior:** new or changed behavior shipped without test coverage
-  (see Testing expectations).
+  - Schema-Änderung ohne `VersionedSchema` + `MigrationStage`.
+  - `try?` auf Migration/Backup/Store-Copy ohne Logging.
+- **Data Correctness:** Kapazitätsberechnung (60 cm/Person), Füllgrad,
+  Constraint-Verletzungen, Off-by-one bei Tisch-Belegung.
+- **Resource Leaks:** Offene `FileHandle`, `CGContext`, `ModelContext` ohne save.
+- **Untested Behavior:** Neues/geändertes Behavior ohne Test-Coverage.
 
-### P1 — should fix
+### P1 — Should Fix
 
-- **Architecture (MV + Service Layer):**
+- **Architektur:**
   - View enthält Geschäftslogik statt Service zu callen.
-  - Service hat UI-Code (`View`, `Color`, `Font`).
-  - SwiftData-Query direkt in View statt über `@Query` (reaktiv).
-  - State management: `@State` vs `@Binding` vs `@Observable` falsch eingesetzt.
+  - Service enthält UI-Code (`View`, `Color`, `Font`).
+  - `FetchDescriptor` direkt in View statt `@Query`.
+  - `@State` vs `@Binding` vs `@AppStorage` falsch eingesetzt.
 - **Clean Code:**
-  - Single-responsibility violations: Methods oder Types doing too much.
-  - Dateien > 500 Zeilen ohne klare `// MARK:`-Section-Struktur.
-  - Duplicierter Code über 3+ Dateien (z.B. `drawText`-Helper in 5 PDF-Exportern).
-  - Primitive obsession: Magic numbers statt benannter Konstanten.
-- **Error handling:**
-  - Swallowed exceptions: `try?` ohne Logging oder Fallback.
-  - Catch-all ohne Kontext: `catch { print(error) }`.
-  - Control flow driven by exceptions statt Result-Types.
-- **Test gaps:**
-  - Missing integration test for changes that cross a boundary (SwiftData, HTTP,
-    File I/O).
-  - Unit tests that assert nothing meaningful or only cover the happy path.
-  - LLM-Client-Tests ohne Mock (Integration-Tests gegen echte API).
+  - Methoden/Types die zu viel machen (SRP-Verletzung).
+  - Dateien > 500 Zeilen ohne `// MARK:`-Struktur.
+  - Duplicierter Code über 3+ Dateien (z.B. `drawText` in PDF-Exportern).
+  - Magic numbers statt benannter Konstanten.
+- **Error Handling:**
+  - `try?` auf kritischen Operationen (Migration, Backup, Import) ohne Logging.
+  - `catch { print(error) }` ohne Kontext oder Recovery.
+- **Tests:**
+  - Integration-Test fehlt für Boundary-Crossing (SwiftData, HTTP, File I/O).
+  - Unit-Test assertiert nichts Sinnvolles oder nur Happy Path.
+  - LLM-Test ohne `StubLLM`-Mock (echte API-Calls).
 - **Performance:**
-  - N+1 queries: SwiftData `@Query` in Loop statt batch fetch.
-  - Materializing before filtering: `Array(guests).filter` statt `#Predicate`.
-  - Avoidable allocations in hot paths (z.B. SeatingOptimizer mit 6000 Iterationen).
-  - Missing `async` on IO-bound work (LLM-Calls, File I/O, HTTP).
-- **Contract changes:**
-  - Public API, Events, oder DTOs changed without updated docs / changelog or a
-    migration note.
-  - SwiftData-Schema geändert ohne `VersionedSchema` + Migration.
-  - LLM-Prompt geändert ohne `eval/`-Test-Update.
+  - N+1: `@Query` in Loop statt batch fetch.
+  - `Array(guests).filter` statt `#Predicate`.
+  - Allocation in Hot Path (SeatingOptimizer: 6000 Iterationen).
+  - Missing `async` auf IO-bound work (LLM-Calls, File I/O).
 - **Validation:**
-  - Missing input validation at trust boundaries (CSV-Import, LLM-JSON-Response).
+  - CSV-Import, LLM-JSON-Response nicht validiert.
   - Keine Kapazitätsprüfung vor `GuestTable.guests.append`.
-- **Explanatory comments are a smell:**
-  - Flag any comment that describes *what* the code does or *how* it works.
-  - The fix is not a better comment but clearer code: extract a well-named
-    method, rename variables, simplify control flow so the intent is obvious
-    without prose. Recommend the refactor, never a reworded comment.
-  - Ausnahme: `// MARK:`-Sections sind Konvention in Swift, kein Smell.
-- **Magic numbers and unexplained literals:**
-  - Flag them. They must become named constants whose name carries the meaning.
-  - Beispiele: Scoring-Gewichte (`100`, `-500`, `70`, `40`), SA-Parameter
-    (`6000`, `60`, `0.05`), PDF-Dimensionen (`595`, `842`).
+- **Magic Numbers:**
+  - Scoring-Gewichte (`100`, `-500`, `70`, `40` in `SeatingGraph`, `HappinessScorer`).
+  - SA-Parameter (`6000` Iterationen, `60.0` Temperatur, `0.05` cooling).
+  - PDF-Dimensionen (`595×842` A4, `1191×842` A3).
   - Fix: `enum ScoringConstants { static let mustSitTogether = 100 }`.
-  - This is a pure refactor, unrelated to ADRs.
 - **Plattform-Guards:**
-  - macOS-only Code ohne `#if os(macOS)` Guard.
-  - AppKit/UIKit-Typen direkt statt `PlatformImage`-Alias.
-  - Conditional compilation für iPad-Target (`#if canImport(SwiftUI)`).
+  - macOS-only Code ohne `#if os(macOS)`.
+  - AppKit/UIKit direkt statt `PlatformImage`-Alias.
 
-### Testing expectations
+### Nicht flaggen
 
-- New behavior needs unit tests. Behavior that crosses a boundary (SwiftData,
-  HTTP, File I/O) needs an integration test as well.
-- Tests must cover failure and edge cases, not only the happy path.
-- Flag assertions that do not actually verify the intended outcome.
-- LLM-Feature-Tests: Mock `LLMClient`-Protocol, teste JSON-Parsing und
-  Fallback-Strategien, nicht echte API-Calls.
-- Prompt-Regression: Änderungen an `systemPrompt`-Strings erfordern Update in
-  `eval/test_prompts.py`.
+- Formatting (swift-format enforced in CI).
+- `// MARK:`-Sections (Swift-Konvention).
+- Deutsche Sprache in Code/Kommentaren (Repo-Konvention).
+- `///` Doc-Kommentare auf public API.
+- Pre-existing Issues im Diff (außer der Change macht sie schlimmer).
 
-### What NOT to flag
+## Test-Konventionen
 
-- Formatting, whitespace, import ordering, and casing already enforced by the
-  analyzers / formatter and the build (`swift-format`). Do not duplicate tooling.
-- Subjective style preferences with no maintainability impact.
-- Pre-existing issues unrelated to the diff, unless the change makes them
-  materially worse.
-- A comment that *only* references an ADR (e.g. `// rationale: ADR-0012`). It
-  explains nothing inline; it points to where the decision lives. That is the
-  intended way to keep the "why" without explanatory comments.
-- `// MARK:`-Sections — Swift-Konvention für Strukturierung, kein Smell.
-- XML doc comments (`///`) on public / published API surface, where they drive
-  IntelliSense or generated docs. (Remove this carve-out if you want zero
-  comments of any kind, including on internal code.)
-- Deutsche Sprache in Code/Kommentaren — ist Konvention für dieses Repo, nicht
-  flaggen.
+- **Framework:** Swift Testing (`@Suite`, `@Test`, `#expect`), nicht XCTest.
+- **Mock-Pattern:** `StubLLM`-Struct conforming to `LLMClient`.
+- **HTTP-Mock:** `HTTPSession`-Protocol mit `StubSession`.
+- **Thread-safe Capture:** `actor URLCapture` für async-Test-Assertions.
+- **LLM-Tests:** `LLMClient`-Protocol mocken, JSON-Parsing und Fallbacks testen.
+- **Prompt-Regression:** `systemPrompt`-Änderung erfordert Update in `eval/test_prompts.py`.
+- **Coverage:** Happy Path + Failure + Edge Cases.
 
-Keep comments specific and actionable: state the risk, point to the line,
-suggest the fix. If an assumption in the code is not guaranteed to hold, say so
-rather than letting it pass.
-
-## Build & Test commands
+## Build & Test
 
 ```bash
-swift build                       # Bauen
-swift test                        # Tests (225 Tests in 44 Suites)
+swift build                                          # Bauen
+swift test                                           # ~225 Tests in 41 Suites
 swift-format lint --recursive Sources/ Tests/ --strict   # Lint (CI)
-./scripts/build-macos-app.sh      # .app-Bundle nach dist/
+./scripts/build-macos-app.sh                         # .app-Bundle nach dist/
 ```
+
+## CI (`.github/workflows/ci.yml`)
+
+4 Jobs:
+1. **build-and-test** (macos-15): swift-format lint + swift build + swift test
+2. **ios-build** (macos-15): xcodebuild für iPad-Simulator (compile-only)
+3. **prompt-eval** (ubuntu, nur main): Python deepeval gegen OpenRouter API
+4. **release** (macos-15, nur main): .app-Bundle + DMG + GitHub Release
+
+`prompt-eval` ist **nicht** prerequisite für release (LLM-Judge ist flaky).
 
 ## Conventions
 
-- **Sprache:** Deutsch in Code-Kommentaren, Commits, Docs und UI.
-- **Kommentare:** sparsam. Nicht-triviale Begründungen als erklärende Methode
-  oder Spec, nicht als Inline-Kommentar.
-- **Commits:** pro logischem Arbeitspaket, kein Sammel-Commit.
-- **Tests:** Logik in Services/Models testbar halten; Views dünn.
-- **Architecture:** MV + Service Layer. Views queryn SwiftData via `@Query`,
-  Services sind stateless (`enum`/`struct` mit `static func`).
-- **Concurrency:** `@MainActor` auf Views und Model-Mutationen. LLM-Clients
-  sind `actor`. Services sind `nonisolated` (stateless).
-- **Error handling:** `try?` nur für nicht-kritische Operationen. Kritische
-  Operationen (Migration, Backup, Import) mit `do/catch` + Logging.
+- **Sprache:** Deutsch in Code, Kommentaren, Commits, Docs, UI, Error-Descriptions.
+- **Kommentare:** sparsam. Begründungen als Methode/Spec, nicht Inline.
+- **Commits:** pro logischem Arbeitspaket.
+- **Tests:** Services/Models testbar, Views dünn.
+- **Enums:** für namespaced Konstanten (`enum PDFColors`), nicht `class`/`struct`.
+- **Error-Types:** `enum FooError: Error, LocalizedError` mit deutschem `errorDescription`.

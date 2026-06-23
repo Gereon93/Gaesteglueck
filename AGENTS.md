@@ -115,7 +115,7 @@ aber einen bestehenden Workflow bricht, ist schlimmer als ein Style-Problem.
   - `@State` vs `@Binding` vs `@AppStorage` falsch eingesetzt.
 - **Clean Code:**
   - Methoden/Types die zu viel machen (SRP-Verletzung).
-  - Dateien > 500 Zeilen ohne `// MARK:`-Struktur.
+  - Dateien > 400 Zeilen ohne `// MARK:`-Struktur.
   - Duplicierter Code über 3+ Dateien (z.B. `drawText` in PDF-Exportern).
   - Magic numbers statt benannter Konstanten.
 - **Error Handling:**

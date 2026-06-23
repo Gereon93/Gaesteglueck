@@ -134,10 +134,16 @@ User klickt "Plan vorschlagen"
 └──────────────────────────────────┘
 ```
 
-## 6.4 Sitzplan generieren (Algorithmus)
+## 6.4 Sitzplan generieren (Algorithmus) — Interner Service
+
+> **Hinweis:** Dieser Workflow ist aktuell nicht als eigener UI-Button
+> "Auto-Platzierung" im Canvas wired. `SeatingOptimizer.solve` existiert als
+> Service, wird aber von keinem View-Button direkt aufgerufen. Der Canvas-Button
+> "Auto-Platzierung" platziert lediglich Tische über `TablePlacer.suggestLayout`.
+> Die folgende Sequenz dokumentiert den Service für zukünftige UI-Anbindung.
 
 ```
-User klickt "Auto-Platzierung"
+User klickt "Auto-Platzierung" (zukünftig)
     │
     ▼
 ┌──────────────────────────────────┐

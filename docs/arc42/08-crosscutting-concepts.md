@@ -68,11 +68,13 @@ kann der App einzelne Kontakte freigeben statt des ganzen Adressbuchs.
 Actor
 ├── LMStudioClient
 ├── OpenRouterClient
-├── GoogleSheetsImportFlow
-└── LoggingLLMClient (Wrapper)
+└── GoogleSheetsImportFlow
+
+Struct / Decorator (keine Actor-Isolation)
+├── LoggingLLMClient (Wrapper-Struct, leitet Calls durch)
+└── Services (enum/struct, stateless)
 
 nonisolated
-├── Services (enum/struct, stateless)
 ├── SeatingOptimizer
 ├── SeatingGraph
 └── HappinessScorer

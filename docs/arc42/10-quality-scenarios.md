@@ -12,9 +12,9 @@
 **Erwartung:**
 - Pre-Launch-Backup wurde vor Migration erstellt
 - Migration wird erneut versucht (SwiftData retry)
-- Falls Migration fehlschlägt: Manual Restore aus Backup via Settings
+- Falls Migration fehlschlägt: manuelles Wiederherstellen aus `Backups/` über den Finder (im Fehlerfall ist die Settings-UI nicht erreichbar, da `fatalError` im App-Init ausgelöst wird)
 
-**Status:** ✅ Implementiert (Pre-Launch-Backup + Restore-Mechanismus)
+**Status:** ✅ Implementiert (Pre-Launch-Backup + manuelles Filesystem-Restore)
 
 ### Szenario: Korrupter Store
 

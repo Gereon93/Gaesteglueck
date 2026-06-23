@@ -97,3 +97,4 @@ dist/
 # iOS-Build-Artefakte (lokale Compile-Checks)
 .build-ios/
 .build-ios-dd/
+.opencode/

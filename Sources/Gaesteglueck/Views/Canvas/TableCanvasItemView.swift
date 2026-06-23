@@ -21,7 +21,6 @@ struct TableCanvasItemView: View {
     @AppStorage("canvasSeatInfoMode") private var seatInfoModeRaw: String =
         SeatInfoDisplay.none.rawValue
     @AppStorage("canvasShowAgeMarkers") private var showAgeMarkers = false
-    @AppStorage("canvasShowTableWarnings") private var showTableWarnings = true
     @AppStorage("canvasSeatChipContent") private var seatChipContentRaw = SeatChipContent.initials.rawValue
     @AppStorage("canvasSeatNameSize") private var seatNameSize: Double = 9
     @AppStorage("canvasShowCoupleMarker") private var showCoupleMarker = false
@@ -88,30 +87,9 @@ struct TableCanvasItemView: View {
         table.guests.first { $0.seatIndex == seatIndex }
     }
 
-    private var hasPinnedGuest: Bool {
-        table.guests.contains(where: { $0.isPinned })
-    }
-
     private var scaledDiameter: CGFloat { max(table.diameter * canvasScale, 40) }
     private var scaledWidth: CGFloat { max(table.width * canvasScale, 40) }
     private var scaledDepth: CGFloat { max(table.depth * canvasScale, 28) }
-
-    private var fillColor: Color {
-        if table.isBridalTable { return Tokens.Colors.accentTint }
-        if hasPinnedGuest { return Tokens.Colors.accentTint }
-        return Tokens.Colors.surface
-    }
-
-    private var borderColor: Color {
-        if isSelected { return Tokens.Colors.accent }
-        return Tokens.Colors.line2
-    }
-
-    private var borderWidth: CGFloat { isSelected ? 2 : 1.5 }
-
-    private var allergyCount: Int {
-        table.attendingGuests.filter(\.hasIntolerances).count
-    }
 
     var body: some View {
         Group {
@@ -143,6 +121,10 @@ struct TableCanvasItemView: View {
         }
     }
 
+    private var tableShape: some View {
+        TableCanvasTableShapeView(table: table, isSelected: isSelected)
+    }
+
     @ViewBuilder
     private var tafelFollowerView: some View {
         tableShape
@@ -159,7 +141,9 @@ struct TableCanvasItemView: View {
                 .dropDestination(for: String.self) { items, _ in
                     handleTableDrop(items: items)
                 }
-                .overlay(alignment: .topTrailing) { badgeOverlay }
+                .overlay(alignment: .topTrailing) {
+                    TableCanvasBadgeOverlay(table: table)
+                }
             VStack(spacing: 3) {
                 Text(table.name)
                     .font(.system(size: 11.5, weight: .medium, design: .rounded))
@@ -171,8 +155,8 @@ struct TableCanvasItemView: View {
                         .font(.system(size: 10, design: .rounded))
                         .foregroundStyle(table.isFull ? Tokens.Colors.warn : Tokens.Colors.ink3)
                         .monospacedDigit()
-                    allergyBadge
-                    lateCancellationBadge
+                    TableCanvasAllergyBadge(table: table)
+                    TableCanvasLateCancellationBadge(table: table)
                 }
                 if table.combinationGroup != nil {
                     Image(systemName: "link")
@@ -292,16 +276,13 @@ struct TableCanvasItemView: View {
     /// Tisch-Halbmaße, damit Eck-Sitze breiter Tische als Oben/Unten zählen,
     /// nicht fälschlich als Links/Rechts).
     private func resolvedNameSide(localX: CGFloat, localY: CGFloat) -> SeatNameSide {
-        if table.seatNameSide != .auto { return table.seatNameSide }
-        let halfW = (table.shape == .round ? scaledDiameter : scaledWidth) / 2
-        let halfD = (table.shape == .round ? scaledDiameter : scaledDepth) / 2
-        let nx = localX / max(halfW, 1)
-        let ny = localY / max(halfD, 1)
-        if abs(ny) >= abs(nx) {
-            return ny < 0 ? .top : .bottom
-        } else {
-            return nx < 0 ? .left : .right
-        }
+        TableCanvasSeatSideLogic.resolvedNameSide(
+            override: table.seatNameSide,
+            localX: localX,
+            localY: localY,
+            halfWidth: (table.shape == .round ? scaledDiameter : scaledWidth) / 2,
+            halfDepth: (table.shape == .round ? scaledDiameter : scaledDepth) / 2
+        )
     }
 
     private func occupantInGroup(tableID: UUID, seatIndex: Int) -> Guest? {
@@ -328,106 +309,20 @@ struct TableCanvasItemView: View {
         return placeGuestWithCompanions(guest: guest, on: table, primarySeatIndex: nil)
     }
 
-    /// Findet alle Begleiter eines Gastes: identische Anmeldegruppe oder
-    /// gemeinsamer mustSitTogether-Constraint. Filtert isPinned.
-    private func companions(of guest: Guest) -> [Guest] {
-        var companionIDs = Set<UUID>()
-
-        if let group = guest.registrationGroup {
-            for g in allGuests where g.id != guest.id && g.registrationGroup == group {
-                companionIDs.insert(g.id)
-            }
-        }
-
-        for c in allConstraints where c.type == .mustSitTogether && c.guestIDs.contains(guest.id) {
-            for id in c.guestIDs where id != guest.id {
-                companionIDs.insert(id)
-            }
-        }
-
-        return allGuests.filter { companionIDs.contains($0.id) && !$0.isPinned }
-    }
-
-    /// Platziert einen Gast (plus Begleiter) auf dem Tisch. Wenn `primarySeatIndex`
-    /// gesetzt: der Gast nimmt diesen konkreten Sitz; Begleiter werden räumlich
-    /// nächst-möglich daneben platziert. Sonst bekommt der primäre Gast den
-    /// ersten freien Sitz, Begleiter folgen räumlich daneben.
     @discardableResult
     private func placeGuestWithCompanions(
         guest: Guest,
         on target: GuestTable,
         primarySeatIndex: Int?
     ) -> Bool {
-        let peerList = companions(of: guest)
-        let toPlace = [guest] + peerList.filter { $0.table?.id != target.id }
-        let cap = target.capacity(rules: currentRules)
-        let disabled = target.disabledSeatIndices.filter { $0 < cap }
-
-        var used: Set<Int> = Set(target.guests.compactMap { g in
-            toPlace.contains(where: { $0.id == g.id }) ? nil : g.seatIndex
-        })
-
-        let positions = SeatLayout.positions(
-            shape: target.shape,
-            capacity: cap,
-            scaledDiameter: CGFloat(target.diameter),
-            scaledWidth: CGFloat(target.width),
-            scaledDepth: CGFloat(target.depth)
+        TableCanvasPlacement.placeGuestWithCompanions(
+            guest: guest,
+            on: target,
+            primarySeatIndex: primarySeatIndex,
+            allGuests: allGuests,
+            allConstraints: allConstraints,
+            rules: currentRules
         )
-
-        func position(of idx: Int) -> CGPoint? {
-            guard idx >= 0 && idx < positions.count else { return nil }
-            return positions[idx]
-        }
-
-        func nearestFree(to anchor: CGPoint?) -> Int? {
-            let candidates = (0..<cap).filter { !used.contains($0) && !disabled.contains($0) }
-            guard !candidates.isEmpty else { return nil }
-            guard let anchor = anchor else { return candidates.first }
-            return candidates.min { a, b in
-                let pa = position(of: a) ?? .zero
-                let pb = position(of: b) ?? .zero
-                let dxA = pa.x - anchor.x, dyA = pa.y - anchor.y
-                let dxB = pb.x - anchor.x, dyB = pb.y - anchor.y
-                return (dxA*dxA + dyA*dyA) < (dxB*dxB + dyB*dyB)
-            }
-        }
-
-        var anchor: CGPoint?
-
-        if let primary = primarySeatIndex, !disabled.contains(primary) {
-            if let prior = target.guests.first(where: { $0.seatIndex == primary && $0.id != guest.id }) {
-                prior.seatIndex = guest.table?.id == target.id ? guest.seatIndex : nil
-            }
-            guest.table = target
-            guest.seatIndex = primary
-            used.insert(primary)
-            anchor = position(of: primary)
-        } else if primarySeatIndex != nil {
-            // Drop landete auf einem gesperrten Sitz — Fallback auf nächsten freien.
-            guard let first = nearestFree(to: nil) else { return false }
-            guest.table = target
-            guest.seatIndex = first
-            used.insert(first)
-            anchor = position(of: first)
-        } else {
-            guard let first = nearestFree(to: nil) else { return false }
-            guest.table = target
-            guest.seatIndex = first
-            used.insert(first)
-            anchor = position(of: first)
-        }
-
-        for peer in toPlace where peer.id != guest.id {
-            guard let chosen = nearestFree(to: anchor) else {
-                return true
-            }
-            peer.table = target
-            peer.seatIndex = chosen
-            used.insert(chosen)
-            // Anker bleibt am Primärgast — alle Begleiter clustern sich um ihn
-        }
-        return true
     }
 
     /// Drop auf konkreten Sitz: Gast bekommt diesen Tisch + diesen Sitz-Index.
@@ -489,44 +384,19 @@ struct TableCanvasItemView: View {
     }
 
     private func rotateBy90() {
-        let newRot = (table.rotation + 90).truncatingRemainder(dividingBy: 360)
-        if table.combinationGroup != nil {
-            let geo = TafelLayout.geometry(of: groupTables, rules: event?.seatingRules ?? .default)
-            let cx = Double(geo.center.x)
-            let cy = Double(geo.center.y)
-            let cosD = cos(Double.pi / 2)
-            let sinD = sin(Double.pi / 2)
-            for t in groupTables {
-                let dx = t.positionX - cx
-                let dy = t.positionY - cy
-                t.positionX = cx + dx * cosD - dy * sinD
-                t.positionY = cy + dx * sinD + dy * cosD
-                t.rotation = newRot
-            }
-        } else {
-            table.rotation = newRot
-        }
+        TableCanvasMutations.rotateBy90(
+            table: table,
+            groupTables: groupTables,
+            rules: event?.seatingRules ?? .default
+        )
     }
 
-    /// Entfernt alle nicht-gepinnten Gäste vom Tisch (table = nil, seatIndex = nil).
-    /// Bei Tafel: leert alle Gruppen-Tische gemeinsam.
     private func clearTable() {
-        let targets: [GuestTable] = table.combinationGroup != nil ? groupTables : [table]
-        for t in targets {
-            for g in t.guests where !g.isPinned {
-                g.seatIndex = nil
-                g.table = nil
-            }
-        }
+        TableCanvasMutations.clearTable(table: table, groupTables: groupTables)
     }
 
     private func dissolveTafel() {
-        guard let groupID = table.combinationGroup else { return }
-        for t in allTables where t.combinationGroup == groupID {
-            t.combinationGroup = nil
-            t.combinationOrder = nil
-            t.combinationRole = nil
-        }
+        TableCanvasMutations.dissolveTafel(table: table, allTables: allTables)
     }
 
     private func applyDrag(_ translation: CGSize) {
@@ -542,121 +412,5 @@ struct TableCanvasItemView: View {
         dragOffset = .zero
     }
 
-    @ViewBuilder
-    private var tableShape: some View {
-        switch table.shape {
-        case .round:
-            ZStack {
-                Circle().fill(fillColor)
-                Circle().strokeBorder(borderColor, lineWidth: borderWidth)
-            }
-            .frame(width: scaledDiameter, height: scaledDiameter)
-            .shadow(
-                color: isSelected ? Tokens.Colors.accent.opacity(0.2) : Color.black.opacity(0.06),
-                radius: isSelected ? 16 : 6,
-                x: 0,
-                y: isSelected ? 4 : 2
-            )
-        case .rectangular:
-            ZStack {
-                RoundedRectangle(cornerRadius: 6, style: .continuous).fill(fillColor)
-                RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(borderColor, lineWidth: borderWidth)
-            }
-            .frame(width: scaledWidth, height: scaledDepth)
-            .shadow(
-                color: isSelected ? Tokens.Colors.accent.opacity(0.2) : Color.black.opacity(0.06),
-                radius: isSelected ? 16 : 6,
-                x: 0,
-                y: isSelected ? 4 : 2
-            )
-        case .square:
-            ZStack {
-                RoundedRectangle(cornerRadius: 8, style: .continuous).fill(fillColor)
-                RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(borderColor, lineWidth: borderWidth)
-            }
-            .frame(width: scaledWidth, height: scaledWidth)
-            .shadow(
-                color: isSelected ? Tokens.Colors.accent.opacity(0.2) : Color.black.opacity(0.06),
-                radius: isSelected ? 16 : 6,
-                x: 0,
-                y: isSelected ? 4 : 2
-            )
-        }
-    }
-
-    @ViewBuilder
-    private var allergyBadge: some View {
-        if showTableWarnings, allergyCount > 0 {
-            HStack(spacing: 2) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 8, weight: .bold))
-                Text("\(allergyCount)")
-                    .font(.system(size: 9, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-            }
-            .foregroundStyle(.white)
-            .padding(.horizontal, 5)
-            .padding(.vertical, 1.5)
-            .background(Color(hex: "#c44a4a"))
-            .clipShape(Capsule())
-            .help(allergyTooltip)
-        }
-    }
-
-    private var allergyTooltip: String {
-        let names = table.attendingGuests.filter(\.hasIntolerances).map(\.fullName).sorted().joined(separator: ", ")
-        return "\(allergyCount) Gast\(allergyCount == 1 ? "" : "ä")ste mit Unverträglichkeiten: \(names)"
-    }
-
-    @ViewBuilder
-    private var lateCancellationBadge: some View {
-        let ghosts = table.ghostGuests
-        if showTableWarnings, !ghosts.isEmpty {
-            HStack(spacing: 2) {
-                Image(systemName: "person.fill.xmark")
-                    .font(.system(size: 8, weight: .bold))
-                Text("\(ghosts.count)")
-                    .font(.system(size: 9, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-            }
-            .foregroundStyle(.white)
-            .padding(.horizontal, 5)
-            .padding(.vertical, 1.5)
-            .background(Tokens.Colors.ink3)
-            .clipShape(Capsule())
-            .help(lateCancellationTooltip)
-        }
-    }
-
-    private var lateCancellationTooltip: String {
-        let ghosts = table.ghostGuests
-        let names = ghosts.map(\.fullName).sorted().joined(separator: ", ")
-        return "\(ghosts.count) späte Absage\(ghosts.count == 1 ? "" : "n") – Platz frei, Catering ist bestellt: \(names)"
-    }
-
-    @ViewBuilder
-    private var badgeOverlay: some View {
-        if table.isBridalTable {
-            ZStack {
-                Circle().fill(Tokens.Colors.accent)
-                Image(systemName: "heart.fill")
-                    .font(.system(size: 9))
-                    .foregroundStyle(.white)
-            }
-            .frame(width: 18, height: 18)
-            .offset(x: 6, y: -6)
-            .shadow(color: .black.opacity(0.15), radius: 2, x: 0, y: 1)
-        } else if hasPinnedGuest {
-            ZStack {
-                Circle().fill(Tokens.Colors.accent)
-                Image(systemName: "pin.fill")
-                    .font(.system(size: 8))
-                    .foregroundStyle(.white)
-            }
-            .frame(width: 18, height: 18)
-            .offset(x: 6, y: -6)
-            .shadow(color: .black.opacity(0.15), radius: 2, x: 0, y: 1)
-        }
-    }
 }
 #endif

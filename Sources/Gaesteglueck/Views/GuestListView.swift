@@ -34,7 +34,7 @@ struct GuestListView: View {
 
     @State private var sideFilter: PartnerAssignment? = nil
     @State private var tagFilter: TagCategory? = nil
-    @State private var statusFilter: StatusFilter? = nil
+    @State private var statusFilter: GuestListFiltering.StatusFilter? = nil
     @State private var ageFilter: AgeCategory? = nil
 
     @State private var isCheckingFunFacts: Bool = false
@@ -66,208 +66,16 @@ struct GuestListView: View {
     @AppStorage("guestlist.col.tisch.visible") private var showTischColumn: Bool = true
     @AppStorage("guestlist.col.menu.visible") private var showMenuColumn: Bool = true
 
-    enum StatusFilter: String, CaseIterable, Hashable {
-        case assigned = "Tisch zugewiesen"
-        case unassigned = "Ohne Tisch"
-        case pinned = "Gepinnt"
-        case allergies = "Allergie"
-        case funfactGood = "FunFact ok"
-        case funfactPending = "FunFact unklar"
-        case funfactEmpty = "FunFact fehlt"
-        case phoneSet = "Telefon ok"
-        case phoneMissing = "Telefon fehlt"
-    }
-
-    private struct RegistrationSection: Identifiable {
-        let id: String
-        let label: String
-        let isBridal: Bool
-        let guests: [Guest]
-        /// Gäste die zwar zur Anmeldung gehören aber AKTUELL durch den Filter
-        /// fallen — werden gedimmt mitgerendert damit Familienkontext sichtbar
-        /// bleibt. Leer wenn kein Filter aktiv ist.
-        let dimmedGuests: [Guest]
-    }
-
-    private var hasActiveFilter: Bool {
-        sideFilter != nil || tagFilter != nil || statusFilter != nil || ageFilter != nil || !searchText.isEmpty
-    }
-
-    /// Wenn ein FunFact-Filter aktiv ist, NICHT nach Anmeldegruppen
-    /// gruppieren — der User soll jeden einzelnen Gast durchgehen koennen.
-    private var isFunFactFilterActive: Bool {
-        switch statusFilter {
-        case .funfactGood, .funfactPending, .funfactEmpty: return true
-        default: return false
-        }
-    }
-
-    private var registrationSections: [RegistrationSection] {
-        let filtered = filteredGuests
-        let filteredIDs = Set(filtered.map(\.id))
-
-        // Bei FunFact-Filter: flache alphabetische Liste, keine Gruppen
-        if isFunFactFilterActive {
-            let flat = filtered.sorted { lhs, rhs in
-                if lhs.firstName == rhs.firstName { return lhs.lastName < rhs.lastName }
-                return lhs.firstName < rhs.firstName
-            }
-            return flat.isEmpty ? [] : [RegistrationSection(
-                id: "funfact-flat",
-                label: "Alle (\(flat.count))",
-                isBridal: false,
-                guests: flat,
-                dimmedGuests: []
-            )]
-        }
-
-        // Brautpaar identifizieren — entweder via Tag "Brautpaar" oder als
-        // Mitglieder einer Constraint mit reason "Brautpaar".
-        let brautpaarTag = tags.first { $0.name == "Brautpaar" }
-        let bridalIDs = Set(brautpaarTag?.guestIDs ?? [])
-
-        var sections: [RegistrationSection] = []
-
-        // Brautpaar zuerst — beim Brautpaar zeigen wir bei Filter beide oder
-        // keinen, kein Gedimme nötig.
-        let bridal = filtered.filter { bridalIDs.contains($0.id) }
-            .sorted { $0.firstName < $1.firstName }
-        if !bridal.isEmpty {
-            sections.append(RegistrationSection(
-                id: "brautpaar",
-                label: "Brautpaar",
-                isBridal: true,
-                guests: bridal,
-                dimmedGuests: []
-            ))
-        }
-
-        // Anderen Gäste nach registrationGroup gruppieren — diesmal aus dem
-        // VOLLSTÄNDIGEN Datensatz, damit Familienmitglieder die durchs Filter
-        // fallen trotzdem als Kontext mitsichtbar bleiben (z.B. Heike Becker
-        // taucht in einem Fasching-Tag-Filter neben Clara Stein auf).
-        let allNonBridal = guests.filter { !bridalIDs.contains($0.id) }
-        let allWithGroup = allNonBridal.filter { $0.registrationGroup != nil }
-        let groupedDict = Dictionary(grouping: allWithGroup) { $0.registrationGroup! }
-        let sortedGroups = groupedDict.sorted { lhs, rhs in
-            sectionLabel(for: lhs.value) < sectionLabel(for: rhs.value)
-        }
-        for (groupID, members) in sortedGroups {
-            let matching = members.filter { filteredIDs.contains($0.id) }
-            // Gruppen ohne einen einzigen Treffer ausblenden — sonst sieht der
-            // User bei aktivem Filter sein gesamtes Dataset als gedimmt.
-            guard !matching.isEmpty else { continue }
-            let dimmed = members.filter { !filteredIDs.contains($0.id) }
-            sections.append(RegistrationSection(
-                id: groupID.uuidString,
-                label: sectionLabel(for: members),
-                isBridal: false,
-                guests: matching.sorted { $0.firstName < $1.firstName },
-                dimmedGuests: dimmed.sorted { $0.firstName < $1.firstName }
-            ))
-        }
-
-        // Einzeln hinzugefügte am Ende
-        let nonBridalFiltered = filtered.filter { !bridalIDs.contains($0.id) }
-        let withoutGroup = nonBridalFiltered.filter { $0.registrationGroup == nil }
-        if !withoutGroup.isEmpty {
-            sections.append(RegistrationSection(
-                id: "standalone",
-                label: "Einzeln hinzugefügt",
-                isBridal: false,
-                guests: withoutGroup.sorted { $0.firstName < $1.firstName },
-                dimmedGuests: []
-            ))
-        }
-
-        return sections
-    }
-
-    private func sectionLabel(for members: [Guest]) -> String {
-        let lastNames = members.map { $0.lastName }.filter { !$0.isEmpty }
-        let counts = Dictionary(grouping: lastNames, by: { $0 }).mapValues(\.count)
-        if let maxCount = counts.values.max() {
-            // Alle Nachnamen die gleichhäufig vorkommen — wenn nur einer
-            // dominiert: "Familie Müller". Bei Mehrfach-Nachnamen-Anmeldungen
-            // (Stein + Becker als Paar/Wohngemeinschaft): alphabetisch
-            // sortiert beide. Ohne sort wäre die Anzeige nicht-deterministisch
-            // weil Dictionary-Reihenfolge wechselt — der Header würde beim
-            // Anklicken eines Gastes "toggeln".
-            let topNames = counts.filter { $0.value == maxCount }.keys.sorted()
-            if topNames.count == 1 {
-                return "Familie \(topNames[0])"
-            }
-            // Bei zwei kombinierten Familien: "Stein & Becker"
-            return topNames.joined(separator: " & ")
-        }
-        let firstNames = members.map(\.firstName).prefix(3).joined(separator: " & ")
-        return firstNames.isEmpty ? "Anmeldung" : firstNames
-    }
-
-    private var filteredGuests: [Guest] {
-        // Vorberechnung: welche registrationGroups haben mindestens ein
-        // Mitglied das schon eine Seite (Alice/Bob/Beide) hat? Solche
-        // Anmeldungen blenden wir beim "Unzugeordnet"-Filter komplett aus —
-        // weil ein zugeordnetes Familienmitglied via mustSitTogether-Constraint
-        // den Rest der Familie zum gleichen Tisch zieht. Es gibt also
-        // keinen echten "Unzugeordnet"-Action-Item mehr für diese Familie.
-        let groupsWithAnyAssignment: Set<UUID> = Set(
-            guests
-                .filter { $0.partnerAssignment != .unassigned && $0.registrationGroup != nil }
-                .compactMap(\.registrationGroup)
+    private var filtering: GuestListFiltering {
+        GuestListFiltering(
+            guests: guests,
+            tags: tags,
+            searchText: searchText,
+            sideFilter: sideFilter,
+            tagFilter: tagFilter,
+            statusFilter: statusFilter,
+            ageFilter: ageFilter
         )
-
-        return guests.filter { guest in
-            if let sideFilter {
-                if sideFilter == .unassigned {
-                    if guest.partnerAssignment != .unassigned { return false }
-                    if let group = guest.registrationGroup,
-                       groupsWithAnyAssignment.contains(group) {
-                        // Familienkollege schon zugeordnet → Anmeldung zählt
-                        // nicht mehr als offen.
-                        return false
-                    }
-                } else if guest.partnerAssignment != sideFilter {
-                    return false
-                }
-            }
-            if let statusFilter {
-                switch statusFilter {
-                case .assigned where guest.table == nil: return false
-                case .unassigned where guest.table != nil: return false
-                case .pinned where !guest.isPinned: return false
-                case .allergies where !guest.hasIntolerances: return false
-                case .funfactGood:
-                    if !guest.funFactApproved || guest.funFact.trimmingCharacters(in: .whitespaces).isEmpty { return false }
-                case .funfactPending:
-                    if guest.funFactApproved || guest.funFact.trimmingCharacters(in: .whitespaces).isEmpty { return false }
-                case .funfactEmpty:
-                    if !guest.funFact.trimmingCharacters(in: .whitespaces).isEmpty { return false }
-                case .phoneSet:
-                    if guest.phoneNumber.trimmingCharacters(in: .whitespaces).isEmpty { return false }
-                case .phoneMissing:
-                    if !guest.phoneNumber.trimmingCharacters(in: .whitespaces).isEmpty { return false }
-                    if registrationGroupHasPhone(for: guest) { return false }
-                default: break
-                }
-            }
-            if let tagFilter {
-                let guestTags = tags.filter { $0.guestIDs.contains(guest.id) }
-                let hasMatchingTag = guestTags.contains(where: { $0.category == tagFilter })
-                // Spezialfall Familie: Familienrolle am Gast (Vater, Mutter,
-                // Onkel, Cousine, …) zählt auch als "Familie" — sonst würde
-                // der Filter blutsverwandte Personen verstecken nur weil sie
-                // keinen expliziten Family-Tag haben (Family-Tags werden
-                // bewusst NICHT erzeugt, weil familyRole die Wahrheit ist).
-                let hasFamilyRoleMatch = tagFilter == .family && guest.familyRole != nil
-                if !hasMatchingTag && !hasFamilyRoleMatch { return false }
-            }
-            if let ageFilter, guest.ageCategory != ageFilter { return false }
-            if !searchText.isEmpty {
-                return guest.fullName.localizedCaseInsensitiveContains(searchText)
-            }
-            return true
-        }
     }
 
     var body: some View {
@@ -388,7 +196,7 @@ struct GuestListView: View {
                     anchorGuestID = nil
                 }
                 .warmButton(.ghost)
-            } else if hasActiveFilter, !filteredGuests.isEmpty {
+            } else if filtering.hasActiveFilter, !filtering.filteredGuests.isEmpty {
                 // Wenn nichts ausgewählt aber ein Filter aktiv ist → Quick-
                 // Action zum Massen-Selektieren des sichtbaren Bereichs.
                 // Workflow: Filter side=Bob + tag=Freundesgruppe → klick
@@ -399,7 +207,7 @@ struct GuestListView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "checkmark.circle")
-                        Text("Alle \(filteredGuests.count) auswählen")
+                        Text("Alle \(filtering.filteredGuests.count) auswählen")
                     }
                 }
                 .warmButton(.secondary)
@@ -473,39 +281,6 @@ struct GuestListView: View {
         return "\(total) Gäste · \(registrationCount) Anmeldungen · \(allergic) mit Allergie"
     }
 
-    /// Zählt Gäste pro Tag-Kategorie — für `.family` werden zusätzlich Gäste
-    /// mit gepflegter Familienrolle gezählt (Vater, Mutter, Onkel, Cousine,
-    /// …), weil das die eigentliche Quelle der Wahrheit für Familie ist.
-    private func tagCategoryCount(_ cat: TagCategory) -> Int {
-        let taggedIDs = Set(tags.filter { $0.category == cat }.flatMap { $0.guestIDs })
-        if cat == .family {
-            let familyRoleIDs = Set(guests.filter { $0.familyRole != nil }.map(\.id))
-            return taggedIDs.union(familyRoleIDs).count
-        }
-        return taggedIDs.count
-    }
-
-    /// Zählt Gäste pro Seite — für "Unzugeordnet" wird die schlaue Filter-
-    /// Logik angewendet: nur Gäste deren Anmeldungsgruppe komplett offen ist
-    /// werden als echte Action-Items gezählt. Sonst wäre die Zahl `26` während
-    /// die Liste leer ist (weil alle 26 via Familie automatisch mitgehen).
-    private func countForSide(_ side: PartnerAssignment) -> Int {
-        if side == .unassigned {
-            let groupsWithAnyAssignment: Set<UUID> = Set(
-                guests
-                    .filter { $0.partnerAssignment != .unassigned && $0.registrationGroup != nil }
-                    .compactMap(\.registrationGroup)
-            )
-            return guests.filter { g in
-                guard g.partnerAssignment == .unassigned else { return false }
-                if let group = g.registrationGroup,
-                   groupsWithAnyAssignment.contains(group) { return false }
-                return true
-            }.count
-        }
-        return guests.filter { $0.partnerAssignment == side }.count
-    }
-
     // MARK: - Filter Rail
 
     private var filterRail: some View {
@@ -521,7 +296,7 @@ struct GuestListView: View {
                     ForEach(PartnerAssignment.allCases) { side in
                         filterChip(
                             label: side.displayName(for: events.first),
-                            count: countForSide(side),
+                            count: filtering.countForSide(side),
                             active: sideFilter == side,
                             dotColor: side.color,
                             action: { sideFilter = sideFilter == side ? nil : side }
@@ -532,7 +307,7 @@ struct GuestListView: View {
                 if !tags.isEmpty || guests.contains(where: { $0.familyRole != nil }) {
                     filterGroup("Tag-Kategorien") {
                         ForEach(TagCategory.allCases) { cat in
-                            let count = tagCategoryCount(cat)
+                            let count = filtering.tagCategoryCount(cat)
                             if count > 0 {
                                 filterChip(
                                     label: cat.rawValue,
@@ -566,8 +341,8 @@ struct GuestListView: View {
                 }
 
                 filterGroup("Status") {
-                    ForEach(StatusFilter.allCases, id: \.self) { status in
-                        let count = countForStatus(status)
+                    ForEach(GuestListFiltering.StatusFilter.allCases, id: \.self) { status in
+                        let count = filtering.countForStatus(status)
                         filterChip(
                             label: status.rawValue,
                             count: count,
@@ -639,34 +414,6 @@ struct GuestListView: View {
         }
     }
 
-    private func countForStatus(_ status: StatusFilter) -> Int {
-        switch status {
-        case .assigned: guests.filter { $0.table != nil }.count
-        case .unassigned: guests.filter { $0.table == nil }.count
-        case .pinned: guests.filter { $0.isPinned }.count
-        case .allergies: guests.filter { $0.hasIntolerances }.count
-        case .funfactGood: guests.filter { $0.funFactApproved && !$0.funFact.trimmingCharacters(in: .whitespaces).isEmpty }.count
-        case .funfactPending: guests.filter { !$0.funFactApproved && !$0.funFact.trimmingCharacters(in: .whitespaces).isEmpty }.count
-        case .funfactEmpty: guests.filter { $0.funFact.trimmingCharacters(in: .whitespaces).isEmpty }.count
-        case .phoneSet: guests.filter { !$0.phoneNumber.trimmingCharacters(in: .whitespaces).isEmpty }.count
-        case .phoneMissing: guests.filter { g in
-            g.phoneNumber.trimmingCharacters(in: .whitespaces).isEmpty
-                && !registrationGroupHasPhone(for: g)
-        }.count
-        }
-    }
-
-    /// True wenn jemand aus der gleichen Anmeldungs-Gruppe bereits eine
-    /// Telefonnummer hinterlegt hat — pro Anmeldung reicht eine Nummer.
-    private func registrationGroupHasPhone(for guest: Guest) -> Bool {
-        guard let group = guest.registrationGroup else { return false }
-        return guests.contains { peer in
-            peer.id != guest.id
-                && peer.registrationGroup == group
-                && !peer.phoneNumber.trimmingCharacters(in: .whitespaces).isEmpty
-        }
-    }
-
     // MARK: - Guest Table
 
     private var guestTable: some View {
@@ -697,7 +444,7 @@ struct GuestListView: View {
                 Rectangle().fill(Tokens.Colors.line).frame(height: 1)
             }
 
-            if filteredGuests.isEmpty {
+            if filtering.filteredGuests.isEmpty {
                 EmptyStateCard(
                     icon: "person.3.sequence",
                     title: searchText.isEmpty ? "Keine Gäste gefunden" : "Keine Treffer",
@@ -710,7 +457,7 @@ struct GuestListView: View {
                 guestTableHeader
                 ScrollView {
                     LazyVStack(spacing: 0, pinnedViews: []) {
-                        ForEach(registrationSections) { section in
+                        ForEach(filtering.registrationSections) { section in
                             sectionHeader(section)
                             ForEach(section.guests) { guest in
                                 guestRow(guest: guest)
@@ -749,7 +496,7 @@ struct GuestListView: View {
             }
     }
 
-    private func sectionHeader(_ section: RegistrationSection) -> some View {
+    private func sectionHeader(_ section: GuestListFiltering.RegistrationSection) -> some View {
         let total = section.guests.count + section.dimmedGuests.count
         let countText: String
         if section.dimmedGuests.isEmpty {
@@ -986,7 +733,7 @@ struct GuestListView: View {
         if flags.contains(.shift), let anchor = anchorGuestID {
             // Range-Auswahl: alles zwischen anchor und guest in der aktuell sichtbaren
             // Liste markieren — folgt der Reihenfolge die der User sieht.
-            let visible = filteredGuests
+            let visible = filtering.filteredGuests
             if let aIdx = visible.firstIndex(where: { $0.id == anchor }),
                let bIdx = visible.firstIndex(where: { $0.id == guest.id }) {
                 let lo = min(aIdx, bIdx)
@@ -1280,8 +1027,9 @@ struct GuestListView: View {
     /// Bulk-Tag zum Two-Step-Massen-Workflow: Filter setzen → "Alle X
     /// auswählen" → Inspector → "Tag hinzufügen" → fertig.
     private func selectAllVisible() {
-        selectedGuestIDs = Set(filteredGuests.map(\.id))
-        anchorGuestID = filteredGuests.first?.id
+        let visible = filtering.filteredGuests
+        selectedGuestIDs = Set(visible.map(\.id))
+        anchorGuestID = visible.first?.id
     }
 
     /// Erzeugt einen mustSitTogether-Constraint für alle aktuell selektierten
@@ -1660,174 +1408,6 @@ struct GuestListView: View {
         try? modelContext.save()
         showingFunFactReview = false
         funFactProposals = []
-    }
-}
-
-// MARK: - FunFact-Review
-
-private struct FunFactReviewSheet: View {
-    let proposals: [FunFactNormalizer.Result]
-    @Binding var selection: Set<UUID>
-    let onApply: () -> Void
-    @Environment(\.dismiss) private var dismiss
-
-    private var costLine: String {
-        let t = LLMCostEstimator.funfactBatchTokens(texts: proposals.map(\.original))
-        let pricePerM = LLMClientFactory.effectiveOpenRouterPricePerM(for: .funfact)
-        guard pricePerM > 0 else {
-            return "Lokal (LM Studio) — kostenlos · ~\(t.prompt + t.completion) Tokens"
-        }
-        let usd = LLMCostEstimator.usd(
-            promptTokens: t.prompt, completionTokens: t.completion,
-            blendedUSDPerMillion: pricePerM
-        )
-        return "Geschätzte Kosten dieses Laufs: \(LLMCostEstimator.format(usd: usd)) (OpenRouter)"
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text("FunFacts vereinheitlichen")
-                    .font(.system(size: 16, weight: .semibold, design: .rounded))
-                Spacer()
-                Text("\(selection.count)/\(proposals.count) ausgewählt")
-                    .font(.system(size: 12, design: .rounded))
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 16)
-            Text(costLine)
-                .font(.system(size: 11, design: .rounded))
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 16)
-                .padding(.bottom, 12)
-            Divider()
-            ScrollView {
-                VStack(spacing: 8) {
-                    ForEach(proposals) { p in
-                        Button {
-                            if selection.contains(p.guestID) { selection.remove(p.guestID) }
-                            else { selection.insert(p.guestID) }
-                        } label: {
-                            HStack(alignment: .top, spacing: 10) {
-                                Image(systemName: selection.contains(p.guestID)
-                                      ? "checkmark.square.fill" : "square")
-                                    .foregroundStyle(selection.contains(p.guestID) ? Color.accentColor : .secondary)
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(p.original)
-                                        .font(.system(size: 12, design: .rounded))
-                                        .foregroundStyle(.secondary)
-                                        .strikethrough()
-                                    Text(p.normalized)
-                                        .font(.system(size: 13, weight: .medium, design: .rounded))
-                                }
-                                Spacer(minLength: 0)
-                            }
-                            .padding(10)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(Color.gray.opacity(0.06))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(16)
-            }
-            Divider()
-            HStack {
-                Button("Abbrechen") { dismiss() }
-                Spacer()
-                Button("Ausgewählte übernehmen") { onApply() }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(selection.isEmpty)
-            }
-            .padding(16)
-        }
-        .frame(width: 620, height: 560)
-    }
-}
-
-// MARK: - Simple flow layout for tag chips
-
-private struct ChipFlowLayout: Layout {
-    var spacing: CGFloat = 4
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let width = proposal.width ?? .infinity
-        var rowWidth: CGFloat = 0
-        var rowHeight: CGFloat = 0
-        var totalHeight: CGFloat = 0
-        for sub in subviews {
-            let s = sub.sizeThatFits(.unspecified)
-            if rowWidth + s.width > width, rowWidth > 0 {
-                totalHeight += rowHeight + spacing
-                rowWidth = 0
-                rowHeight = 0
-            }
-            rowWidth += s.width + spacing
-            rowHeight = max(rowHeight, s.height)
-        }
-        totalHeight += rowHeight
-        return CGSize(width: width.isFinite ? width : rowWidth, height: totalHeight)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var x: CGFloat = bounds.minX
-        var y: CGFloat = bounds.minY
-        var rowHeight: CGFloat = 0
-        for sub in subviews {
-            let s = sub.sizeThatFits(.unspecified)
-            if x + s.width > bounds.maxX, x > bounds.minX {
-                x = bounds.minX
-                y += rowHeight + spacing
-                rowHeight = 0
-            }
-            sub.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(s))
-            x += s.width + spacing
-            rowHeight = max(rowHeight, s.height)
-        }
-    }
-}
-
-/// Drag-Handle zwischen Tabellen-Spalten. Liegt visuell unsichtbar (transparenter
-/// Hit-Bereich, dünne Linie als Indikator), zeigt resize-Cursor beim Hover und
-/// verstellt per Drag die gebundene Breite — clamped auf [minWidth, maxWidth].
-private struct ColumnResizeHandle: View {
-    @Binding var width: Double
-    let minWidth: Double
-    let maxWidth: Double
-    @State private var startWidth: Double? = nil
-
-    var body: some View {
-        Rectangle()
-            .fill(Color.clear)
-            .frame(width: 6)
-            .contentShape(Rectangle())
-            .overlay(
-                Rectangle()
-                    .fill(Tokens.Colors.line2)
-                    .frame(width: 1)
-                    .opacity(0.5)
-            )
-            #if os(macOS)
-            .onHover { inside in
-                if inside {
-                    NSCursor.resizeLeftRight.push()
-                } else {
-                    NSCursor.pop()
-                }
-            }
-            #endif
-            .gesture(
-                DragGesture()
-                    .onChanged { value in
-                        if startWidth == nil { startWidth = width }
-                        let proposed = (startWidth ?? width) + Double(value.translation.width)
-                        width = Swift.max(minWidth, Swift.min(maxWidth, proposed))
-                    }
-                    .onEnded { _ in startWidth = nil }
-            )
     }
 }
 #endif

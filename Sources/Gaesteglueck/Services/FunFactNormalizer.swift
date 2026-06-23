@@ -12,6 +12,11 @@ enum FunFactNormalizer {
         var id: UUID { guestID }
         let original: String
         let normalized: String
+
+        var isRewrite: Bool {
+            original.trimmingCharacters(in: .whitespacesAndNewlines)
+                != normalized.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
     }
 
     enum Error: Swift.Error, LocalizedError {

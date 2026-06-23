@@ -37,5 +37,9 @@ final class Tag {
         guestIDs.contains(guestID)
     }
 
+    func includesAny(of ids: Set<UUID>) -> Bool {
+        guestIDs.contains(where: ids.contains)
+    }
+
     var guestCount: Int { guestIDs.count }
 }

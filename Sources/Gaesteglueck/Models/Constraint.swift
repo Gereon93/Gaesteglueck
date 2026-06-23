@@ -22,4 +22,8 @@ final class Constraint {
     func involves(_ guestID: UUID) -> Bool {
         guestIDs.contains(guestID)
     }
+
+    func isMustSitLink(for ids: Set<UUID>) -> Bool {
+        type == .mustSitTogether && Set(guestIDs) == ids
+    }
 }

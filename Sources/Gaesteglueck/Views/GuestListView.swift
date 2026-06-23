@@ -206,11 +206,10 @@ struct GuestListView: View {
         guard ids.count >= 2 else { return }
         let descriptor = FetchDescriptor<Constraint>()
         if let existing = try? modelContext.fetch(descriptor),
-           existing.contains(where: { $0.type == .mustSitTogether && Set($0.guestIDs) == Set(ids) }) {
+           MustSitTogetherLink.alreadyLinked(ids, in: existing) {
             return
         }
-        let names = ids.compactMap { id in guests.first { $0.id == id }?.firstName }.sorted().joined(separator: " + ")
-        let reason = names.isEmpty ? "Manuell verknüpft" : "Müssen zusammen sitzen: \(names)"
+        let reason = MustSitTogetherLink.reason(for: ids, in: guests)
         let c = Constraint(type: .mustSitTogether, guestIDs: ids, reason: reason)
         modelContext.insert(c)
         try? modelContext.save()

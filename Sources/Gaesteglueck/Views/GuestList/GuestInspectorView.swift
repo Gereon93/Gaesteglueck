@@ -216,13 +216,11 @@ struct GuestInspectorView: View {
     }
 
     private func tagsOnAnyOfSelection() -> [Tag] {
-        tags.filter { tag in
-            tag.guestIDs.contains(where: { selectedGuestIDs.contains($0) })
-        }
+        GuestTagSelection.tagsOnAny(of: selectedGuestIDs, in: tags)
     }
 
     private func membersInSelection(of tag: Tag) -> [UUID] {
-        tag.guestIDs.filter { selectedGuestIDs.contains($0) }
+        GuestTagSelection.members(of: tag, in: selectedGuestIDs)
     }
 
     private func addTagToSelection(_ tag: Tag) {

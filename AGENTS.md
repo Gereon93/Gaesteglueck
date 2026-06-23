@@ -164,7 +164,7 @@ aber einen bestehenden Workflow bricht, ist schlimmer als ein Style-Problem.
 
 ```bash
 swift build                                          # Bauen
-swift test                                           # ~225 Tests in 41 Suites
+swift test                                           # ~244 Tests in 45 Suites
 swift-format lint --recursive Sources/ Tests/ --strict   # Lint (CI)
 ./scripts/build-macos-app.sh                         # .app-Bundle nach dist/
 ```

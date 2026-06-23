@@ -47,7 +47,7 @@ enum VisualSeatingPlanExporter {
         }
     }
 
-    private static func smartDedupedNames(for guests: [Guest]) -> [UUID: String] {
+    static func smartDedupedNames(for guests: [Guest]) -> [UUID: String] {
         var byFirst: [String: [Guest]] = [:]
         for g in guests {
             byFirst[g.firstName, default: []].append(g)
@@ -79,44 +79,45 @@ enum VisualSeatingPlanExporter {
 
 #if os(macOS)
 extension VisualSeatingPlanExporter {
-    private static let pageWidth: CGFloat = 1191   // A3 landscape
-    private static let pageHeight: CGFloat = 842
-    private static let titleAreaHeight: CGFloat = 80
-    private static let canvasMargin: CGFloat = 40
+    static let pageWidth: CGFloat = 1191   // A3 landscape
+    static let pageHeight: CGFloat = 842
+    static let titleAreaHeight: CGFloat = 80
+    static let canvasMargin: CGFloat = 40
 
-    private static let baseSeatDotDiameter: CGFloat = 8
-    private static let baseDietDotDiameter: CGFloat = 5
-    private static let baseNameFontSize: CGFloat = 9
-    private static let baseNameOffset: CGFloat = 6
+    static let baseSeatDotDiameter: CGFloat = 8
+    static let baseDietDotDiameter: CGFloat = 5
+    static let baseNameFontSize: CGFloat = 9
+    static let baseNameOffset: CGFloat = 6
 
     // Colors
     // Vegan = Gold (#c9a227), Vegetarisch = Grün (#3f7a30) — kanonisch wie
     // Tokens.Colors.dietVegan/dietVegetarian, hier als NSColor gespiegelt.
-    private static let veganColor   = NSColor(srgbRed: 0.788, green: 0.635, blue: 0.153, alpha: 1)
-    private static let vegColor     = NSColor(srgbRed: 0.247, green: 0.478, blue: 0.188, alpha: 1)
-    private static let allergyColor = NSColor(srgbRed: 0.77, green: 0.29, blue: 0.29, alpha: 1)
+    static let veganColor   = NSColor(srgbRed: 0.788, green: 0.635, blue: 0.153, alpha: 1)
+    static let vegColor     = NSColor(srgbRed: 0.247, green: 0.478, blue: 0.188, alpha: 1)
+    static let allergyColor = NSColor(srgbRed: 0.77, green: 0.29, blue: 0.29, alpha: 1)
     // Alter (#6e8aab = Tokens.Colors.tagActivity) — Blau, klar abgesetzt von
     // Diät (Gold/Grün) und Allergie (Rot).
-    private static let ageColor     = NSColor(srgbRed: 0.431, green: 0.541, blue: 0.671, alpha: 1)
+    static let ageColor     = NSColor(srgbRed: 0.431, green: 0.541, blue: 0.671, alpha: 1)
     // Fleisch/„isst alles" = Standard-Chip-Rosa (#c8788c = Tokens.Colors.accent).
-    private static let mealColor    = NSColor(srgbRed: 0.784, green: 0.471, blue: 0.549, alpha: 1)
-    private static let bridalFill   = NSColor(srgbRed: 0.99, green: 0.93, blue: 0.94, alpha: 1)
-    private static let tableFill    = NSColor(calibratedWhite: 0.97, alpha: 1)
-    private static let accentLine   = NSColor(calibratedRed: 0.78, green: 0.47, blue: 0.55, alpha: 1)
+    static let mealColor    = NSColor(srgbRed: 0.784, green: 0.471, blue: 0.549, alpha: 1)
+    static let bridalFill   = NSColor(srgbRed: 0.99, green: 0.93, blue: 0.94, alpha: 1)
+    static let tableFill    = NSColor(calibratedWhite: 0.97, alpha: 1)
+    static let accentLine   = NSColor(calibratedRed: 0.78, green: 0.47, blue: 0.55, alpha: 1)
 
-    nonisolated(unsafe) private static var currentDisplayNames: [UUID: String] = [:]
-    nonisolated(unsafe) private static var currentRenderScale: CGFloat = 1.0
-    nonisolated(unsafe) private static var currentLegend: SeatingLegend = SeatingLegend(guests: [])
-    /// `currentDisplayNames`/`currentRenderScale` werden während eines Renders
-    /// von Helfern tief im Call-Stack gelesen. Damit parallele Aufrufe nicht
-    /// die Werte gegenseitig überschreiben (race → falsche Skalierung im PNG),
-    /// serialisieren wir die beiden Generate-Methoden über diesen Lock.
-    private static let renderLock = NSLock()
+    /// Render-Kontext eines einzelnen Export-Laufs. Ersetzt die früheren
+    /// `nonisolated(unsafe)` static vars: wird von den Generate-Methoden
+    /// gebaut und durch alle Draw-Helfer gereicht, sodass parallele Exporte
+    /// sich keinen mutablen Zustand mehr teilen — kein Data-Race, kein Lock.
+    struct RenderContext {
+        let displayNames: [UUID: String]
+        let renderScale: CGFloat
+        let legend: SeatingLegend
 
-    private static var seatDotDiameter: CGFloat { baseSeatDotDiameter * currentRenderScale }
-    private static var dietDotDiameter: CGFloat { baseDietDotDiameter * currentRenderScale }
-    private static var nameFontSize: CGFloat    { baseNameFontSize * currentRenderScale }
-    private static var nameOffset: CGFloat      { baseNameOffset * currentRenderScale }
+        var seatDotDiameter: CGFloat { baseSeatDotDiameter * renderScale }
+        var dietDotDiameter: CGFloat { baseDietDotDiameter * renderScale }
+        var nameFontSize: CGFloat    { baseNameFontSize * renderScale }
+        var nameOffset: CGFloat      { baseNameOffset * renderScale }
+    }
 
     /// Erzeugt eine PNG des reinen Sitzplan-Canvas — ohne Header oder
     /// Legende, in hoher Aufloesung. Ideal wenn der User selbst auf
@@ -131,17 +132,12 @@ extension VisualSeatingPlanExporter {
         nameStyle: NameStyle = .smartDeduped,
         pixelsPerCM: CGFloat = 4
     ) -> Data? {
-        renderLock.lock()
-        defer { renderLock.unlock() }
         let allGuests = tables.flatMap(\.attendingGuests)
-        currentDisplayNames = displayNames(for: allGuests, style: nameStyle)
-        currentRenderScale = max(1.0, pixelsPerCM / 2)
-        currentLegend = SeatingLegend(guests: allGuests)
-        defer {
-            currentDisplayNames = [:]
-            currentRenderScale = 1.0
-            currentLegend = SeatingLegend(guests: [])
-        }
+        let ctx = RenderContext(
+            displayNames: displayNames(for: allGuests, style: nameStyle),
+            renderScale: max(1.0, pixelsPerCM / 2),
+            legend: SeatingLegend(guests: allGuests)
+        )
 
         let canvasSize = canvasPixelSize(
             tables: tables,
@@ -153,7 +149,7 @@ extension VisualSeatingPlanExporter {
         let legendScale: CGFloat = max(1.0, pixelsPerCM / 2)
         // availableWidth = legendRect-Innenbreite (pixelW - 32) — derselbe
         // Bereich, in den drawLegend rendert, sodass Reserve & Render synchron sind.
-        let pngLegendHeight = legendBlockHeight(scale: legendScale,
+        let pngLegendHeight = legendBlockHeight(legend: ctx.legend, scale: legendScale,
                                                 availableWidth: canvasSize.width - 32) + 24
         let pixelW = Int(canvasSize.width)
         let pixelH = Int(canvasSize.height + pngLegendHeight)
@@ -193,7 +189,7 @@ extension VisualSeatingPlanExporter {
         }
 
         if !tables.isEmpty {
-            drawCanvas(context: context, tables: tables, in: canvasRect.insetBy(dx: 20, dy: 20))
+            drawCanvas(context: context, ctx: ctx, tables: tables, in: canvasRect.insetBy(dx: 20, dy: 20))
         }
 
         for label in labels {
@@ -207,14 +203,14 @@ extension VisualSeatingPlanExporter {
             width: CGFloat(pixelW) - 32,
             height: pngLegendHeight - 12
         )
-        drawLegend(context: context, in: legendRect)
+        drawLegend(context: context, ctx: ctx, in: legendRect)
 
         guard let cgImage = context.makeImage() else { return nil }
         let bitmap = NSBitmapImageRep(cgImage: cgImage)
         return bitmap.representation(using: .png, properties: [:])
     }
 
-    private static func canvasPixelSize(
+    static func canvasPixelSize(
         tables: [GuestTable],
         roomCMSize: CGSize?,
         pixelsPerCM: CGFloat
@@ -245,7 +241,7 @@ extension VisualSeatingPlanExporter {
         return CGSize(width: widthCM * pixelsPerCM, height: heightCM * pixelsPerCM)
     }
 
-    private static func drawLabel(
+    static func drawLabel(
         context: CGContext,
         label: CanvasLabel,
         in canvasRect: CGRect,
@@ -268,7 +264,7 @@ extension VisualSeatingPlanExporter {
         context.restoreGState()
     }
 
-    private static func canvasPosition(
+    static func canvasPosition(
         forCM cm: CGPoint,
         canvasRect: CGRect,
         tables: [GuestTable],
@@ -289,8 +285,6 @@ extension VisualSeatingPlanExporter {
         date: Date?,
         nameStyle: NameStyle = .smartDeduped
     ) -> Data {
-        renderLock.lock()
-        defer { renderLock.unlock() }
         let pageRect = CGRect(x: 0, y: 0, width: pageWidth, height: pageHeight)
         let pdfData = NSMutableData()
         guard let consumer = CGDataConsumer(data: pdfData as CFMutableData),
@@ -298,10 +292,13 @@ extension VisualSeatingPlanExporter {
             return Data()
         }
 
-        // Display-Names einmal pro Generate berechnen
+        // Display-Names + Legende einmal pro Generate berechnen
         let allGuests = tables.flatMap(\.attendingGuests)
-        currentDisplayNames = displayNames(for: allGuests, style: nameStyle)
-        currentLegend = SeatingLegend(guests: allGuests)
+        let ctx = RenderContext(
+            displayNames: displayNames(for: allGuests, style: nameStyle),
+            renderScale: 1.0,
+            legend: SeatingLegend(guests: allGuests)
+        )
 
         var box = pageRect
         context.beginPage(mediaBox: &box)
@@ -314,6 +311,7 @@ extension VisualSeatingPlanExporter {
         drawHeader(context: context, eventName: eventName, date: date)
 
         let reservedLegendHeight = legendBlockHeight(
+            legend: ctx.legend,
             availableWidth: pageWidth - 2 * canvasMargin
         )
         let fullCanvasHeight = pageHeight - titleAreaHeight - 2 * canvasMargin
@@ -332,7 +330,7 @@ extension VisualSeatingPlanExporter {
                 color: PDFColors.tertiary
             )
         } else {
-            drawCanvas(context: context, tables: tables, in: canvasArea)
+            drawCanvas(context: context, ctx: ctx, tables: tables, in: canvasArea)
         }
 
         let legendArea = CGRect(
@@ -341,7 +339,7 @@ extension VisualSeatingPlanExporter {
             width: pageWidth - 2 * canvasMargin,
             height: reservedLegendHeight
         )
-        drawLegend(context: context, in: legendArea)
+        drawLegend(context: context, ctx: ctx, in: legendArea)
 
         // WICHTIG: closePDF MUSS vor `return pdfData as Data` laufen.
         // Wenn closePDF in einem `defer` steht, passiert der NSData→Data
@@ -350,682 +348,7 @@ extension VisualSeatingPlanExporter {
         NSGraphicsContext.restoreGraphicsState()
         context.endPage()
         context.closePDF()
-        currentDisplayNames = [:]
-        currentLegend = SeatingLegend(guests: [])
-
         return pdfData as Data
-    }
-
-    // MARK: - Header
-
-    private static func drawHeader(context: CGContext, eventName: String, date: Date?) {
-        drawText(
-            "Sitzplan: \(eventName)",
-            at: CGPoint(x: canvasMargin, y: 32),
-            font: .boldSystemFont(ofSize: 28)
-        )
-        if let date {
-            let fmt = DateFormatter()
-            fmt.dateStyle = .long
-            fmt.locale = Locale(identifier: "de_DE")
-            drawText(
-                fmt.string(from: date),
-                at: CGPoint(x: canvasMargin, y: 60),
-                font: .systemFont(ofSize: 13),
-                color: PDFColors.secondary
-            )
-        }
-        context.saveGState()
-        context.setStrokeColor(accentLine.cgColor)
-        context.setLineWidth(2)
-        let lineY = titleAreaHeight + 4
-        context.move(to: CGPoint(x: canvasMargin, y: lineY))
-        context.addLine(to: CGPoint(x: pageWidth - canvasMargin, y: lineY))
-        context.strokePath()
-        context.restoreGState()
-    }
-
-    // MARK: - Legend
-
-    /// Höhe des Legenden-Blocks abhängig von der Anzahl Allergen-Einträge.
-    /// Wird oben in den Generatoren verwendet, um Platz unten zu reservieren.
-    private static func legendBlockHeight(
-        scale: CGFloat = 1.0,
-        availableWidth: CGFloat = 0
-    ) -> CGFloat {
-        var h: CGFloat = 26 // Header + Diät-Zeile
-        let legend = currentLegend
-        // Spalten-Logik IDENTISCH zu drawLegend, damit die Reserve nicht
-        // pauschal zu hoch ist (z.B. auf A3 mehr Spalten möglich = weniger Zeilen).
-        let entryWidth: CGFloat = 130 * scale
-        let cols = max(3, availableWidth > 0 ? Int(availableWidth / entryWidth) : 3)
-        if !legend.isEmpty {
-            let rows = (legend.entries.count + cols - 1) / cols
-            h += CGFloat(rows) * 14 + 16
-        }
-        if legend.hasAgeMarkers {
-            let rows = (legend.ageCategories.count + cols - 1) / cols
-            h += CGFloat(rows) * 14 + 16
-        }
-        return h * scale
-    }
-
-    /// Voll-formatierter Legenden-Block: Diät-Farben + nummerierte
-    /// Allergen-Liste. `area` ist der gesamte zur Verfügung stehende Bereich
-    /// (z.B. der untere Streifen unter dem Tisch-Canvas). Alle Größen
-    /// skalieren mit `currentRenderScale`, damit die Legende auf high-res
-    /// PNGs proportional zur Tisch-Beschriftung mitwächst.
-    private static func drawLegend(context: CGContext, in area: CGRect) {
-        let s = currentRenderScale
-        let headerFont = NSFont.boldSystemFont(ofSize: 9 * s)
-        let font = NSFont.systemFont(ofSize: 9 * s)
-        let numberFont = NSFont.boldSystemFont(ofSize: 9 * s)
-
-        // Trenner-Linie oben über dem Legenden-Bereich.
-        context.saveGState()
-        context.setStrokeColor(NSColor(calibratedWhite: 0.85, alpha: 1).cgColor)
-        context.setLineWidth(0.5 * s)
-        context.move(to: CGPoint(x: area.minX, y: area.minY))
-        context.addLine(to: CGPoint(x: area.maxX, y: area.minY))
-        context.strokePath()
-        context.restoreGState()
-
-        var y = area.minY + 12 * s
-        drawText("LEGENDE", at: CGPoint(x: area.minX, y: y - 5 * s),
-                 font: headerFont, color: PDFColors.secondary)
-        y += 12 * s
-
-        // Diät-Swatches in einer Zeile (Kreise mit farbigem Rand wie die Chips).
-        let swatch: CGFloat = 8 * s
-        func dietSwatch(_ x: CGFloat, fill: NSColor, label: String) {
-            let rect = CGRect(x: x, y: y - 5 * s, width: swatch, height: swatch)
-            context.saveGState()
-            context.setFillColor(fill.withAlphaComponent(0.20).cgColor)
-            context.fillEllipse(in: rect)
-            context.setStrokeColor(fill.cgColor)
-            context.setLineWidth(1.2 * s)
-            context.strokeEllipse(in: rect.insetBy(dx: 0.6 * s, dy: 0.6 * s))
-            context.restoreGState()
-            drawText(label, at: CGPoint(x: x + swatch + 4 * s, y: y - 5 * s),
-                     font: font, color: PDFColors.primary)
-        }
-        dietSwatch(area.minX, fill: mealColor, label: "Fleisch")
-        dietSwatch(area.minX + 64 * s, fill: veganColor, label: "Vegan")
-        dietSwatch(area.minX + 128 * s, fill: vegColor, label: "Vegetarisch")
-
-        // Spalten verteilen über die volle Breite. Mindestens 3 Spalten;
-        // bei vielen Einträgen mehr, sodass nichts überläuft.
-        let legend = currentLegend
-        let entryWidth: CGFloat = 130 * s
-        let columns = max(3, Int(area.width / entryWidth))
-        let columnWidth = area.width / CGFloat(columns)
-
-        // Unverträglichkeiten-Sektion — nur wenn Einträge vorhanden.
-        if !legend.entries.isEmpty {
-            y += 16 * s
-            drawText("UNVERTRÄGLICHKEITEN", at: CGPoint(x: area.minX, y: y - 5 * s),
-                     font: headerFont, color: PDFColors.secondary)
-            y += 12 * s
-
-            for (idx, entry) in legend.entries.enumerated() {
-                let col = idx % columns
-                let row = idx / columns
-                let cx = area.minX + CGFloat(col) * columnWidth
-                let cy = y + CGFloat(row) * 14 * s
-
-                // Nummer als rote Kapsel.
-                let numStr = "\(entry.number)"
-                let numAttr: [NSAttributedString.Key: Any] = [
-                    .font: numberFont, .foregroundColor: NSColor.white
-                ]
-                let numSize = (numStr as NSString).size(withAttributes: numAttr)
-                let pillWidth = max(14 * s, numSize.width + 8 * s)
-                let pillHeight = 11 * s
-                let pillRect = CGRect(x: cx, y: cy - 7 * s, width: pillWidth, height: pillHeight)
-                context.saveGState()
-                context.setFillColor(allergyColor.cgColor)
-                let pillPath = CGPath(roundedRect: pillRect,
-                                      cornerWidth: pillHeight / 2, cornerHeight: pillHeight / 2,
-                                      transform: nil)
-                context.addPath(pillPath)
-                context.fillPath()
-                context.restoreGState()
-                let numX = cx + (pillWidth - numSize.width) / 2
-                (numStr as NSString).draw(at: CGPoint(x: numX, y: cy - 7 * s),
-                                          withAttributes: numAttr)
-
-                // Allergen-Name daneben.
-                drawText(entry.name,
-                         at: CGPoint(x: cx + pillWidth + 5 * s, y: cy - 5 * s),
-                         font: font, color: PDFColors.primary)
-            }
-            let rows = (legend.entries.count + columns - 1) / columns
-            y += CGFloat(rows) * 14 * s
-        }
-
-        // Alters-Sektion — unabhängig von Unverträglichkeiten.
-        guard legend.hasAgeMarkers else { return }
-        y += 4 * s
-        drawText("ALTER", at: CGPoint(x: area.minX, y: y - 5 * s),
-                 font: headerFont, color: PDFColors.secondary)
-        y += 12 * s
-
-        for (idx, age) in legend.ageCategories.enumerated() {
-            let col = idx % columns
-            let row = idx / columns
-            let cx = area.minX + CGFloat(col) * columnWidth
-            let cy = y + CGFloat(row) * 14 * s
-
-            let badge = 11 * s
-            let badgeRect = CGRect(x: cx, y: cy - 7 * s, width: badge, height: badge)
-            context.setFillColor(ageColor.cgColor)
-            context.fillEllipse(in: badgeRect)
-            drawSymbol(age.iconName,
-                       in: badgeRect.insetBy(dx: badge * 0.22, dy: badge * 0.22),
-                       color: .white)
-
-            drawText(age.rawValue,
-                     at: CGPoint(x: cx + badge + 5 * s, y: cy - 5 * s),
-                     font: font, color: PDFColors.primary)
-        }
-    }
-
-    // MARK: - Canvas layout
-
-    private static func drawCanvas(context: CGContext, tables: [GuestTable], in area: CGRect) {
-        // Compute bounding box of all table footprints (center ± half-size)
-        var minX = CGFloat.greatestFiniteMagnitude
-        var minY = CGFloat.greatestFiniteMagnitude
-        var maxX = -CGFloat.greatestFiniteMagnitude
-        var maxY = -CGFloat.greatestFiniteMagnitude
-        let seatPad: CGFloat = 40  // extra room for names around the outermost seats
-
-        for table in tables {
-            let hw = table.shape == .round ? CGFloat(table.diameter) / 2 : CGFloat(table.width) / 2
-            let hd = table.shape == .round ? CGFloat(table.diameter) / 2 : CGFloat(table.depth) / 2
-            let cx = CGFloat(table.positionX)
-            let cy = CGFloat(table.positionY)
-            minX = min(minX, cx - hw - seatPad)
-            maxX = max(maxX, cx + hw + seatPad)
-            minY = min(minY, cy - hd - seatPad)
-            maxY = max(maxY, cy + hd + seatPad)
-        }
-
-        let srcW = max(maxX - minX, 1)
-        let srcH = max(maxY - minY, 1)
-        let scaleX = area.width / srcW
-        let scaleY = area.height / srcH
-        let scale = min(scaleX, scaleY)
-
-        // Translation: centre the layout in the canvas area
-        let scaledW = srcW * scale
-        let scaledH = srcH * scale
-        let offsetX = area.minX + (area.width - scaledW) / 2 - minX * scale
-        let offsetY = area.minY + (area.height - scaledH) / 2 - minY * scale
-
-        func toCanvas(_ pt: CGPoint) -> CGPoint {
-            CGPoint(x: offsetX + pt.x * scale, y: offsetY + pt.y * scale)
-        }
-
-        // Identify tafel groups: group tables by combinationGroup
-        var groupMap: [UUID: [GuestTable]] = [:]
-        for table in tables {
-            if let gid = table.combinationGroup {
-                groupMap[gid, default: []].append(table)
-            }
-        }
-
-        // Identify which tables are tafel-followers (not owners)
-        // The "owner" is the table with the lowest combinationOrder (or the .head role)
-        var tafelFollowerIDs: Set<UUID> = []
-        for (_, group) in groupMap {
-            let sorted = group.sorted { ($0.combinationOrder ?? 0) < ($1.combinationOrder ?? 0) }
-            // Owner = first in sorted order; all others are followers for rendering purposes
-            for follower in sorted.dropFirst() {
-                tafelFollowerIDs.insert(follower.id)
-            }
-        }
-
-        // Draw all tables
-        for table in tables {
-            if tafelFollowerIDs.contains(table.id) { continue }
-
-            let cx = CGFloat(table.positionX)
-            let cy = CGFloat(table.positionY)
-            let center = toCanvas(CGPoint(x: cx, y: cy))
-            let scaledDiameter = CGFloat(table.diameter) * scale
-            let scaledWidth    = CGFloat(table.width)    * scale
-            let scaledDepth    = CGFloat(table.depth)    * scale
-
-            if let gid = table.combinationGroup, let group = groupMap[gid] {
-                // Tafel (combined) rendering
-                drawTafelTable(
-                    context: context,
-                    ownerTable: table,
-                    group: group,
-                    toCanvas: toCanvas,
-                    scale: scale
-                )
-            } else {
-                // Solo table rendering
-                drawSoloTable(
-                    context: context,
-                    table: table,
-                    center: center,
-                    scaledDiameter: scaledDiameter,
-                    scaledWidth: scaledWidth,
-                    scaledDepth: scaledDepth,
-                    scale: scale
-                )
-            }
-        }
-    }
-
-    // MARK: - Solo table
-
-    private static func drawSoloTable(
-        context: CGContext,
-        table: GuestTable,
-        center: CGPoint,
-        scaledDiameter: CGFloat,
-        scaledWidth: CGFloat,
-        scaledDepth: CGFloat,
-        scale: CGFloat
-    ) {
-        let cap = table.capacity(rules: GuestTable.activeRules)
-        let seatPositions = SeatLayout.positions(
-            shape: table.shape,
-            capacity: cap,
-            scaledDiameter: scaledDiameter,
-            scaledWidth: scaledWidth,
-            scaledDepth: scaledDepth
-        )
-
-        context.saveGState()
-        context.translateBy(x: center.x, y: center.y)
-        context.rotate(by: CGFloat(table.rotation) * .pi / 180)
-
-        // Draw table shape
-        drawTableShape(context: context, table: table, scaledWidth: scaledWidth, scaledDepth: scaledDepth, scaledDiameter: scaledDiameter)
-
-        // Draw table label (name + occupancy) — in rotated coordinate system
-        drawTableLabel(context: context, table: table, scaledWidth: scaledWidth, scaledDepth: scaledDepth, scaledDiameter: scaledDiameter)
-
-        // Draw seats (positions are relative to table center, already in rotated space)
-        for (idx, seatPos) in seatPositions.enumerated() {
-            let guest = table.attendingGuests.first { $0.seatIndex == idx }
-            let isDisabled = table.disabledSeatIndices.contains(idx)
-            drawSeat(
-                context: context,
-                position: seatPos,
-                tableCenter: .zero,
-                guest: guest,
-                isDisabled: isDisabled,
-                shape: table.shape,
-                counterRotation: -table.rotation
-            )
-        }
-
-        context.restoreGState()
-    }
-
-    // MARK: - Tafel (combined) table
-
-    private static func drawTafelTable(
-        context: CGContext,
-        ownerTable: GuestTable,
-        group: [GuestTable],
-        toCanvas: (CGPoint) -> CGPoint,
-        scale: CGFloat
-    ) {
-        let geometry = TafelLayout.geometry(of: group, rules: GuestTable.activeRules)
-        let center = toCanvas(geometry.center)
-
-        context.saveGState()
-        context.translateBy(x: center.x, y: center.y)
-        context.rotate(by: CGFloat(geometry.rotation) * .pi / 180)
-
-        let scaledWidth = geometry.totalWidth * scale
-        let scaledDepth = geometry.depth * scale
-
-        // Draw the tafel as a single rectangle
-        let fill = group.contains(where: \.isBridalTable) ? bridalFill : tableFill
-        context.setFillColor(fill.cgColor)
-        context.setStrokeColor(PDFColors.primary.cgColor)
-        context.setLineWidth(1)
-        let tableRect = CGRect(x: -scaledWidth / 2, y: -scaledDepth / 2, width: scaledWidth, height: scaledDepth)
-        let path = CGPath(roundedRect: tableRect, cornerWidth: 6, cornerHeight: 6, transform: nil)
-        context.addPath(path)
-        context.drawPath(using: .fillStroke)
-
-        // Tafel name from the owner table
-        let nameFont = NSFont.systemFont(ofSize: max(10, min(13, scaledWidth / 10)), weight: .semibold)
-        let ownerName = group.sorted { ($0.combinationOrder ?? 0) < ($1.combinationOrder ?? 0) }.first?.name ?? ownerTable.name
-        drawCenteredText(ownerName, at: .zero, offsetY: -8, font: nameFont)
-
-        let totalGuests = group.flatMap(\.attendingGuests).count
-        let totalCap = geometry.capacity - group.reduce(0) { $0 + $1.disabledSeatIndices.count }
-        let countFont = NSFont.systemFont(ofSize: max(8, min(11, scaledWidth / 14)))
-        drawCenteredText("\(totalGuests)/\(totalCap) Plätze", at: .zero, offsetY: 8, font: countFont, color: PDFColors.secondary)
-
-        // Draw seats using TafelLayout seat positions (already in global canvas coords)
-        // We need them relative to the rotated local frame of this table center
-        let cosR = cos(-geometry.rotation * .pi / 180)
-        let sinR = sin(-geometry.rotation * .pi / 180)
-
-        for seat in geometry.seats {
-            guard let table = group.first(where: { $0.id == seat.tableID }) else { continue }
-            let guest = table.attendingGuests.first { $0.seatIndex == seat.localSeatIndex }
-            let isDisabled = table.disabledSeatIndices.contains(seat.localSeatIndex)
-
-            // Convert global seat position to local (relative to tafel center, pre-rotation)
-            let globalSeat = toCanvas(seat.position)
-            let dx = globalSeat.x - center.x
-            let dy = globalSeat.y - center.y
-            // Un-rotate to get local seat position in the rotated draw context
-            let localX = dx * cosR - dy * sinR
-            let localY = dx * sinR + dy * cosR
-
-            let localSeatPos = CGPoint(x: localX, y: localY)
-            drawSeat(
-                context: context,
-                position: localSeatPos,
-                tableCenter: .zero,
-                guest: guest,
-                isDisabled: isDisabled,
-                shape: .rectangular
-            )
-        }
-
-        context.restoreGState()
-    }
-
-    // MARK: - Table shape drawing
-
-    private static func drawTableShape(
-        context: CGContext,
-        table: GuestTable,
-        scaledWidth: CGFloat,
-        scaledDepth: CGFloat,
-        scaledDiameter: CGFloat
-    ) {
-        let fill = table.isBridalTable ? bridalFill : tableFill
-        context.setFillColor(fill.cgColor)
-        context.setStrokeColor(PDFColors.primary.cgColor)
-        context.setLineWidth(1)
-
-        switch table.shape {
-        case .round:
-            let r = scaledDiameter / 2
-            context.fillEllipse(in: CGRect(x: -r, y: -r, width: scaledDiameter, height: scaledDiameter))
-            context.strokeEllipse(in: CGRect(x: -r, y: -r, width: scaledDiameter, height: scaledDiameter))
-        case .rectangular:
-            let rect = CGRect(x: -scaledWidth / 2, y: -scaledDepth / 2, width: scaledWidth, height: scaledDepth)
-            let path = CGPath(roundedRect: rect, cornerWidth: 6, cornerHeight: 6, transform: nil)
-            context.addPath(path)
-            context.drawPath(using: .fillStroke)
-        case .square:
-            let side = scaledWidth
-            let rect = CGRect(x: -side / 2, y: -side / 2, width: side, height: side)
-            let path = CGPath(roundedRect: rect, cornerWidth: 8, cornerHeight: 8, transform: nil)
-            context.addPath(path)
-            context.drawPath(using: .fillStroke)
-        }
-    }
-
-    // MARK: - Table label
-
-    private static func drawTableLabel(
-        context: CGContext,
-        table: GuestTable,
-        scaledWidth: CGFloat,
-        scaledDepth: CGFloat,
-        scaledDiameter: CGFloat
-    ) {
-        let refSize: CGFloat = table.shape == .round ? scaledDiameter : max(scaledWidth, scaledDepth)
-        let nameFont = NSFont.systemFont(ofSize: max(8, min(13, refSize / 8)), weight: .semibold)
-        let occupancy = "\(table.attendingGuests.count)/\(table.effectiveCapacity) Plätze"
-        let countFont = NSFont.systemFont(ofSize: max(7, min(11, refSize / 11)))
-
-        // Counter-rotate damit das Label aufrecht bleibt wenn der Tisch
-        // gedreht ist — sonst muss man den Plan zum Lesen drehen.
-        context.saveGState()
-        context.rotate(by: -CGFloat(table.rotation) * .pi / 180)
-        drawCenteredText(table.name, at: .zero, offsetY: -8, font: nameFont)
-        drawCenteredText(occupancy, at: .zero, offsetY: 8, font: countFont, color: PDFColors.secondary)
-        context.restoreGState()
-    }
-
-    // MARK: - Seat drawing
-
-    private static func drawSeat(
-        context: CGContext,
-        position: CGPoint,
-        tableCenter: CGPoint,
-        guest: Guest?,
-        isDisabled: Bool,
-        shape: TableShape,
-        displayName: String? = nil,
-        counterRotation: Double = 0
-    ) {
-        let r = seatDotDiameter / 2
-        let dotRect = CGRect(x: position.x - r, y: position.y - r, width: seatDotDiameter, height: seatDotDiameter)
-
-        context.saveGState()
-
-        if isDisabled {
-            context.setFillColor(PDFColors.tertiary.cgColor)
-            context.setStrokeColor(NSColor.separatorColor.cgColor)
-            context.setLineWidth(0.5)
-            context.fillEllipse(in: dotRect)
-            context.strokeEllipse(in: dotRect)
-            // Strikethrough line across the dot
-            context.setStrokeColor(PDFColors.primary.cgColor)
-            context.setLineWidth(1)
-            context.move(to: CGPoint(x: position.x - r, y: position.y))
-            context.addLine(to: CGPoint(x: position.x + r, y: position.y))
-            context.strokePath()
-            context.restoreGState()
-            return
-        }
-
-        // Seat circle fill: white with border
-        context.setFillColor(NSColor.white.cgColor)
-        context.setStrokeColor(NSColor(calibratedWhite: 0.6, alpha: 1).cgColor)
-        context.setLineWidth(0.75)
-        context.fillEllipse(in: dotRect)
-        context.strokeEllipse(in: dotRect)
-
-        guard let guest else {
-            context.restoreGState()
-            return
-        }
-
-        // Diet dot in top-right corner of the seat circle
-        let diet = guest.dietaryChoice
-        if diet == "Vegan" || diet == "Vegetarisch" {
-            let dotColor = diet == "Vegan" ? veganColor : vegColor
-            let dr = dietDotDiameter / 2
-            let dietRect = CGRect(
-                x: position.x + r - dr * 0.8,
-                y: position.y - r - dr * 0.8,
-                width: dietDotDiameter,
-                height: dietDotDiameter
-            )
-            context.setFillColor(dotColor.cgColor)
-            context.fillEllipse(in: dietRect)
-        }
-
-        // Age badge bottom-left (Kind/Baby/…) — Symbol auf blauem Punkt.
-        if guest.ageCategory.isMarkedAge {
-            let d = dietDotDiameter * 1.25
-            let badge = CGRect(
-                x: position.x - r - d * 0.2,
-                y: position.y + r - d * 0.8,
-                width: d, height: d
-            )
-            context.setFillColor(ageColor.cgColor)
-            context.fillEllipse(in: badge)
-            drawSymbol(guest.ageCategory.iconName,
-                       in: badge.insetBy(dx: d * 0.22, dy: d * 0.22),
-                       color: .white)
-        }
-
-        context.restoreGState()
-
-        // Guest name — positioned radially outward from table center,
-        // counter-rotated damit der Name lesbar bleibt wenn der Tisch
-        // gedreht ist.
-        drawGuestName(
-            context: context,
-            guest: guest,
-            seatPosition: position,
-            tableCenter: tableCenter,
-            shape: shape,
-            displayName: displayName,
-            counterRotation: counterRotation
-        )
-    }
-
-    // MARK: - Guest name placement
-
-    private static func drawGuestName(
-        context: CGContext,
-        guest: Guest,
-        seatPosition: CGPoint,
-        tableCenter: CGPoint,
-        shape: TableShape,
-        displayName: String? = nil,
-        counterRotation: Double = 0
-    ) {
-        let font = NSFont.systemFont(ofSize: nameFontSize)
-        let allergyFont = NSFont.boldSystemFont(ofSize: nameFontSize)
-        let name = displayName ?? currentDisplayNames[guest.id] ?? guest.firstName
-        let nameAttr: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: PDFColors.primary]
-        let nameSize = (name as NSString).size(withAttributes: nameAttr)
-
-        let dx = seatPosition.x - tableCenter.x
-        let dy = seatPosition.y - tableCenter.y
-        let r = seatDotDiameter / 2
-
-        let anchorOffset: CGPoint
-        if shape == .round {
-            anchorOffset = nameAnchorRadiallyOutward(
-                fromTableCenterDx: dx, dy: dy,
-                textSize: nameSize, seatRadius: r, gap: nameOffset
-            )
-        } else {
-            enum Direction { case top, bottom, left, right }
-            let threshold: CGFloat = 5
-            let dir: Direction
-            if abs(dy) > abs(dx) {
-                dir = dy < -threshold ? .top : .bottom
-            } else {
-                dir = dx < -threshold ? .left : .right
-            }
-            switch dir {
-            case .top:
-                anchorOffset = CGPoint(x: -nameSize.width / 2, y: -r - nameOffset - nameSize.height)
-            case .bottom:
-                anchorOffset = CGPoint(x: -nameSize.width / 2, y: r + nameOffset)
-            case .left:
-                anchorOffset = CGPoint(x: -r - nameOffset - nameSize.width, y: -nameSize.height / 2)
-            case .right:
-                anchorOffset = CGPoint(x: r + nameOffset, y: -nameSize.height / 2)
-            }
-        }
-
-        context.saveGState()
-        context.translateBy(x: seatPosition.x, y: seatPosition.y)
-        context.rotate(by: CGFloat(counterRotation) * .pi / 180)
-        (name as NSString).draw(at: anchorOffset, withAttributes: nameAttr)
-
-        if guest.hasIntolerances {
-            let marker = intoleranceMarkerText(for: guest)
-            let markerAttr: [NSAttributedString.Key: Any] = [.font: allergyFont, .foregroundColor: allergyColor]
-            let markerOrigin = CGPoint(x: anchorOffset.x + nameSize.width + 3, y: anchorOffset.y)
-            (marker as NSString).draw(at: markerOrigin, withAttributes: markerAttr)
-        }
-        context.restoreGState()
-    }
-
-    /// Zeichnet ein (template-getöntes) SF-Symbol in `rect`. Funktioniert im
-    /// geflippten Export-Context, weil `NSImage.draw` die Flipped-ness des
-    /// aktuellen `NSGraphicsContext` respektiert.
-    private static func drawSymbol(_ name: String, in rect: CGRect, color: NSColor) {
-        let config = NSImage.SymbolConfiguration(pointSize: rect.height, weight: .bold)
-        guard let base = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
-            .withSymbolConfiguration(config) else { return }
-        let tinted = NSImage(size: rect.size)
-        tinted.lockFocus()
-        color.set()
-        let r = NSRect(origin: .zero, size: rect.size)
-        // Symbol zentriert ins Quadrat einpassen (Aspect-Fit).
-        let aspect = base.size.width / max(base.size.height, 1)
-        var drawRect = r
-        if aspect > 1 {
-            let h = rect.width / aspect
-            drawRect = NSRect(x: 0, y: (rect.height - h) / 2, width: rect.width, height: h)
-        } else {
-            let w = rect.height * aspect
-            drawRect = NSRect(x: (rect.width - w) / 2, y: 0, width: w, height: rect.height)
-        }
-        base.draw(in: drawRect)
-        r.fill(using: .sourceAtop)
-        tinted.unlockFocus()
-        tinted.draw(in: rect)
-    }
-
-    /// Komma-getrennte Nummern aus der aktuellen Render-Legende. Fallback "!"
-    /// wenn ein Gast irgendwie keine aufgelösten Nummern hat (defensive — sollte
-    /// nicht passieren, da die Legende aus *allen* Gästen gebaut wird).
-    private static func intoleranceMarkerText(for guest: Guest) -> String {
-        let numbers = currentLegend.numbers(for: guest)
-        guard !numbers.isEmpty else { return "!" }
-        return numbers.map(String.init).joined(separator: ",")
-    }
-
-    /// Liefert den Text-Origin so, dass die zur Tischmitte zugewandte Kante
-    /// der Text-BBox am Sitz-Außenrand + `gap` sitzt — das Label "fließt"
-    /// vom Sitz radial nach außen.
-    private static func nameAnchorRadiallyOutward(
-        fromTableCenterDx dx: CGFloat,
-        dy: CGFloat,
-        textSize: CGSize,
-        seatRadius: CGFloat,
-        gap: CGFloat
-    ) -> CGPoint {
-        let angle = atan2(dy, dx)
-        let cosA = cos(angle)
-        let sinA = sin(angle)
-        let outerEdgeRadius = seatRadius + gap
-        let halfW = textSize.width / 2
-        let halfH = textSize.height / 2
-        return CGPoint(
-            x: cosA * (outerEdgeRadius + halfW) - halfW,
-            y: sinA * (outerEdgeRadius + halfH) - halfH
-        )
-    }
-
-    // MARK: - Helpers
-
-    /// Draws horizontally centred text at an offset from a given origin (in current coordinate system).
-    private static func drawCenteredText(
-        _ text: String,
-        at origin: CGPoint,
-        offsetY: CGFloat,
-        font: NSFont,
-        color: NSColor = PDFColors.primary
-    ) {
-        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
-        let size = (text as NSString).size(withAttributes: attrs)
-        let pt = CGPoint(x: origin.x - size.width / 2, y: origin.y + offsetY - size.height / 2)
-        (text as NSString).draw(at: pt, withAttributes: attrs)
-    }
-
-    private static func drawText(_ text: String, at point: CGPoint, font: NSFont, color: NSColor = PDFColors.primary) {
-        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
-        (text as NSString).draw(at: point, withAttributes: attrs)
     }
 }
 #endif

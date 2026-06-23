@@ -173,7 +173,20 @@ final class Guest {
 
     var awaitsSeating: Bool { countsForSeating && needsSeat && table == nil }
 
+    var hasIncompleteFunFact: Bool {
+        funFact.trimmingCharacters(in: .whitespaces).isEmpty || !funFactApproved
+    }
+
+    var funFactNeedsReview: Bool {
+        !funFact.trimmingCharacters(in: .whitespaces).isEmpty && !funFactApproved
+    }
+
     var needsFunFactFollowUp: Bool {
-        countsForSeating && (funFact.trimmingCharacters(in: .whitespaces).isEmpty || !funFactApproved)
+        countsForSeating && hasIncompleteFunFact
+    }
+
+    static func byName(_ lhs: Guest, _ rhs: Guest) -> Bool {
+        if lhs.firstName == rhs.firstName { return lhs.lastName < rhs.lastName }
+        return lhs.firstName < rhs.firstName
     }
 }

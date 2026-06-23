@@ -12,10 +12,7 @@ extension GuestListView {
     /// Anzahl Gäste mit unklarem oder fehlendem FunFact — für den Export-
     /// Button-Disable-Status.
     var funFactWorklistCount: Int {
-        guests.filter { g in
-            let trimmed = g.funFact.trimmingCharacters(in: .whitespaces)
-            return trimmed.isEmpty || !g.funFactApproved
-        }.count
+        FunFactWorklist.incompleteCount(in: guests)
     }
 
     enum FunFactExportFormat { case pdf, csv, reminderCSV }
@@ -27,10 +24,7 @@ extension GuestListView {
     /// für Excel/Tabelle.
     @MainActor
     func exportFunFactWorklist(format: FunFactExportFormat) {
-        let pending = guests.filter(\.needsFunFactFollowUp).sorted { lhs, rhs in
-            if lhs.firstName == rhs.firstName { return lhs.lastName < rhs.lastName }
-            return lhs.firstName < rhs.firstName
-        }
+        let pending = FunFactWorklist.followUpListByName(in: guests)
         guard !pending.isEmpty else { return }
 
         let title = "FunFact-Liste — \(events.first?.name ?? "Hochzeit")"
@@ -70,9 +64,7 @@ extension GuestListView {
                 isCheckingFunFacts = false
                 funFactCheckTask = nil
             }
-            let candidates = guests.filter {
-                !$0.funFact.trimmingCharacters(in: .whitespaces).isEmpty && !$0.funFactApproved
-            }
+            let candidates = FunFactWorklist.checkCandidates(in: guests)
             guard !candidates.isEmpty else {
                 funFactCheckResult = "Alle FunFacts sind bereits bestaetigt."
                 return
@@ -132,10 +124,7 @@ extension GuestListView {
                     funFactCheckResult = "Die KI hat keine Vorschläge geliefert (Antwort leer)."
                     return
                 }
-                let changed = proposals.filter {
-                    $0.original.trimmingCharacters(in: .whitespacesAndNewlines)
-                        != $0.normalized.trimmingCharacters(in: .whitespacesAndNewlines)
-                }
+                let changed = FunFactWorklist.changedProposals(proposals)
                 guard !changed.isEmpty else {
                     funFactCheckResult = "KI lieferte \(proposals.count) Antworten, aber 0 Änderungen "
                         + "— das Modell hat die Texte unverändert zurückgegeben (zu schwach für die Aufgabe)."

@@ -9,7 +9,7 @@ import CoreText
 /// Vor- und Nachname plus aktueller FunFact-Text (falls vorhanden) plus
 /// Status-Hinweis. Alphabetisch sortiert.
 enum FunFactWorklistExporter {
-    private static let pageRect = CGRect(x: 0, y: 0, width: 595, height: 842)
+    private static let pageRect = PDFPageSize.a4
 
     static func generatePDF(guests: [Guest], title: String) -> Data {
         let pdfData = NSMutableData()
@@ -33,11 +33,7 @@ enum FunFactWorklistExporter {
         }
 
         func drawText(_ text: String, at point: CGPoint, font: NSFont, color: CGColor = PDFColors.primary.cgColor) {
-            let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
-            let line = CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: attrs))
-            let cgY = pageRect.height - point.y - font.ascender
-            context.textPosition = CGPoint(x: point.x, y: cgY)
-            CTLineDraw(line, context)
+            PDFDrawing.drawText(text, at: point, font: font, color: color, in: context, pageRect: pageRect)
         }
 
         func drawWrappedText(_ text: String, in rect: CGRect, font: NSFont, color: CGColor = PDFColors.primary.cgColor) -> CGFloat {

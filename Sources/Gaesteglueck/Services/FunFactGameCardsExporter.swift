@@ -14,7 +14,7 @@ import CoreText
 /// Am Ende des PDFs: Lösungsblatt mit FunFact ↔ Name-Mapping
 /// (alphabetisch nach FunFact, damit der Moderator schnell nachschauen kann).
 enum FunFactGameCardsExporter {
-    private static let pageRect = CGRect(x: 0, y: 0, width: 595, height: 842)
+    private static let pageRect = PDFPageSize.a4
     private static let cols = 2
     private static let rows = 4
     private static let cardsPerPage = 8
@@ -45,8 +45,8 @@ enum FunFactGameCardsExporter {
 
         if withFunFact.isEmpty {
             beginPage(context: context)
-            drawText("FunFact-Spielkarten", at: CGPoint(x: marginX, y: 80), font: .boldSystemFont(ofSize: 22))
-            drawText("Noch keine FunFacts erfasst — bitte erst FunFacts ergänzen.",
+            PDFDrawing.drawText("FunFact-Spielkarten", at: CGPoint(x: marginX, y: 80), font: .boldSystemFont(ofSize: 22))
+            PDFDrawing.drawText("Noch keine FunFacts erfasst — bitte erst FunFacts ergänzen.",
                      at: CGPoint(x: marginX, y: 120), font: .systemFont(ofSize: 13),
                      color: PDFColors.secondary)
             endPage(context: context)
@@ -110,7 +110,7 @@ enum FunFactGameCardsExporter {
 
         // Akzent-Linie unter Caption
         context.saveGState()
-        context.setStrokeColor(NSColor(calibratedRed: 0.78, green: 0.47, blue: 0.55, alpha: 1).cgColor)
+        context.setStrokeColor(PDFColors.accent.cgColor)
         context.setLineWidth(1)
         let accentY = originY + 30
         context.move(to: CGPoint(x: originX + (size.width - 30) / 2, y: accentY))
@@ -160,10 +160,10 @@ enum FunFactGameCardsExporter {
 
     private static func drawSolutionPage(context: CGContext, guests: [Guest], eventName: String) {
         beginPage(context: context)
-        drawText("Lösungsblatt — \(eventName)",
+        PDFDrawing.drawText("Lösungsblatt — \(eventName)",
                  at: CGPoint(x: marginX, y: 50),
                  font: .boldSystemFont(ofSize: 18))
-        drawText("Welcher FunFact gehört zu wem (für Moderator/Brautpaar)",
+        PDFDrawing.drawText("Welcher FunFact gehört zu wem (für Moderator/Brautpaar)",
                  at: CGPoint(x: marginX, y: 75),
                  font: .systemFont(ofSize: 11),
                  color: PDFColors.secondary)
@@ -176,11 +176,11 @@ enum FunFactGameCardsExporter {
                 y = 50
             }
             let funFactFont = NSFont.systemFont(ofSize: 11)
-            drawText("• \(guest.funFactDisplay)",
+            PDFDrawing.drawText("• \(guest.funFactDisplay)",
                      at: CGPoint(x: marginX, y: y),
                      font: funFactFont)
             y += 16
-            drawText("    → \(guest.fullName)",
+            PDFDrawing.drawText("    → \(guest.fullName)",
                      at: CGPoint(x: marginX, y: y),
                      font: .boldSystemFont(ofSize: 11),
                      color: NSColor(calibratedRed: 0.5, green: 0.3, blue: 0.4, alpha: 1))
@@ -190,10 +190,6 @@ enum FunFactGameCardsExporter {
         endPage(context: context)
     }
 
-    private static func drawText(_ text: String, at point: CGPoint, font: NSFont, color: NSColor = PDFColors.primary) {
-        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
-        (text as NSString).draw(at: point, withAttributes: attrs)
-    }
 }
 #endif
 #endif

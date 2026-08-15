@@ -11,7 +11,7 @@ enum TableCardExporter {
         guests.sorted { $0.fullName.localizedCompare($1.fullName) == .orderedAscending }
     }
 
-    private static let pageRect = CGRect(x: 0, y: 0, width: 595, height: 842)
+    private static let pageRect = PDFPageSize.a4
     private static let cols: Int = 2
     private static let rows: Int = 2
     private static let cardsPerPage: Int = 4
@@ -72,8 +72,8 @@ enum TableCardExporter {
 
     private static func drawCoverPage(context: CGContext, eventName: String, message: String) {
         beginPage(context: context)
-        drawText(eventName, at: CGPoint(x: marginX, y: 80), font: .boldSystemFont(ofSize: 24))
-        drawText(message, at: CGPoint(x: marginX, y: 120), font: .systemFont(ofSize: 14), color: PDFColors.secondary)
+        PDFDrawing.drawText(eventName, at: CGPoint(x: marginX, y: 80), font: .boldSystemFont(ofSize: 24))
+        PDFDrawing.drawText(message, at: CGPoint(x: marginX, y: 120), font: .systemFont(ofSize: 14), color: PDFColors.secondary)
         endPage(context: context)
     }
 
@@ -116,12 +116,12 @@ enum TableCardExporter {
         let nameSize = (name as NSString).size(withAttributes: [.font: nameFont])
         let nameX = rect.minX + (rect.width - nameSize.width) / 2
         let nameY = rect.minY + (rect.height - nameSize.height) / 2 - 6
-        drawText(name, at: CGPoint(x: nameX, y: nameY), font: nameFont)
+        PDFDrawing.drawText(name, at: CGPoint(x: nameX, y: nameY), font: nameFont)
 
         let accentLength: CGFloat = 44
         let accentY = nameY + nameSize.height + 12
         context.saveGState()
-        context.setStrokeColor(NSColor(calibratedRed: 0.78, green: 0.47, blue: 0.55, alpha: 1).cgColor)
+        context.setStrokeColor(PDFColors.accent.cgColor)
         context.setLineWidth(1.2)
         context.move(to: CGPoint(x: rect.midX - accentLength / 2, y: accentY))
         context.addLine(to: CGPoint(x: rect.midX + accentLength / 2, y: accentY))
@@ -163,10 +163,6 @@ enum TableCardExporter {
         context.restoreGState()
     }
 
-    private static func drawText(_ text: String, at point: CGPoint, font: NSFont, color: NSColor = PDFColors.primary) {
-        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
-        (text as NSString).draw(at: point, withAttributes: attrs)
-    }
 }
 #endif
 #endif

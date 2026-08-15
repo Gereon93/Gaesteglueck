@@ -185,7 +185,7 @@ struct SaalKonfiguratorView: View {
             existingCount: existingTables.count,
             into: modelContext
         )
-        try? modelContext.save()
+        modelContext.saveOrLog()
 
         guard alsoAssignGuests else {
             dismiss()
@@ -207,7 +207,7 @@ struct SaalKonfiguratorView: View {
         do {
             let plan = try await LLMSeatingPlanner.requestPlan(client: client, context: context)
             SaalTablePlacement.applyAssignments(plan.assignments, in: plannerTables, guests: guests)
-            try? modelContext.save()
+            modelContext.saveOrLog()
             assignmentSummary = "Tische angelegt. \(plan.assignments.count) Gäste verteilt. Du kannst im Sitzplan nachjustieren."
             try? await Task.sleep(nanoseconds: 1_500_000_000)
             dismiss()

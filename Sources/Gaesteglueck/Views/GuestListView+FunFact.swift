@@ -51,7 +51,7 @@ extension GuestListView {
         panel.nameFieldStringValue = suggestedName
         panel.canCreateDirectories = true
         if panel.runModal() == .OK, let url = panel.url {
-            try? data.write(to: url)
+            data.writeOrLog(to: url)
         }
     }
     #endif
@@ -91,7 +91,7 @@ extension GuestListView {
                         break
                     }
                 }
-                try? modelContext.save()
+                modelContext.saveOrLog()
                 funFactCheckResult = "\(goodCount) FunFacts bestaetigt, \(genericCount) als generisch markiert."
             } catch is CancellationError {
                 funFactCheckResult = "Abgebrochen — nichts geändert."
@@ -153,7 +153,7 @@ extension GuestListView {
             // Normalisierung ändert die Aussage nicht, nur die Formulierung.
             guest.funFactNormalized = proposal.normalized
         }
-        try? modelContext.save()
+        modelContext.saveOrLog()
         showingFunFactReview = false
         funFactProposals = []
     }

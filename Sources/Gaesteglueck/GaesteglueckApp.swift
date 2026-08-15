@@ -1,6 +1,7 @@
 #if canImport(SwiftUI)
 import SwiftUI
 import SwiftData
+import OSLog
 #if canImport(AppKit)
 import AppKit
 #endif
@@ -76,7 +77,7 @@ struct GaesteglueckApp: App {
             let src = URL(fileURLWithPath: oldStore.path + ext)
             let dst = URL(fileURLWithPath: storeURL.path + ext)
             if fm.fileExists(atPath: src.path) {
-                try? fm.copyItem(at: src, to: dst)
+                copyOrLog(from: src, to: dst)
             }
         }
     }
@@ -96,7 +97,7 @@ struct GaesteglueckApp: App {
             let src = URL(fileURLWithPath: storeURL.path + ext)
             let dst = URL(fileURLWithPath: target.path + ext)
             if fm.fileExists(atPath: src.path) {
-                try? fm.copyItem(at: src, to: dst)
+                copyOrLog(from: src, to: dst)
             }
         }
         pruneStartupBackups(in: backupDir, keep: 3)
@@ -112,7 +113,7 @@ struct GaesteglueckApp: App {
 
         let fm = FileManager.default
         let backupDir = storeURL.deletingLastPathComponent().appendingPathComponent("Backups")
-        guard let entries = try? fm.contentsOfDirectory(at: backupDir, includingPropertiesForKeys: nil) else { return }
+        guard let entries = contentsOrLog(of: backupDir) else { return }
         let setFiles = entries.filter { $0.lastPathComponent.hasPrefix(prefix) }
         guard !setFiles.isEmpty else { return }
 
@@ -120,7 +121,7 @@ struct GaesteglueckApp: App {
         for ext in ["", "-shm", "-wal"] {
             let src = URL(fileURLWithPath: storeURL.path + ext)
             if fm.fileExists(atPath: src.path) {
-                try? fm.copyItem(at: src, to: URL(fileURLWithPath: safety.path + ext))
+                copyOrLog(from: src, to: URL(fileURLWithPath: safety.path + ext))
             }
         }
 
@@ -128,8 +129,8 @@ struct GaesteglueckApp: App {
             let suffix = ext.isEmpty ? ".store" : ".store\(ext)"
             guard let match = setFiles.first(where: { $0.lastPathComponent.hasSuffix(suffix) }) else { continue }
             let dst = URL(fileURLWithPath: storeURL.path + ext)
-            try? fm.removeItem(at: dst)
-            try? fm.copyItem(at: match, to: dst)
+            removeOrLog(at: dst)
+            copyOrLog(from: match, to: dst)
         }
     }
 
@@ -142,7 +143,7 @@ struct GaesteglueckApp: App {
 
     private static func pruneStartupBackups(in dir: URL, keep: Int) {
         let fm = FileManager.default
-        guard let entries = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else { return }
+        guard let entries = contentsOrLog(of: dir) else { return }
         var byPrefix: [String: [URL]] = [:]
         for url in entries where url.lastPathComponent.contains("-pre-launch") {
             let name = url.lastPathComponent
@@ -153,7 +154,41 @@ struct GaesteglueckApp: App {
         let sorted = byPrefix.keys.sorted(by: >)
         guard sorted.count > keep else { return }
         for prefix in sorted.dropFirst(keep) {
-            for url in byPrefix[prefix] ?? [] { try? fm.removeItem(at: url) }
+            for url in byPrefix[prefix] ?? [] { removeOrLog(at: url) }
+        }
+    }
+
+    /// Store-Dateien werden bewusst best-effort kopiert bzw. gelöscht: ein
+    /// Fehlschlag darf den Start nicht verhindern, muss aber nachvollziehbar
+    /// bleiben — sonst steht der User vor leeren Daten ohne jede Spur.
+    private static func copyOrLog(from src: URL, to dst: URL) {
+        do {
+            try FileManager.default.copyItem(at: src, to: dst)
+        } catch {
+            AppLog.files.error(
+                "Kopieren von \(src.lastPathComponent, privacy: .public) fehlgeschlagen: \(error.localizedDescription, privacy: .public)"
+            )
+        }
+    }
+
+    private static func removeOrLog(at url: URL) {
+        do {
+            try FileManager.default.removeItem(at: url)
+        } catch {
+            AppLog.files.error(
+                "Löschen von \(url.lastPathComponent, privacy: .public) fehlgeschlagen: \(error.localizedDescription, privacy: .public)"
+            )
+        }
+    }
+
+    private static func contentsOrLog(of dir: URL) -> [URL]? {
+        do {
+            return try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
+        } catch {
+            AppLog.files.error(
+                "Verzeichnis \(dir.lastPathComponent, privacy: .public) nicht lesbar: \(error.localizedDescription, privacy: .public)"
+            )
+            return nil
         }
     }
 
@@ -165,7 +200,13 @@ struct GaesteglueckApp: App {
     private static func fixupLegacyTagCategories(_ container: ModelContainer) {
         let context = ModelContext(container)
         let descriptor = FetchDescriptor<Tag>()
-        guard let tags = try? context.fetch(descriptor) else { return }
+        let tags: [Tag]
+        do {
+            tags = try context.fetch(descriptor)
+        } catch {
+            AppLog.persistence.error("Tag-Fixup übersprungen, Fetch fehlgeschlagen: \(error.localizedDescription, privacy: .public)")
+            return
+        }
         var changed = false
         for tag in tags {
             let n = tag.name.lowercased()
@@ -175,7 +216,7 @@ struct GaesteglueckApp: App {
                 changed = true
             }
         }
-        if changed { try? context.save() }
+        if changed { context.saveOrLog() }
     }
 
     @MainActor

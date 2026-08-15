@@ -127,7 +127,7 @@ struct EventSetupView: View {
             e.menuOptions = menuOptions.isEmpty ? ["Fleisch", "Vegetarisch", "Vegan"] : menuOptions
             e.roomWidthCM = Double(roomWidthCM)
             e.roomLengthCM = Double(roomLengthCM)
-            try? modelContext.save()
+            modelContext.saveOrLog()
         } else {
             let e = Event(
                 name: name.trimmingCharacters(in: .whitespaces),
@@ -142,7 +142,7 @@ struct EventSetupView: View {
             e.roomWidthCM = Double(roomWidthCM)
             e.roomLengthCM = Double(roomLengthCM)
             modelContext.insert(e)
-            try? modelContext.save()
+            modelContext.saveOrLog()
         }
         dismiss()
     }

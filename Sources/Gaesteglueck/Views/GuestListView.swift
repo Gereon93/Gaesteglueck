@@ -144,7 +144,7 @@ struct GuestListView: View {
         .sheet(item: $contactPickerGuest) { guest in
             ContactPickerSheet(guest: guest, matches: contactPickerMatches) { phone in
                 guest.phoneNumber = phone
-                try? modelContext.save()
+                modelContext.saveOrLog()
             }
         }
         .alert("Kontakte-Zugriff", isPresented: Binding(
@@ -212,7 +212,7 @@ struct GuestListView: View {
         let reason = MustSitTogetherLink.reason(for: ids, in: guests)
         let c = Constraint(type: .mustSitTogether, guestIDs: ids, reason: reason)
         modelContext.insert(c)
-        try? modelContext.save()
+        modelContext.saveOrLog()
     }
 }
 #endif

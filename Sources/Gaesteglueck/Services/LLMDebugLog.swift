@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 /// Hängt jeden LLM-Request/Response (oder Fehler) als JSON-Zeile an
 /// `~/Library/Application Support/Gaesteglueck/llm-debug.log`. Damit ist nie
@@ -57,12 +58,16 @@ enum LLMDebugLog {
               var line = String(data: data, encoding: .utf8) else { return }
         line += "\n"
         let url = fileURL
-        if let handle = try? FileHandle(forWritingTo: url) {
-            defer { try? handle.close() }
-            _ = try? handle.seekToEnd()
-            try? handle.write(contentsOf: Data(line.utf8))
-        } else {
-            try? line.data(using: .utf8)?.write(to: url)
+        do {
+            if let handle = try? FileHandle(forWritingTo: url) {
+                defer { try? handle.close() }
+                try handle.seekToEnd()
+                try handle.write(contentsOf: Data(line.utf8))
+            } else {
+                try Data(line.utf8).write(to: url)
+            }
+        } catch {
+            AppLog.llm.error("LLM-Debug-Log nicht schreibbar: \(error.localizedDescription, privacy: .public)")
         }
     }
 }

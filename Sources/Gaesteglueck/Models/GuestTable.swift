@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 #if canImport(SwiftData)
 import SwiftData
 #endif
@@ -37,13 +38,13 @@ final class GuestTable {
 
     /// App-weiter Default für Sitzregeln. Wird von der UI gesetzt, wenn ein
     /// Event geladen ist (siehe `RoomCanvasView`). Tests setzen explizit.
-    /// Lock-geschuetzt damit Hintergrund-Tasks (Optimizer, Exporter) nicht
-    /// parallel mit der UI in Konflikt geraten.
-    nonisolated(unsafe) private static var _activeRules: SeatingRules = .default
-    private static let activeRulesLock = NSLock()
+    /// `Mutex` statt `nonisolated(unsafe)` plus manuellem `NSLock`: der
+    /// Compiler erzwingt damit, dass Hintergrund-Tasks (Optimizer, Exporter)
+    /// nicht parallel mit der UI auf den Wert zugreifen.
+    private static let activeRulesStorage = Mutex<SeatingRules>(.default)
     static var activeRules: SeatingRules {
-        get { activeRulesLock.lock(); defer { activeRulesLock.unlock() }; return _activeRules }
-        set { activeRulesLock.lock(); defer { activeRulesLock.unlock() }; _activeRules = newValue }
+        get { activeRulesStorage.withLock { $0 } }
+        set { activeRulesStorage.withLock { $0 = newValue } }
     }
 
     var disabledSeatIndices: Set<Int> {

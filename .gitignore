@@ -98,3 +98,6 @@ dist/
 .build-ios/
 .build-ios-dd/
 .opencode/
+.repowise/
+.vscode/
+.mcp.json

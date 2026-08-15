@@ -22,15 +22,15 @@ enum TafelLayout {
     /// Tische werden nach combinationOrder sortiert; alle haben gleiche depth.
     static func geometry(of tables: [GuestTable], rules: SeatingRules) -> TafelGeometry {
         let sorted = tables.sorted { ($0.combinationOrder ?? 0) < ($1.combinationOrder ?? 0) }
-        guard !sorted.isEmpty else {
+        guard let firstTable = sorted.first, let lastTable = sorted.last else {
             return TafelGeometry(totalWidth: 0, depth: 0, center: .zero, rotation: 0, capacity: 0, seats: [])
         }
 
         let totalWidth = CGFloat(sorted.reduce(0.0) { $0 + $1.width })
         let depth = CGFloat(sorted.map(\.depth).max() ?? 0)
         let centerX = CGFloat(sorted.reduce(0.0) { $0 + $1.positionX * $1.width } / max(sorted.reduce(0.0) { $0 + $1.width }, 0.001))
-        let centerY = CGFloat(sorted[0].positionY)
-        let rotation = sorted[0].rotation
+        let centerY = CGFloat(firstTable.positionY)
+        let rotation = firstTable.rotation
 
         let seatWidth = CGFloat(rules.seatWidthCm)
         let nLong = Int(totalWidth / seatWidth)
@@ -62,7 +62,7 @@ enum TafelLayout {
 
         func tableForX(_ x: CGFloat) -> GuestTable {
             for r in ranges where x >= r.xStart && x <= r.xEnd { return r.table }
-            return ranges.last!.table
+            return lastTable
         }
 
         var seats: [Seat] = []
@@ -77,23 +77,21 @@ enum TafelLayout {
 
         for p in localTopSeats {
             let table = tableForX(p.x)
-            let idx = localIndexCounter[table.id]!
+            let idx = localIndexCounter[table.id, default: 0]
             localIndexCounter[table.id] = idx + 1
             seats.append(Seat(position: toGlobal(p), tableID: table.id, localSeatIndex: idx))
         }
         for p in localBottomSeats {
             let table = tableForX(p.x)
-            let idx = localIndexCounter[table.id]!
+            let idx = localIndexCounter[table.id, default: 0]
             localIndexCounter[table.id] = idx + 1
             seats.append(Seat(position: toGlobal(p), tableID: table.id, localSeatIndex: idx))
         }
-        let firstTable = sorted.first!
-        let leftIdx = localIndexCounter[firstTable.id]!
+        let leftIdx = localIndexCounter[firstTable.id, default: 0]
         localIndexCounter[firstTable.id] = leftIdx + 1
         seats.append(Seat(position: toGlobal(leftEnd), tableID: firstTable.id, localSeatIndex: leftIdx))
 
-        let lastTable = sorted.last!
-        let rightIdx = localIndexCounter[lastTable.id]!
+        let rightIdx = localIndexCounter[lastTable.id, default: 0]
         localIndexCounter[lastTable.id] = rightIdx + 1
         seats.append(Seat(position: toGlobal(rightEnd), tableID: lastTable.id, localSeatIndex: rightIdx))
 

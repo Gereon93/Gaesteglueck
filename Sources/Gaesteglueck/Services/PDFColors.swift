@@ -11,7 +11,8 @@ enum PDFColors {
     static let secondary = NSColor(srgbRed: 0.40, green: 0.40, blue: 0.40, alpha: 1)
     static let tertiary = NSColor(srgbRed: 0.60, green: 0.60, blue: 0.60, alpha: 1)
     static let allergy = NSColor(srgbRed: 0.77, green: 0.29, blue: 0.29, alpha: 1)
-    static let accent = NSColor(srgbRed: 0.78, green: 0.47, blue: 0.55, alpha: 1)
+    /// Spiegelt `Tokens.Colors.accent` (#c8788c) als NSColor.
+    static let accent = NSColor(srgbRed: 0.784, green: 0.471, blue: 0.549, alpha: 1)
 }
 #endif
 #endif

@@ -7,7 +7,7 @@ extension VisualSeatingPlanExporter {
     // MARK: - Header
 
     static func drawHeader(context: CGContext, eventName: String, date: Date?) {
-        drawText(
+        PDFDrawing.drawText(
             "Sitzplan: \(eventName)",
             at: CGPoint(x: canvasMargin, y: 32),
             font: .boldSystemFont(ofSize: 28)
@@ -16,7 +16,7 @@ extension VisualSeatingPlanExporter {
             let fmt = DateFormatter()
             fmt.dateStyle = .long
             fmt.locale = Locale(identifier: "de_DE")
-            drawText(
+            PDFDrawing.drawText(
                 fmt.string(from: date),
                 at: CGPoint(x: canvasMargin, y: 60),
                 font: .systemFont(ofSize: 13),
@@ -79,7 +79,7 @@ extension VisualSeatingPlanExporter {
         context.restoreGState()
 
         var y = area.minY + 12 * s
-        drawText("LEGENDE", at: CGPoint(x: area.minX, y: y - 5 * s),
+        PDFDrawing.drawText("LEGENDE", at: CGPoint(x: area.minX, y: y - 5 * s),
                  font: headerFont, color: PDFColors.secondary)
         y += 12 * s
 
@@ -94,7 +94,7 @@ extension VisualSeatingPlanExporter {
             context.setLineWidth(1.2 * s)
             context.strokeEllipse(in: rect.insetBy(dx: 0.6 * s, dy: 0.6 * s))
             context.restoreGState()
-            drawText(label, at: CGPoint(x: x + swatch + 4 * s, y: y - 5 * s),
+            PDFDrawing.drawText(label, at: CGPoint(x: x + swatch + 4 * s, y: y - 5 * s),
                      font: font, color: PDFColors.primary)
         }
         dietSwatch(area.minX, fill: mealColor, label: "Fleisch")
@@ -111,7 +111,7 @@ extension VisualSeatingPlanExporter {
         // Unverträglichkeiten-Sektion — nur wenn Einträge vorhanden.
         if !legend.entries.isEmpty {
             y += 16 * s
-            drawText("UNVERTRÄGLICHKEITEN", at: CGPoint(x: area.minX, y: y - 5 * s),
+            PDFDrawing.drawText("UNVERTRÄGLICHKEITEN", at: CGPoint(x: area.minX, y: y - 5 * s),
                      font: headerFont, color: PDFColors.secondary)
             y += 12 * s
 
@@ -143,7 +143,7 @@ extension VisualSeatingPlanExporter {
                                           withAttributes: numAttr)
 
                 // Allergen-Name daneben.
-                drawText(entry.name,
+                PDFDrawing.drawText(entry.name,
                          at: CGPoint(x: cx + pillWidth + 5 * s, y: cy - 5 * s),
                          font: font, color: PDFColors.primary)
             }
@@ -154,7 +154,7 @@ extension VisualSeatingPlanExporter {
         // Alters-Sektion — unabhängig von Unverträglichkeiten.
         guard legend.hasAgeMarkers else { return }
         y += 4 * s
-        drawText("ALTER", at: CGPoint(x: area.minX, y: y - 5 * s),
+        PDFDrawing.drawText("ALTER", at: CGPoint(x: area.minX, y: y - 5 * s),
                  font: headerFont, color: PDFColors.secondary)
         y += 12 * s
 
@@ -172,7 +172,7 @@ extension VisualSeatingPlanExporter {
                        in: badgeRect.insetBy(dx: badge * 0.22, dy: badge * 0.22),
                        color: .white)
 
-            drawText(age.rawValue,
+            PDFDrawing.drawText(age.rawValue,
                      at: CGPoint(x: cx + badge + 5 * s, y: cy - 5 * s),
                      font: font, color: PDFColors.primary)
         }

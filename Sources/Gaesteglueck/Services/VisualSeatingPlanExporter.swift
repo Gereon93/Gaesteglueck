@@ -79,8 +79,8 @@ enum VisualSeatingPlanExporter {
 
 #if os(macOS)
 extension VisualSeatingPlanExporter {
-    static let pageWidth: CGFloat = 1191   // A3 landscape
-    static let pageHeight: CGFloat = 842
+    static let pageWidth: CGFloat = PDFPageSize.a3Landscape.width
+    static let pageHeight: CGFloat = PDFPageSize.a3Landscape.height
     static let titleAreaHeight: CGFloat = 80
     static let canvasMargin: CGFloat = 40
 
@@ -94,15 +94,14 @@ extension VisualSeatingPlanExporter {
     // Tokens.Colors.dietVegan/dietVegetarian, hier als NSColor gespiegelt.
     static let veganColor   = NSColor(srgbRed: 0.788, green: 0.635, blue: 0.153, alpha: 1)
     static let vegColor     = NSColor(srgbRed: 0.247, green: 0.478, blue: 0.188, alpha: 1)
-    static let allergyColor = NSColor(srgbRed: 0.77, green: 0.29, blue: 0.29, alpha: 1)
+    static let allergyColor = PDFColors.allergy
     // Alter (#6e8aab = Tokens.Colors.tagActivity) — Blau, klar abgesetzt von
     // Diät (Gold/Grün) und Allergie (Rot).
     static let ageColor     = NSColor(srgbRed: 0.431, green: 0.541, blue: 0.671, alpha: 1)
-    // Fleisch/„isst alles" = Standard-Chip-Rosa (#c8788c = Tokens.Colors.accent).
-    static let mealColor    = NSColor(srgbRed: 0.784, green: 0.471, blue: 0.549, alpha: 1)
+    static let mealColor    = PDFColors.accent
     static let bridalFill   = NSColor(srgbRed: 0.99, green: 0.93, blue: 0.94, alpha: 1)
     static let tableFill    = NSColor(calibratedWhite: 0.97, alpha: 1)
-    static let accentLine   = NSColor(calibratedRed: 0.78, green: 0.47, blue: 0.55, alpha: 1)
+    static let accentLine   = PDFColors.accent
 
     /// Render-Kontext eines einzelnen Export-Laufs. Ersetzt die früheren
     /// `nonisolated(unsafe)` static vars: wird von den Generate-Methoden
@@ -323,7 +322,7 @@ extension VisualSeatingPlanExporter {
         )
 
         if tables.isEmpty {
-            drawText(
+            PDFDrawing.drawText(
                 "Noch keine Tische platziert.",
                 at: CGPoint(x: canvasArea.midX - 80, y: canvasArea.midY),
                 font: .systemFont(ofSize: 14),

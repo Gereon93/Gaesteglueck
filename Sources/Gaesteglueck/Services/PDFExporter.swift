@@ -25,20 +25,20 @@ enum PDFExporter {
         partner1Name: String = "",
         partner2Name: String = ""
     ) -> Data {
-        let pageRect = CGRect(x: 0, y: 0, width: 595, height: 842)
+        let pageRect = PDFPageSize.a4
         let pdfData = NSMutableData()
         guard let consumer = CGDataConsumer(data: pdfData as CFMutableData),
               let context = CGContext(consumer: consumer, mediaBox: nil, nil) else { return Data() }
 
         let primaryColor: CGColor = options.blackAndWhite
             ? NSColor.black.cgColor
-            : NSColor(srgbRed: 0.10, green: 0.10, blue: 0.10, alpha: 1).cgColor
+            : PDFColors.primary.cgColor
         let secondaryColor: CGColor = options.blackAndWhite
             ? NSColor(srgbRed: 0.30, green: 0.30, blue: 0.30, alpha: 1).cgColor
-            : NSColor(srgbRed: 0.40, green: 0.40, blue: 0.40, alpha: 1).cgColor
+            : PDFColors.secondary.cgColor
         let allergyColor: CGColor = options.blackAndWhite
             ? NSColor.black.cgColor
-            : NSColor(srgbRed: 0.77, green: 0.29, blue: 0.29, alpha: 1).cgColor
+            : PDFColors.allergy.cgColor
 
         var pageNumber = 0
         var pageOpen = false
@@ -63,18 +63,14 @@ enum PDFExporter {
         /// Zeichnet eine Zeile Text per Core Text. point ist Top-Left in
         /// Top-Down-Koordinaten (y=0 oben, y=pageHeight unten).
         func drawText(_ text: String, at point: CGPoint, font: NSFont, color: CGColor? = nil) {
-            let attrs: [NSAttributedString.Key: Any] = [
-                .font: font,
-                .foregroundColor: color ?? primaryColor
-            ]
-            let attributed = NSAttributedString(string: text, attributes: attrs)
-            let line = CTLineCreateWithAttributedString(attributed)
-            // Baseline-Y so wählen dass Top-Left bei (point.x, point.y) landet.
-            let ascent = font.ascender
-            let baselineFromTop = ascent
-            let cgY = pageRect.height - point.y - baselineFromTop
-            context.textPosition = CGPoint(x: point.x, y: cgY)
-            CTLineDraw(line, context)
+            PDFDrawing.drawText(
+                text,
+                at: point,
+                font: font,
+                color: color ?? primaryColor,
+                in: context,
+                pageRect: pageRect
+            )
         }
 
         func drawFooterIfWanted() {

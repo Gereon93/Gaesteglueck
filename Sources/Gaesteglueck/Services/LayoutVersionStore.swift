@@ -50,10 +50,11 @@ enum LayoutVersionStore {
             modelContext.insert(snap)
         }
 
-        for g in guests where g.table != nil {
+        for g in guests {
+            guard let tableID = g.table?.id else { continue }
             let snap = LayoutSeatSnapshot(
                 guestID: g.id,
-                tableID: g.table!.id,
+                tableID: tableID,
                 seatIndex: g.seatIndex
             )
             snap.version = version

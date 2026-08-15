@@ -8,7 +8,7 @@ enum SeatingOptimizer {
         tables: [GuestTable],
         tags: [Tag],
         constraints: [Constraint],
-        iterations: Int = 6000
+        iterations: Int = SimulatedAnnealing.defaultIterations
     ) -> [UUID: UUID] {
         let guests = guests.filter(\.countsForSeating)
         guard !guests.isEmpty, !tables.isEmpty else { return [:] }
@@ -24,7 +24,7 @@ enum SeatingOptimizer {
         // Pinned guests first (immovable)
         let pinnedGuests = guests.filter { $0.isPinned && $0.table != nil }
         for guest in pinnedGuests {
-            let tid = guest.table!.id
+            guard let tid = guest.table?.id else { continue }
             assignment[guest.id] = tid
             tableCounts[tid, default: 0] += 1
         }
@@ -105,8 +105,11 @@ enum SeatingOptimizer {
         var currentCounts = tableCounts
 
         // Temperature calibrated to realistic deltas: partner +150, constraints +100.
-        var temperature = 60.0
-        let cooling = pow(0.05 / 60.0, 1.0 / Double(max(iterations, 1)))
+        var temperature = SimulatedAnnealing.startTemperature
+        let cooling = pow(
+            SimulatedAnnealing.endTemperature / SimulatedAnnealing.startTemperature,
+            1.0 / Double(max(iterations, 1))
+        )
         let movable = guests.filter { !pinnedIDs.contains($0.id) }
 
         for _ in 0..<iterations {

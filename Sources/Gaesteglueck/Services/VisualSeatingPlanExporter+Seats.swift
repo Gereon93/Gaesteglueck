@@ -234,9 +234,5 @@ extension VisualSeatingPlanExporter {
         (text as NSString).draw(at: pt, withAttributes: attrs)
     }
 
-    static func drawText(_ text: String, at point: CGPoint, font: NSFont, color: NSColor = PDFColors.primary) {
-        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
-        (text as NSString).draw(at: point, withAttributes: attrs)
-    }
 }
 #endif

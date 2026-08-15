@@ -27,7 +27,9 @@ struct SeatingGraph: Sendable {
             let ids = constraint.guestIDs
             for i in ids.indices {
                 for j in (i+1)..<ids.count {
-                    let weight: Double = constraint.type == .mustSitTogether ? 100 : -500
+                    let weight: Double = constraint.type == .mustSitTogether
+                        ? ScoringConstants.mustSitTogether
+                        : ScoringConstants.mustNotSitTogether
                     edges.append(Edge(from: ids[i], to: ids[j], weight: weight, isHardConstraint: true))
                 }
             }
@@ -35,7 +37,9 @@ struct SeatingGraph: Sendable {
 
         for tag in activeTags {
             let ids = tag.guestIDs
-            let weight: Double = tag.category == .family ? 70 : 40
+            let weight: Double = tag.category == .family
+                ? ScoringConstants.familyTagWeight
+                : ScoringConstants.otherTagWeight
             for i in ids.indices {
                 for j in (i+1)..<ids.count {
                     let exists = edges.contains {
@@ -48,7 +52,11 @@ struct SeatingGraph: Sendable {
             }
         }
 
-        let families = Dictionary(grouping: guests.filter { $0.familyID != nil }, by: { $0.familyID! })
+        var families: [UUID: [Guest]] = [:]
+        for guest in guests {
+            guard let familyID = guest.familyID else { continue }
+            families[familyID, default: []].append(guest)
+        }
         for (_, members) in families {
             // Detect adult partner pair: exactly two adults in a family (no kids bundled in).
             let adults = members.filter { $0.ageCategory == .adult }
@@ -68,15 +76,15 @@ struct SeatingGraph: Sendable {
                     if isChildPair {
                         // Child-parent edge: hard unless a child table exists (then child may leave).
                         if hasChildTable {
-                            edges.append(Edge(from: a.id, to: b.id, weight: 30, isHardConstraint: false))
+                            edges.append(Edge(from: a.id, to: b.id, weight: ScoringConstants.childParentWithChildTable, isHardConstraint: false))
                         } else {
-                            edges.append(Edge(from: a.id, to: b.id, weight: 100, isHardConstraint: true))
+                            edges.append(Edge(from: a.id, to: b.id, weight: ScoringConstants.childParentWithoutChildTable, isHardConstraint: true))
                         }
                     } else if isPurePartnerPair {
                         // Adult-adult partner edge: extra strong so SA keeps couples together.
-                        edges.append(Edge(from: a.id, to: b.id, weight: 150, isHardConstraint: false))
+                        edges.append(Edge(from: a.id, to: b.id, weight: ScoringConstants.partnerPairWeight, isHardConstraint: false))
                     } else {
-                        edges.append(Edge(from: a.id, to: b.id, weight: 70, isHardConstraint: false))
+                        edges.append(Edge(from: a.id, to: b.id, weight: ScoringConstants.familyTagWeight, isHardConstraint: false))
                     }
                 }
             }
@@ -93,10 +101,10 @@ struct SeatingGraph: Sendable {
         }
         edges = edges.map { edge in
             guard !edge.isHardConstraint else { return edge }
-            let fromBridge = (tagCountPerGuest[edge.from] ?? 0) >= 2
-            let toBridge = (tagCountPerGuest[edge.to] ?? 0) >= 2
+            let fromBridge = (tagCountPerGuest[edge.from] ?? 0) >= ScoringConstants.bridgePersonMinimumTags
+            let toBridge = (tagCountPerGuest[edge.to] ?? 0) >= ScoringConstants.bridgePersonMinimumTags
             if fromBridge || toBridge {
-                return Edge(from: edge.from, to: edge.to, weight: edge.weight + 10, isHardConstraint: false)
+                return Edge(from: edge.from, to: edge.to, weight: edge.weight + ScoringConstants.bridgeEdgeBoost, isHardConstraint: false)
             }
             return edge
         }
@@ -108,9 +116,9 @@ struct SeatingGraph: Sendable {
                 var perTable: [UUID: Double] = [:]
                 for table in tables where table.isChildTable {
                     if guest.ageCategory != .adult {
-                        perTable[table.id] = 200
+                        perTable[table.id] = ScoringConstants.childAtChildTable
                     } else {
-                        perTable[table.id] = -200
+                        perTable[table.id] = ScoringConstants.adultAtChildTable
                     }
                 }
                 if !perTable.isEmpty { bonuses[guest.id] = perTable }

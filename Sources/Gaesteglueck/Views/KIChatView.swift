@@ -147,7 +147,7 @@ struct KIChatView: View {
         VStack(spacing: 16) {
             Image(systemName: "sparkles")
                 .font(.system(size: 36))
-                .foregroundStyle(Color(red: 0.78, green: 0.47, blue: 0.55))
+                .foregroundStyle(Tokens.Colors.accent)
             VStack(spacing: 4) {
                 Text("KI-Assistent für den Sitzplan")
                     .font(.headline)
@@ -229,7 +229,7 @@ struct KIChatView: View {
             } label: {
                 Image(systemName: "arrow.up.circle.fill")
                     .font(.title2)
-                    .foregroundStyle(canSubmit ? Color(red: 0.78, green: 0.47, blue: 0.55) : Color.secondary)
+                    .foregroundStyle(canSubmit ? Tokens.Colors.accent : Color.secondary)
             }
             .buttonStyle(.plain)
             .disabled(!canSubmit)

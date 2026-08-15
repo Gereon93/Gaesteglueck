@@ -7,6 +7,7 @@ import AppKit
 
 /// Daten — Speicherort, Backups, Restore und destruktive Reset-Aktionen.
 struct DataCardView: View {
+    private let dataMessageDuration: Duration = .seconds(6)
     @AppStorage("autoBackup") private var autoBackup = true
     @AppStorage(LLMDebugLog.enabledKey) private var llmDebugLogEnabled = false
 
@@ -390,7 +391,7 @@ struct DataCardView: View {
         dataActionMessage = text
         dataActionMessageIsError = isError
         Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 6_000_000_000)
+            try? await Task.sleep(for: dataMessageDuration)
             if dataActionMessage == text {
                 dataActionMessage = nil
             }

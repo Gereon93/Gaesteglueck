@@ -45,6 +45,7 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
 }
 
 struct AppSidebar: View {
+    private let connectionPollInterval: Duration = .seconds(20)
     @Binding var selection: AppSection?
     @Query private var events: [Event]
     @Query private var guests: [Guest]
@@ -107,7 +108,7 @@ struct AppSidebar: View {
             // ausgeht (oder erst angeworfen wird).
             await checkConnection()
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 20_000_000_000)
+                try? await Task.sleep(for: connectionPollInterval)
                 await checkConnection()
             }
         }

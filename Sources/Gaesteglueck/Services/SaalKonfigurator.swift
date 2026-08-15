@@ -265,8 +265,8 @@ Bevorzuge Tafeln, wenn eine zusammenhängende Gruppe größer ist als ein einzel
 
         let reasoning = (parsed["reasoning"] as? String) ?? ""
         let tablesRaw = parsed["tables"] as? [[String: Any]] ?? []
-        let parsed_ = tablesRaw.compactMap { entry in parseTable(entry, inventory: inventory) }
-        let groupValidated = validateAndFixTafelGroups(parsed_, inventory: inventory)
+        let parsedTables = tablesRaw.compactMap { entry in parseTable(entry, inventory: inventory) }
+        let groupValidated = validateAndFixTafelGroups(parsedTables, inventory: inventory)
         let validated = enforceInventoryLimits(groupValidated, inventory: inventory)
         return SaalProposal(tables: validated, reasoning: reasoning)
     }

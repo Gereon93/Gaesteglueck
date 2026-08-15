@@ -216,9 +216,9 @@ struct KIWizardView: View {
         .navigationTitle("KI-Assistent")
         .safeAreaInset(edge: .top) {
             if guests.isEmpty || tables.isEmpty {
-                ki_assistant_warning
+                kiAssistantWarning
             } else if proposedPlan == nil && messages.isEmpty {
-                ki_assistant_intro
+                kiAssistantIntro
             }
         }
     }
@@ -226,7 +226,7 @@ struct KIWizardView: View {
     /// Erklärt was die Buttons machen — verhindert dass der User durch alle
     /// Phasen klickt in der Hoffnung dass dann irgendwann ein Plan rauskommt.
     @ViewBuilder
-    private var ki_assistant_intro: some View {
+    private var kiAssistantIntro: some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: "info.circle.fill")
                 .foregroundStyle(.blue)
@@ -245,7 +245,7 @@ struct KIWizardView: View {
     }
 
     @ViewBuilder
-    private var ki_assistant_warning: some View {
+    private var kiAssistantWarning: some View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)

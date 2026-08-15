@@ -3,6 +3,7 @@ import SwiftUI
 import SwiftData
 
 struct SaalKonfiguratorView: View {
+    private let summaryReadingPause: Duration = .milliseconds(1500)
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Guest.firstName) private var guests: [Guest]
@@ -209,7 +210,7 @@ struct SaalKonfiguratorView: View {
             SaalTablePlacement.applyAssignments(plan.assignments, in: plannerTables, guests: guests)
             try? modelContext.save()
             assignmentSummary = "Tische angelegt. \(plan.assignments.count) Gäste verteilt. Du kannst im Sitzplan nachjustieren."
-            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            try? await Task.sleep(for: summaryReadingPause)
             dismiss()
         } catch {
             errorMessage = "Tische sind angelegt, aber die Gäste-Verteilung ist fehlgeschlagen: \(error.localizedDescription). Du kannst die Verteilung im KI-Assistenten neu starten."

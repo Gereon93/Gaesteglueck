@@ -12,43 +12,48 @@ enum HappinessScorer {
         for tag in activeTags {
             let atTable = tag.guestIDs.filter { guestIDs.contains($0) }
             if atTable.count >= 2 {
-                let weight: Double = tag.category == .family ? 70 : 40
+                let weight: Double = tag.category == .family
+                    ? ScoringConstants.familyTagWeight
+                    : ScoringConstants.otherTagWeight
                 score += Double(atTable.count) * weight
             }
         }
 
         // Partner mix: both sides represented → +10.
         let assignments = Set(guests.map(\.partnerAssignment))
-        if assignments.count > 1 { score += 10 }
+        if assignments.count > 1 { score += ScoringConstants.partnerMixBonus }
 
         // Near-full bonus (80 %+ fill) — no malus for small honor tables.
         if table.capacity > 0 {
             let ratio = Double(guests.count) / Double(table.capacity)
-            if ratio >= 0.8 && ratio <= 1.0 { score += 15 }
-            else if ratio >= 0.6 && ratio <= 1.0 { score += 5 }
+            if ratio >= ScoringConstants.nearFullFillRatio && ratio <= 1.0 {
+                score += ScoringConstants.nearFullFillBonus
+            } else if ratio >= ScoringConstants.moderateFillRatio && ratio <= 1.0 {
+                score += ScoringConstants.moderateFillBonus
+            }
         }
 
         // Bridge persons: guest at this table with 2+ tags connects groups → +15 each.
         let bridgeCount = guests.filter { guest in
-            activeTags.filter { $0.guestIDs.contains(guest.id) }.count >= 2
+            activeTags.filter { $0.guestIDs.contains(guest.id) }.count >= ScoringConstants.bridgePersonMinimumTags
         }.count
-        score += Double(bridgeCount) * 15
+        score += Double(bridgeCount) * ScoringConstants.bridgePersonBonus
 
         // Generation mix: reward at least one adult at a table with children.
         let hasChild = guests.contains { $0.ageCategory != .adult }
         let hasAdult = guests.contains { $0.ageCategory == .adult }
-        if hasChild && hasAdult && !table.isChildTable { score += 20 }
+        if hasChild && hasAdult && !table.isChildTable { score += ScoringConstants.generationMixBonus }
 
         // Child table bonus: mostly children at child table.
         if table.isChildTable {
             let childFraction = Double(guests.filter { $0.ageCategory != .adult }.count) / Double(max(guests.count, 1))
-            score += childFraction * 30
+            score += childFraction * ScoringConstants.childTableFractionBonus
         }
 
         // Dietary cluster: if vegan/vegetarian guests cluster at one table, kitchen wins.
         let dietGroups = Dictionary(grouping: guests, by: \.dietaryChoice)
         for (diet, members) in dietGroups where diet != "Fleisch" && members.count >= 2 {
-            score += Double(members.count) * 3
+            score += Double(members.count) * ScoringConstants.dietaryClusterBonus
         }
 
         return score
@@ -58,7 +63,7 @@ enum HappinessScorer {
     static func gradeTable(_ table: GuestTable, tags: [Tag], constraints: [Constraint]) -> Double {
         let raw = scoreTable(table, tags: tags, constraints: constraints)
         // Cap at 200 for display: anything above is "perfect".
-        return min(100, max(0, raw / 2))
+        return min(ScoringConstants.displayScoreMaximum, max(0, raw / ScoringConstants.displayScoreDivisor))
     }
 
     static func scoreAllTables(_ tables: [GuestTable], tags: [Tag], constraints: [Constraint]) -> Double {

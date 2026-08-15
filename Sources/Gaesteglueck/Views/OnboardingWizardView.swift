@@ -7,6 +7,7 @@ import SwiftData
 /// Namensfeld "Anna & Ben" plus Datum + Location. CTA "Loslegen" legt das
 /// Event an.
 struct OnboardingWizardView: View {
+    private let focusAfterLayoutDelay: Duration = .milliseconds(200)
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Environment(\.isPresented) private var isPresented
@@ -51,8 +52,7 @@ struct OnboardingWizardView: View {
         }
         .frame(minWidth: 720, minHeight: 720)
         .task {
-            // Cursor direkt ins erste Namensfeld nach Layout
-            try? await Task.sleep(nanoseconds: 200_000_000)
+            try? await Task.sleep(for: focusAfterLayoutDelay)
             focusedField = .partner1
         }
     }

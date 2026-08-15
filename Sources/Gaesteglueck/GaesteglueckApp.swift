@@ -7,7 +7,7 @@ import AppKit
 
 @main
 struct GaesteglueckApp: App {
-    nonisolated(unsafe) private static var didActivate = false
+    @MainActor private static var didActivate = false
 
     let container: ModelContainer
 

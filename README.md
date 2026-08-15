@@ -1,7 +1,11 @@
 # Gästeglück
 
-Macher-freundlicher Hochzeits-Sitzplaner für macOS — komplett lokal, mit KI
-über LM Studio (lokal), OpenRouter oder Apple Intelligence.
+Macher-freundlicher Hochzeits-Sitzplaner für macOS. Alle Daten bleiben auf dem
+Mac, keine Accounts. Die KI-Features laufen wahlweise lokal über
+[LM Studio](https://lmstudio.ai/) oder on-device über Apple Intelligence —
+oder, wenn man das ausdrücklich will, über **OpenRouter**. Letzteres ist der
+einzige Cloud-Weg: dabei gehen die Prompt-Inhalte inklusive Gästedaten an
+`openrouter.ai`. Die Einstellungen weisen darauf hin.
 
 > Entstanden als echtes Projekt für meine **eigene Hochzeit** — und dort auch
 > tatsächlich eingesetzt, nicht nur als Demo gebaut. Entwickelt KI-gestützt mit

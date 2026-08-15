@@ -1,11 +1,21 @@
 # Gästeglück
 
-Macher-freundlicher Hochzeits-Sitzplaner für macOS — komplett lokal, mit lokaler KI über LM Studio.
+Macher-freundlicher Hochzeits-Sitzplaner für macOS — komplett lokal, mit KI
+über LM Studio (lokal), OpenRouter oder Apple Intelligence.
 
 > Entstanden als echtes Projekt für meine **eigene Hochzeit** — und dort auch
 > tatsächlich eingesetzt, nicht nur als Demo gebaut. Entwickelt KI-gestützt mit
 > Claude Code; die Produkt- und Architekturentscheidungen sind als Specs unter
 > [`docs/`](docs/) dokumentiert.
+
+## Dokumentation
+
+| Wo | Was |
+|---|---|
+| [`docs/arc42/`](docs/arc42/) | Architekturdokumentation nach arc42 — Bausteinsicht, Laufzeitsicht, Entwurfsentscheidungen, bekannte technische Schulden |
+| [`docs/VISION.md`](docs/VISION.md) | Roadmap und Produktvision |
+| [`docs/superpowers/specs/`](docs/superpowers/specs/) | Specs zu einzelnen Features |
+| [`AGENTS.md`](AGENTS.md) | Review-Richtlinien und Code-Konventionen |
 
 ## Was kann's
 
@@ -110,7 +120,7 @@ sind nicht betroffen.
 swift test
 ```
 
-225 Tests in 44 Suites.
+254 Tests in 48 Suites.
 
 ## Wo liegen die Daten
 

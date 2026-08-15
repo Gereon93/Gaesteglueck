@@ -48,7 +48,11 @@ struct SeatingGraph: Sendable {
             }
         }
 
-        let families = Dictionary(grouping: guests.filter { $0.familyID != nil }, by: { $0.familyID! })
+        var families: [UUID: [Guest]] = [:]
+        for guest in guests {
+            guard let familyID = guest.familyID else { continue }
+            families[familyID, default: []].append(guest)
+        }
         for (_, members) in families {
             // Detect adult partner pair: exactly two adults in a family (no kids bundled in).
             let adults = members.filter { $0.ageCategory == .adult }

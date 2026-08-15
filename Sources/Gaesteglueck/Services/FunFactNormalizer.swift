@@ -80,8 +80,8 @@ enum FunFactNormalizer {
 
     private static func buildUserPrompt(idMap: [String: (UUID, String)]) -> String {
         var lines = ["## FunFacts"]
-        for key in idMap.keys.sorted() {
-            let (_, text) = idMap[key]!
+        for (key, entry) in idMap.sorted(by: { $0.key < $1.key }) {
+            let (_, text) = entry
             lines.append("- \(key): \"\(text)\"")
         }
         return lines.joined(separator: "\n")

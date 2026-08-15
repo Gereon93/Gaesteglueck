@@ -24,7 +24,7 @@ enum SeatingOptimizer {
         // Pinned guests first (immovable)
         let pinnedGuests = guests.filter { $0.isPinned && $0.table != nil }
         for guest in pinnedGuests {
-            let tid = guest.table!.id
+            guard let tid = guest.table?.id else { continue }
             assignment[guest.id] = tid
             tableCounts[tid, default: 0] += 1
         }

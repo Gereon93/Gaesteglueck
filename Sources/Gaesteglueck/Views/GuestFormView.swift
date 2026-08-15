@@ -212,7 +212,7 @@ struct GuestFormView: View {
                     ContactPickerSheet(guest: g, matches: contactPickerMatches) { phone in
                         phoneNumber = phone
                         g.phoneNumber = phone
-                        try? modelContext.save()
+                        modelContext.saveOrLog()
                     }
                 }
             }
@@ -255,7 +255,7 @@ struct GuestFormView: View {
             if matches.count == 1, let only = matches.first, only.phoneNumbers.count == 1 {
                 phoneNumber = only.phoneNumbers[0]
                 target.phoneNumber = only.phoneNumbers[0]
-                try? modelContext.save()
+                modelContext.saveOrLog()
                 return
             }
             if matches.isEmpty {

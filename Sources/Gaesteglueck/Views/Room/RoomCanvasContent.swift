@@ -303,7 +303,7 @@ struct RoomCanvasContent: View {
                     guest.table = nil
                     guest.seatIndex = nil
                 }
-                try? modelContext.save()
+                modelContext.saveOrLog()
             }
         } message: {
             Text("Tische, Labels und Versionen bleiben unverändert. Gepinnte Gäste behalten ihre Zuweisung. Alle anderen Gast-zu-Sitz-Zuordnungen werden entfernt.")
@@ -315,7 +315,7 @@ struct RoomCanvasContent: View {
         let label = CanvasLabel(text: "Neues Label", positionX: 0, positionY: 0)
         label.event = event
         modelContext.insert(label)
-        try? modelContext.save()
+        modelContext.saveOrLog()
     }
 }
 #endif

@@ -157,7 +157,7 @@ extension ExportView {
         panel.nameFieldStringValue = name
         panel.begin { response in
             if response == .OK, let url = panel.url {
-                try? data.write(to: url)
+                data.writeOrLog(to: url)
             }
         }
     }

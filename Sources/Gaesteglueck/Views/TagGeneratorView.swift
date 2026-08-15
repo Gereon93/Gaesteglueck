@@ -496,7 +496,7 @@ struct TagGeneratorView: View {
         for proposal in proposals where proposal.accepted {
             affectedTags.append(applyOne(proposal))
         }
-        try? modelContext.save()
+        modelContext.saveOrLog()
         derivePartnerSidesAfterApply(affectedTags: affectedTags)
         dismiss()
     }

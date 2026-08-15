@@ -61,7 +61,7 @@ enum LayoutVersionStore {
             modelContext.insert(snap)
         }
 
-        try? modelContext.save()
+        modelContext.saveOrLog()
         return version
     }
 
@@ -161,7 +161,7 @@ enum LayoutVersionStore {
         }
 
         event.activeVersionID = version.id
-        try? modelContext.save()
+        modelContext.saveOrLog()
     }
 
     static func delete(
@@ -173,7 +173,7 @@ enum LayoutVersionStore {
             event.activeVersionID = nil
         }
         modelContext.delete(version)
-        try? modelContext.save()
+        modelContext.saveOrLog()
     }
 }
 #endif

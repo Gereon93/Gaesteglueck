@@ -183,7 +183,7 @@ struct SitzplanCoPilotPanel: View {
             let summaries = applyActionsAndCollectSummaries(response.actions)
             let displayText = combineText(response.text, summaries: summaries)
             messages.append(ChatMessage(role: "assistant", content: displayText))
-            try? modelContext.save()
+            modelContext.saveOrLog()
         } catch {
             messages.removeLast()
             errorMessage = error.localizedDescription

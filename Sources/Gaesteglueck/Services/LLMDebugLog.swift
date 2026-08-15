@@ -67,7 +67,7 @@ enum LLMDebugLog {
                 try Data(line.utf8).write(to: url)
             }
         } catch {
-            AppLog.llm.error("LLM-Debug-Log nicht schreibbar: \(error.localizedDescription, privacy: .public)")
+            AppLog.llm.error("LLM-Debug-Log nicht schreibbar: \(error.localizedDescription, privacy: .private)")
         }
     }
 }

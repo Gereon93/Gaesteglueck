@@ -166,7 +166,7 @@ struct GaesteglueckApp: App {
             try FileManager.default.copyItem(at: src, to: dst)
         } catch {
             AppLog.files.error(
-                "Kopieren von \(src.lastPathComponent, privacy: .public) fehlgeschlagen: \(error.localizedDescription, privacy: .public)"
+                "Kopieren von \(src.lastPathComponent, privacy: .private) fehlgeschlagen: \(error.localizedDescription, privacy: .private)"
             )
         }
     }
@@ -176,7 +176,7 @@ struct GaesteglueckApp: App {
             try FileManager.default.removeItem(at: url)
         } catch {
             AppLog.files.error(
-                "Löschen von \(url.lastPathComponent, privacy: .public) fehlgeschlagen: \(error.localizedDescription, privacy: .public)"
+                "Löschen von \(url.lastPathComponent, privacy: .private) fehlgeschlagen: \(error.localizedDescription, privacy: .private)"
             )
         }
     }
@@ -186,7 +186,7 @@ struct GaesteglueckApp: App {
             return try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
         } catch {
             AppLog.files.error(
-                "Verzeichnis \(dir.lastPathComponent, privacy: .public) nicht lesbar: \(error.localizedDescription, privacy: .public)"
+                "Verzeichnis \(dir.lastPathComponent, privacy: .private) nicht lesbar: \(error.localizedDescription, privacy: .private)"
             )
             return nil
         }
@@ -204,7 +204,7 @@ struct GaesteglueckApp: App {
         do {
             tags = try context.fetch(descriptor)
         } catch {
-            AppLog.persistence.error("Tag-Fixup übersprungen, Fetch fehlgeschlagen: \(error.localizedDescription, privacy: .public)")
+            AppLog.persistence.error("Tag-Fixup übersprungen, Fetch fehlgeschlagen: \(error.localizedDescription, privacy: .private)")
             return
         }
         var changed = false

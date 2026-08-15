@@ -12,7 +12,7 @@ extension ModelContext {
             try save()
         } catch {
             AppLog.persistence.error(
-                "Speichern fehlgeschlagen (\(String(describing: file), privacy: .public):\(line, privacy: .public)): \(error.localizedDescription, privacy: .public)"
+                "Speichern fehlgeschlagen (\(String(describing: file), privacy: .public):\(line, privacy: .public)): \(error.localizedDescription, privacy: .private)"
             )
         }
     }

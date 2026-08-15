@@ -7,6 +7,11 @@ import OSLog
 /// Zweck: Fehler, die den Ablauf bewusst nicht abbrechen, hinterlassen
 /// trotzdem eine Spur — sonst ist ein verlorener Speichervorgang oder eine
 /// fehlgeschlagene Backup-Kopie im Nachhinein nicht mehr nachvollziehbar.
+///
+/// Sichtbarkeit: öffentlich ist nur, was nichts über die Gäste verrät —
+/// Quellcode-Ort und Operationsname. Dateinamen tragen den Event-Namen und
+/// Fehlertexte den Benutzerpfad, beide bleiben deshalb `private` und werden
+/// im Unified Log als `<private>` maskiert.
 enum AppLog {
     private static let subsystem = "com.gereon93.Gaesteglueck"
 
@@ -24,7 +29,7 @@ extension Data {
             try write(to: url)
         } catch {
             AppLog.files.error(
-                "Export nach \(url.lastPathComponent, privacy: .public) fehlgeschlagen: \(error.localizedDescription, privacy: .public)"
+                "Export fehlgeschlagen: \(url.lastPathComponent, privacy: .private) — \(error.localizedDescription, privacy: .private)"
             )
         }
     }

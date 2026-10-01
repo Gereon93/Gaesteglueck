@@ -45,6 +45,5 @@ swift-format lint --recursive Sources/ Tests/ --strict   # Lint (läuft in CI, w
 - **Tests:** Logik in Services/Models testbar halten; Views dünn.
 
 # graphify
-- **graphify** (`~/.claude/skills/graphify/SKILL.md`) – beliebige Eingaben für den Wissensgraphen. Auslöser: `/graphify`
-Wenn der Nutzer `/graphify` eingibt, verwende zuerst den installierten graphify-Skill oder dessen Anweisungen.
-`graphify-out/GRAPH_REPORT.md` enthält zentrale Architektur-Hubs und Einstiegspunkte. Aktualisiere den Graphen mit `graphify update .`.
+- **graphify** – `/graphify` verwendet den installierten graphify-Skill, sofern vorhanden. Ohne Skill stehen die lokalen Befehle in `README.md` unter „Architekturgraph“.
+`graphify-out/GRAPH_REPORT.md` enthält zentrale Architektur-Hubs und Einstiegspunkte. Aktualisiere den Graphen mit `python3 scripts/graphify.py update .`.

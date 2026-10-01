@@ -189,6 +189,6 @@ swift-format lint --recursive Sources/ Tests/ --strict   # Lint (CI)
 - **Error-Types:** `enum FooError: Error, LocalizedError` mit deutschem `errorDescription`.
 
 # graphify
-- **graphify** (`~/.claude/skills/graphify/SKILL.md`) - any input to knowledge graph. Trigger: `/graphify`
-When the user types `/graphify`, use the installed graphify skill or instructions before doing anything else.
-See `graphify-out/GRAPH_REPORT.md` for architecture hubs and entry points. Update via `graphify update .`.
+- **graphify** (`~/.claude/skills/graphify/SKILL.md`) – beliebige Eingaben für den Wissensgraphen. Auslöser: `/graphify`
+Wenn der Nutzer `/graphify` eingibt, verwende zuerst den installierten graphify-Skill oder dessen Anweisungen.
+`graphify-out/GRAPH_REPORT.md` enthält zentrale Architektur-Hubs und Einstiegspunkte. Aktualisiere den Graphen mit `graphify update .`.

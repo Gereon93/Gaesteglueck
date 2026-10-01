@@ -126,16 +126,19 @@ PDF-Seitengrößen, Margins, Font-Größen über Exporter verstreut.
 | FA-7.3: In-App-Hilfe | ⬜ Offen | Neue User brauchen Anleitung |
 | FA-1.5: Multi-Event-Support | ⬜ Offen | Datenmodell bereit, UI fehlt |
 
-## 11.8 Keine App-Store-Signierung
+## 11.8 Release-Signierung abhängig von GitHub-Secrets
 
-**Problem:** Ad-hoc signiert, nicht notarisiert. Gatekeeper blockt beim ersten Start.
+**Problem:** Die Release-Pipeline kann Developer-ID-signierte und notarizierte
+DMGs erzeugen, benötigt dafür aber gültige Apple-Secrets in GitHub Actions.
 
-**Auswirkung:** User muss `xattr -dr com.apple.quarantine` ausführen oder
-"Trotzdem öffnen" klicken.
+**Auswirkung:** Wenn die Secrets fehlen oder ablaufen, fällt der Release-Job auf
+Ad-hoc-Signierung zurück. User müssen dann ggf. `xattr -dr com.apple.quarantine`
+ausführen oder "Trotzdem öffnen" klicken.
 
-**Risiko:** Nicht-technische User sind überfordert.
+**Risiko:** Nicht-technische User sind bei Fallback-Releases überfordert.
 
-**Empfehlung:** Apple Developer Account ($99/Jahr) für Notarisierung.
+**Empfehlung:** GitHub Secrets aktuell halten und Release-Logs auf erfolgreiche
+Notarisierung prüfen.
 
 ## 11.9 iPad-Target: Kein PDF-Export
 

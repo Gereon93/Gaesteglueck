@@ -102,21 +102,40 @@ Export auf dem iPad. KI-Provider auf dem iPad: **OpenRouter**,
 Provider erscheint erst ab iPadOS 26 auf fähiger Hardware) — oder
 LM Studio über die LAN-IP des Macs als Endpoint.
 
-### Erster Start (Gatekeeper)
+### Release-Signierung
 
-Eine aus den [Releases](../../releases) geladene `.dmg` ist **ad-hoc signiert,
-nicht notarisiert** (kein bezahlter Apple-Developer-Account). macOS 15 blockt
-sie deshalb beim ersten Start mit „Apple konnte nicht überprüfen…“. Einmalig
-das Quarantäne-Flag entfernen — Pfad ggf. an den tatsächlichen Ablageort der
-App anpassen (z. B. noch im gemounteten DMG oder im Download-Ordner):
+Die Release-Pipeline nutzt das GitHub-Environment `release` und notarisiert die
+`.app` und `.dmg`, sobald diese Environment-Secrets gesetzt sind:
+
+| Secret | Inhalt |
+|---|---|
+| `APPLE_CERTIFICATE_P12_BASE64` | Base64-kodierter Export des `Developer ID Application`-Zertifikats inklusive privatem Schlüssel |
+| `APPLE_CERTIFICATE_PASSWORD` | Passwort des `.p12`-Exports |
+| `APPLE_ID` | Apple-ID des Developer Accounts |
+| `APPLE_APP_SPECIFIC_PASSWORD` | App-spezifisches Passwort für `notarytool` |
+| `APPLE_TEAM_ID` | Apple Developer Team ID |
+
+Das Zertifikat-Secret lokal aus dem `.p12` erzeugen:
+
+```bash
+base64 -i DeveloperIDApplication.p12 | pbcopy
+```
+
+Das Environment in GitHub unter **Settings → Environments → New environment**
+als `release` anlegen. Dort die Apple-Secrets als **Environment secrets**
+hinterlegen, nicht als Repository-Secrets. Für das Environment:
+
+- Deployment branches auf `main` einschränken.
+- Optional Required reviewers aktivieren, wenn Releases manuell freigegeben
+  werden sollen.
+
+Solange die Secrets fehlen, fällt der Release-Job auf ad-hoc-Signierung zurück.
+Dann kann macOS beim ersten Start weiterhin „Apple konnte nicht überprüfen…“
+anzeigen. In dem Fall einmalig **Rechtsklick → Öffnen** wählen oder:
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/Gaesteglueck.app
 ```
-
-Alternativ über **Systemeinstellungen → Datenschutz & Sicherheit → „Trotzdem
-öffnen“** nach dem ersten Startversuch. Selbst gebaute Apps (Variante A/B)
-sind nicht betroffen.
 
 ### Tests
 

@@ -11,7 +11,7 @@
 | Build | Swift Package Manager (`Package.swift`); iPad-Target als Xcode-Projekt |
 | Externe Abhängigkeit | CoreXLSX (Excel-Import) — einzige externe Dependency |
 | KI-Provider | LM Studio (lokal, OpenAI-kompatibel), OpenRouter (Cloud), Apple Intelligence (on-device, macOS 26+) |
-| Signierung | Ad-hoc, nicht notarisiert (kein bezahlter Apple Developer Account) |
+| Signierung | Developer-ID-Signierung + Notarisierung in GitHub Actions, sobald Apple-Secrets gesetzt sind; sonst Ad-hoc-Fallback |
 
 ## Organisatorische Randbedingungen
 
@@ -20,7 +20,7 @@
 | Teamgröße | 1 Entwickler + KI-Assistenz (Claude Code) |
 | Lizenz | GPL v3.0 |
 | Sprache im Code | Deutsch (Kommentare, Commits, Docs, UI) |
-| Budget | Kein Apple Developer Account, keine Cloud-Infrastruktur |
+| Budget | Apple Developer Account vorhanden; keine Cloud-Infrastruktur |
 
 ## Konventionen
 

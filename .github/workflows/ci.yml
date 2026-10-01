@@ -6,6 +6,9 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   build-and-test:
     runs-on: macos-15
@@ -85,13 +88,16 @@ jobs:
 
   release:
     # Baut bei jedem Merge auf main eine DMG und veröffentlicht sie als
-    # GitHub Release. Ad-hoc-signiert (kein Developer-Zertifikat) — beim
-    # ersten Start daher Rechtsklick → Öffnen nötig, steht in den Release-Notes.
+    # GitHub Release. Mit Apple-Developer-Secrets wird per Developer ID signiert
+    # und notarisiert; ohne Secrets bleibt der bisherige Ad-hoc-Fallback aktiv.
+    # Apple-Secrets liegen im geschützten Environment "release", nicht in
+    # PR-Jobs. Das verhindert Secret-Zugriff aus untrusted Pull Requests.
     # prompt-eval ist bewusst KEINE Voraussetzung: ein flakiges LLM-Judge-Urteil
     # soll kein Release blockieren.
     needs: [build-and-test, ios-build]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: macos-15
+    environment: release
     permissions:
       contents: write
     steps:
@@ -100,7 +106,73 @@ jobs:
       - name: Build .app bundle
         run: ./scripts/build-macos-app.sh
 
+      - name: Check Apple signing secrets
+        id: apple-signing
+        env:
+          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          missing=()
+          for name in \
+            APPLE_CERTIFICATE_P12_BASE64 \
+            APPLE_CERTIFICATE_PASSWORD \
+            APPLE_ID \
+            APPLE_APP_SPECIFIC_PASSWORD \
+            APPLE_TEAM_ID
+          do
+            if [ -z "${!name:-}" ]; then
+              missing+=("$name")
+            fi
+          done
+
+          if [ "${#missing[@]}" -eq 0 ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "release_notes=Die App ist mit Developer ID signiert und von Apple notarisiert." >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "release_notes=Die App ist ad-hoc-signiert und nicht notarisiert. Beim ersten Start ggf. Rechtsklick → Öffnen wählen oder \`xattr -dr com.apple.quarantine /Applications/Gaesteglueck.app\` ausführen." >> "$GITHUB_OUTPUT"
+            echo "::warning::Apple-Signierung übersprungen. Fehlende Secrets: ${missing[*]}"
+          fi
+
+      - name: Import Developer ID certificate
+        if: steps.apple-signing.outputs.enabled == 'true'
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+
+      - name: Developer ID codesign
+        if: steps.apple-signing.outputs.enabled == 'true'
+        run: |
+          codesign --force --deep --timestamp --options runtime \
+            --sign "Developer ID Application" \
+            dist/Gaesteglueck.app
+
+          codesign --verify --deep --strict --verbose=2 dist/Gaesteglueck.app
+
+      - name: Notarize app bundle
+        if: steps.apple-signing.outputs.enabled == 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          ditto -c -k --keepParent dist/Gaesteglueck.app dist/Gaesteglueck-notary.zip
+
+          xcrun notarytool submit dist/Gaesteglueck-notary.zip \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+
+          xcrun stapler staple dist/Gaesteglueck.app
+          xcrun stapler validate dist/Gaesteglueck.app
+
       - name: Ad-hoc codesign
+        if: steps.apple-signing.outputs.enabled != 'true'
         run: codesign --force --deep --sign - dist/Gaesteglueck.app
 
       - name: Read version
@@ -110,8 +182,8 @@ jobs:
           TAG="v${VERSION}-build${{ github.run_number }}"
           # Bei Workflow-Reruns bleibt run_number gleich — Suffix verhindert
           # die Tag-Kollision mit dem ersten Versuch.
-          if [ "${{ github.run_attempt }}" -gt 1 ]; then
-            TAG="${TAG}.${{ github.run_attempt }}"
+          if [ "$GITHUB_RUN_ATTEMPT" -gt 1 ]; then
+            TAG="${TAG}.${GITHUB_RUN_ATTEMPT}"
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
@@ -121,6 +193,26 @@ jobs:
           cp -R dist/Gaesteglueck.app dist/dmg/
           ln -s /Applications dist/dmg/Applications
           hdiutil create -volname "Gästeglück" -srcfolder dist/dmg -ov -format UDZO dist/Gaesteglueck.dmg
+
+      - name: Sign and notarize DMG
+        if: steps.apple-signing.outputs.enabled == 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          codesign --force --timestamp \
+            --sign "Developer ID Application" \
+            dist/Gaesteglueck.dmg
+
+          xcrun notarytool submit dist/Gaesteglueck.dmg \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+
+          xcrun stapler staple dist/Gaesteglueck.dmg
+          xcrun stapler validate dist/Gaesteglueck.dmg
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -133,8 +225,4 @@ jobs:
             Automatischer Build vom Merge auf `main` (${{ github.sha }}).
 
             **Installation:** DMG öffnen, App nach „Programme“ ziehen.
-            Die App ist ad-hoc-signiert (nicht notarisiert) — beim ersten Start
-            **Rechtsklick → Öffnen** wählen, oder:
-            ```
-            xattr -dr com.apple.quarantine /Applications/Gaesteglueck.app
-            ```
+            ${{ steps.apple-signing.outputs.release_notes }}

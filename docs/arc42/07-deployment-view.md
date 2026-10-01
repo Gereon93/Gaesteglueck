@@ -91,8 +91,11 @@ Erzeugt `dist/Gaesteglueck.app` mit eigener `Info.plist`.
 │   └── pytest + deepeval (LLM-as-Judge)
 │
 └── Job: release (macos-15, nur main)
-    ├── .app bauen + signieren
+    ├── .app bauen
+    ├── Developer-ID-Zertifikat importieren (wenn Secrets gesetzt)
+    ├── .app signieren + notarizieren oder Ad-hoc-Fallback
     ├── DMG erstellen
+    ├── DMG signieren + notarizieren (wenn Secrets gesetzt)
     └── GitHub Release veröffentlichen
 ```
 

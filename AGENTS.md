@@ -187,3 +187,6 @@ swift-format lint --recursive Sources/ Tests/ --strict   # Lint (CI)
 - **Tests:** Services/Models testbar, Views dünn.
 - **Enums:** für namespaced Konstanten (`enum PDFColors`), nicht `class`/`struct`.
 - **Error-Types:** `enum FooError: Error, LocalizedError` mit deutschem `errorDescription`.
+
+- **graphify** – `/graphify` verwendet den installierten graphify-Skill, sofern vorhanden. Ohne Skill stehen die lokalen Befehle in `README.md` unter „Architekturgraph“.
+`graphify-out/GRAPH_REPORT.md` enthält zentrale Architektur-Hubs und Einstiegspunkte. Aktualisiere den Graphen mit `python3 scripts/graphify.py update .`.

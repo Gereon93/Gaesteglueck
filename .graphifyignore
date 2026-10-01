@@ -1,0 +1,16 @@
+# Workstation & tooling configs
+.mcp.json
+.repowise/
+.vscode/
+.specify/
+.claude/
+.DS_Store
+
+# graphify output (self-reference)
+graphify-out/
+
+# Swift build outputs
+.build/
+.swiftpm/
+dist/
+DerivedData/

@@ -126,6 +126,20 @@ swift test
 
 254 Tests in 48 Suites.
 
+### Architekturgraph
+
+Graphify benötigt `uv`. Der Aufruf nutzt eine festgelegte Graphify-Version und
+funktioniert unabhängig von lokal installierten Agenten-Skills:
+
+```bash
+python3 scripts/graphify.py update .
+python3 scripts/graphify.py query "Wie hängen die Services zusammen?"
+```
+
+`graphify-out/graph.html` verwendet den mitgelieferten vis-network-Renderer
+Version 9.1.6 und funktioniert daher auch ohne Internetverbindung. Die
+MIT-Lizenz des Renderers liegt unter `graphify-out/vendor/`.
+
 ## Wo liegen die Daten
 
 `~/Library/Application Support/Gaesteglueck/`

@@ -43,3 +43,7 @@ swift-format lint --recursive Sources/ Tests/ --strict   # Lint (läuft in CI, w
   oder Spec, nicht als Inline-Kommentar.
 - **Commits:** pro logischem Arbeitspaket, kein Sammel-Commit.
 - **Tests:** Logik in Services/Models testbar halten; Views dünn.
+
+# graphify
+- **graphify** – `/graphify` verwendet den installierten graphify-Skill, sofern vorhanden. Ohne Skill stehen die lokalen Befehle in `README.md` unter „Architekturgraph“.
+`graphify-out/GRAPH_REPORT.md` enthält zentrale Architektur-Hubs und Einstiegspunkte. Aktualisiere den Graphen mit `python3 scripts/graphify.py update .`.

@@ -43,3 +43,8 @@ swift-format lint --recursive Sources/ Tests/ --strict   # Lint (läuft in CI, w
   oder Spec, nicht als Inline-Kommentar.
 - **Commits:** pro logischem Arbeitspaket, kein Sammel-Commit.
 - **Tests:** Logik in Services/Models testbar halten; Views dünn.
+
+# graphify
+- **graphify** (`~/.claude/skills/graphify/SKILL.md`) - any input to knowledge graph. Trigger: `/graphify`
+When the user types `/graphify`, use the installed graphify skill or instructions before doing anything else.
+See `graphify-out/GRAPH_REPORT.md` for architecture hubs and entry points. Update via `graphify update .`.
